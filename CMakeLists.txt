@@ -3,4 +3,4 @@ project(fast_containers)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_library(fast_containers STATIC library.cpp)
+add_subdirectory(src)
