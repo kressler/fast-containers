@@ -1,0 +1,48 @@
+---
+# Clang-format configuration for fast-containers
+# Based on Google C++ Style Guide
+
+BasedOnStyle: Google
+
+# Language-specific settings for C++
+Language: Cpp
+Standard: Latest
+
+# Indentation
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+AccessModifierOffset: -1
+NamespaceIndentation: None
+
+# Line length
+ColumnLimit: 80
+
+# Includes
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+
+# Braces
+BreakBeforeBraces: Attach
+
+# Pointer and reference alignment
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# Template formatting
+AlwaysBreakTemplateDeclarations: Yes
+
+# Function declarations and calls
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: Inline
+BinPackParameters: true
+
+# Control statements
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Comments
+ReflowComments: true
+
+# Other
+MaxEmptyLinesToKeep: 1
