@@ -227,7 +227,7 @@ TEST_CASE("ordered_array iterator support", "[ordered_array]") {
   }
 
   SECTION("Modify through iterator") {
-    for (auto& pair : arr) {
+    for (auto pair : arr) {
       pair.second += "!";
     }
 
