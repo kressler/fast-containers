@@ -14,3 +14,4 @@ Fast container library for C++ on x86-64
 ## Project Structure
 - /src - Main source code
     - /tests - Test files
+- /third_party - Third party libraries
