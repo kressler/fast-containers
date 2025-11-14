@@ -1,0 +1,6 @@
+#ifndef FAST_CONTAINERS_LIBRARY_H
+#define FAST_CONTAINERS_LIBRARY_H
+
+void hello();
+
+#endif // FAST_CONTAINERS_LIBRARY_H
