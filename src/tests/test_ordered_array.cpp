@@ -1,9 +1,19 @@
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
 #include "../ordered_array.hpp"
 
 using namespace fast_containers;
+
+// Template types for parametrized testing of different search modes
+template <SearchMode Mode>
+struct SearchModeType {
+  static constexpr SearchMode value = Mode;
+};
+
+using BinarySearchMode = SearchModeType<SearchMode::Binary>;
+using LinearSearchMode = SearchModeType<SearchMode::Linear>;
 
 TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   ordered_array<int, std::string, 10> arr;
@@ -14,8 +24,10 @@ TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   REQUIRE(arr.capacity() == 10);
 }
 
-TEST_CASE("ordered_array insert operations", "[ordered_array]") {
-  ordered_array<int, std::string, 5> arr;
+TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 5, Mode> arr;
 
   SECTION("Insert single element") {
     arr.insert(5, "five");
@@ -68,8 +80,10 @@ TEST_CASE("ordered_array insert operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array find operations", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -108,8 +122,10 @@ TEST_CASE("ordered_array find operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array remove operations", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -156,8 +172,10 @@ TEST_CASE("ordered_array remove operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array subscript operator", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
 
   SECTION("Access non-existing element inserts with default value") {
     auto& val = arr[5];
@@ -330,5 +348,77 @@ TEST_CASE("ordered_array concept enforcement", "[ordered_array]") {
   SECTION("Floating point types are comparable") {
     ordered_array<double, int, 5> arr;
     REQUIRE(true);
+  }
+}
+
+TEST_CASE("ordered_array search mode comparison",
+          "[ordered_array][search_mode]") {
+  using BinaryArray = ordered_array<int, std::string, 20, SearchMode::Binary>;
+  using LinearArray = ordered_array<int, std::string, 20, SearchMode::Linear>;
+
+  BinaryArray binary_arr;
+  LinearArray linear_arr;
+
+  // Insert the same data into both arrays
+  std::vector<std::pair<int, std::string>> test_data = {
+      {5, "five"},  {10, "ten"},     {15, "fifteen"}, {3, "three"},
+      {7, "seven"}, {12, "twelve"},  {1, "one"},      {20, "twenty"},
+      {8, "eight"}, {14, "fourteen"}};
+
+  for (const auto& [key, value] : test_data) {
+    binary_arr.insert(key, value);
+    linear_arr.insert(key, value);
+  }
+
+  SECTION("Both modes produce same sorted order") {
+    auto binary_it = binary_arr.begin();
+    auto linear_it = linear_arr.begin();
+
+    while (binary_it != binary_arr.end() && linear_it != linear_arr.end()) {
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+      ++binary_it;
+      ++linear_it;
+    }
+
+    REQUIRE(binary_it == binary_arr.end());
+    REQUIRE(linear_it == linear_arr.end());
+  }
+
+  SECTION("Both modes find same elements") {
+    for (int key : {1, 5, 10, 15, 20}) {
+      auto binary_it = binary_arr.find(key);
+      auto linear_it = linear_arr.find(key);
+
+      REQUIRE(binary_it != binary_arr.end());
+      REQUIRE(linear_it != linear_arr.end());
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+    }
+
+    // Test non-existing keys
+    for (int key : {0, 2, 100}) {
+      REQUIRE(binary_arr.find(key) == binary_arr.end());
+      REQUIRE(linear_arr.find(key) == linear_arr.end());
+    }
+  }
+
+  SECTION("Both modes handle removal the same way") {
+    binary_arr.remove(10);
+    linear_arr.remove(10);
+
+    REQUIRE(binary_arr.size() == linear_arr.size());
+    REQUIRE(binary_arr.find(10) == binary_arr.end());
+    REQUIRE(linear_arr.find(10) == linear_arr.end());
+
+    auto binary_it = binary_arr.begin();
+    auto linear_it = linear_arr.begin();
+
+    while (binary_it != binary_arr.end()) {
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+      ++binary_it;
+      ++linear_it;
+    }
   }
 }

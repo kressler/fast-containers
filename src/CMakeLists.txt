@@ -10,3 +10,8 @@ add_test(NAME test_ordered_array COMMAND test_ordered_array)
 # Benchmarks
 add_executable(sample_benchmark benchmarks/sample_benchmark.cpp)
 target_link_libraries(sample_benchmark PRIVATE benchmark::benchmark)
+
+add_executable(ordered_array_search_benchmark
+               benchmarks/ordered_array_search_benchmark.cpp)
+target_link_libraries(ordered_array_search_benchmark
+                      PRIVATE benchmark::benchmark)
