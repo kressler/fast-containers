@@ -51,22 +51,22 @@ git submodule update --init --recursive
 
 **Standard Debug Build:**
 ```bash
-cmake -S . -B build
-cmake --build build
+cmake -S . -B cmake-build-debug
+cmake --build cmake-build-debug
 ```
 
 **Optimized Release Build:**
 ```bash
 # Standard Release build (optimized for native CPU)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-release
 ```
 
 **Release Build with AVX2 Optimizations:**
 ```bash
 # For CPUs with AVX2 support (Intel Haswell or later, AMD Excavator or later)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build build
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build cmake-build-release
 ```
 
 **Build Options:**
@@ -75,31 +75,37 @@ cmake --build build
 - Use AVX2 build for maximum performance on compatible CPUs
 - Check CPU support: `grep -o 'avx2' /proc/cpuinfo | head -1` (Linux)
 
+**Note:** Using separate build directories (`cmake-build-debug` and `cmake-build-release`) allows you to maintain both debug and release builds simultaneously.
+
 ### Testing
 ```bash
-ctest --test-dir build --output-on-failure
+# Debug build
+ctest --test-dir cmake-build-debug --output-on-failure
+
+# Release build
+ctest --test-dir cmake-build-release --output-on-failure
 ```
 
 ### Benchmarking
 ```bash
 # Build benchmarks in Release mode for accurate results
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build build
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build cmake-build-release
 
 # Run specific benchmark
-./build/src/sample_benchmark
-./build/src/ordered_array_search_benchmark
+./cmake-build-release/src/sample_benchmark
+./cmake-build-release/src/ordered_array_search_benchmark
 
 # Or build specific benchmark target
-cmake --build build --target ordered_array_search_benchmark
+cmake --build cmake-build-release --target ordered_array_search_benchmark
 ```
 
 **Note:** Always benchmark in Release mode with optimizations enabled for accurate performance measurements.
 
 ### Code Formatting
 ```bash
-# Format all C++ files
-cmake --build build --target format
+# Format all C++ files (works from any build directory)
+cmake --build cmake-build-debug --target format
 
 # Or let pre-commit hook handle it automatically
 git commit -m "Your message"  # Auto-formats staged C++ files
@@ -273,8 +279,8 @@ git submodule update --remote third_party/benchmark
 
 **For AVX2-capable CPUs (recommended):**
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build build
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build cmake-build-release
 ```
 
 This enables:
@@ -287,8 +293,8 @@ This enables:
 
 **For general-purpose builds:**
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-release
 ```
 
 This uses `-march=native` to optimize for your specific CPU without forcing AVX2.
