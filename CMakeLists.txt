@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 23)
 # Add Catch2 testing framework
 add_subdirectory(third_party/catch2)
 
+# Add Google Benchmark
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark tests" FORCE)
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable gtest tests" FORCE)
+add_subdirectory(third_party/benchmark)
+
 # Enable testing
 enable_testing()
 
