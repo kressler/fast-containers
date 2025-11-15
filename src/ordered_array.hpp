@@ -218,7 +218,8 @@ class ordered_array {
   template <bool IsConst>
   class pair_proxy {
    public:
-    using key_ref_type = std::conditional_t<IsConst, const Key&, Key&>;
+    // Key is always const to prevent breaking sorted order invariant
+    using key_ref_type = const Key&;
     using value_ref_type = std::conditional_t<IsConst, const Value&, Value&>;
 
     pair_proxy(key_ref_type k, value_ref_type v) : first(k), second(v) {}
