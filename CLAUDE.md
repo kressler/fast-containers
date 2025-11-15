@@ -52,28 +52,28 @@ git submodule update --init --recursive
 **Standard Debug Build:**
 ```bash
 cmake -S . -B cmake-build-debug
-cmake --build cmake-build-debug
+cmake --build cmake-build-debug --parallel
 ```
 
 **Optimized Release Build:**
 ```bash
-# Standard Release build (optimized for native CPU)
+# Release build with AVX2 enabled by default (Intel Haswell 2013+, AMD Excavator 2015+)
 cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
-cmake --build cmake-build-release
+cmake --build cmake-build-release --parallel
 ```
 
-**Release Build with AVX2 Optimizations:**
+**Release Build Without AVX2 (for older CPUs):**
 ```bash
-# For CPUs with AVX2 support (Intel Haswell or later, AMD Excavator or later)
-cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build cmake-build-release
+# Disable AVX2 if targeting pre-2013 Intel or pre-2015 AMD CPUs
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=OFF
+cmake --build cmake-build-release --parallel
 ```
 
 **Build Options:**
-- `CMAKE_BUILD_TYPE=Release`: Enables aggressive optimizations (-O3, -ffast-math, -funroll-loops, -march=native)
-- `ENABLE_AVX2=ON`: Adds AVX2 SIMD instructions (-mavx2, -mfma, -march=haswell)
-- Use AVX2 build for maximum performance on compatible CPUs
-- Check CPU support: `grep -o 'avx2' /proc/cpuinfo | head -1` (Linux)
+- `CMAKE_BUILD_TYPE=Release`: Enables aggressive optimizations (-O3, -ffast-math, -funroll-loops)
+- `ENABLE_AVX2`: **ON by default for Release builds** - adds AVX2 SIMD instructions (-mavx2, -mfma, -march=haswell)
+- `--parallel`: Use all available CPU cores for faster builds
+- Disable AVX2 with `-DENABLE_AVX2=OFF` only if targeting older hardware
 
 **Note:** Using separate build directories (`cmake-build-debug` and `cmake-build-release`) allows you to maintain both debug and release builds simultaneously.
 
@@ -88,19 +88,19 @@ ctest --test-dir cmake-build-release --output-on-failure
 
 ### Benchmarking
 ```bash
-# Build benchmarks in Release mode for accurate results
-cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build cmake-build-release
+# Build benchmarks in Release mode for accurate results (AVX2 enabled by default)
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-release --parallel
 
 # Run specific benchmark
 ./cmake-build-release/src/sample_benchmark
 ./cmake-build-release/src/ordered_array_search_benchmark
 
 # Or build specific benchmark target
-cmake --build cmake-build-release --target ordered_array_search_benchmark
+cmake --build cmake-build-release --parallel --target ordered_array_search_benchmark
 ```
 
-**Note:** Always benchmark in Release mode with optimizations enabled for accurate performance measurements.
+**Note:** Always benchmark in Release mode with optimizations enabled for accurate performance measurements. AVX2 optimizations are enabled by default.
 
 ### Code Formatting
 ```bash
@@ -277,13 +277,13 @@ git submodule update --remote third_party/benchmark
 
 ### Build Configuration for Maximum Performance
 
-**For AVX2-capable CPUs (recommended):**
+**Standard Release Build (AVX2 enabled by default):**
 ```bash
-cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
-cmake --build cmake-build-release
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-release --parallel
 ```
 
-This enables:
+This enables by default:
 - `-O3`: Aggressive optimizations
 - `-mavx2`, `-mfma`: AVX2 SIMD instructions
 - `-march=haswell`: Target Haswell (AVX2) architecture or later
@@ -291,16 +291,16 @@ This enables:
 - `-funroll-loops`: Loop unrolling
 - `-mtune=native`: Tune for current CPU
 
-**For general-purpose builds:**
+**For older CPUs without AVX2 (pre-2013 Intel, pre-2015 AMD):**
 ```bash
-cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
-cmake --build cmake-build-release
+cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=OFF
+cmake --build cmake-build-release --parallel
 ```
 
-This uses `-march=native` to optimize for your specific CPU without forcing AVX2.
+This uses `-march=native` to optimize for your specific CPU without requiring AVX2.
 
 ### Check AVX2 Support
-Before enabling AVX2, verify your CPU supports it:
+AVX2 is enabled by default for Release builds. To verify your CPU supports it:
 ```bash
 # Linux
 grep -o 'avx2' /proc/cpuinfo | head -1
@@ -313,9 +313,11 @@ sysctl -a | grep machdep.cpu.features | grep AVX2
 // AVX2 intrinsics available: _mm256_* functions
 ```
 
-**Compatible CPUs:**
+**Compatible CPUs (AVX2 supported):**
 - Intel: Haswell (2013) or later
 - AMD: Excavator (2015) or later
+
+If your CPU doesn't support AVX2, disable it with `-DENABLE_AVX2=OFF`.
 
 ### CPU Scaling
 Disable CPU frequency scaling for consistent benchmarks:
