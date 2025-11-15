@@ -9,6 +9,13 @@
 
 namespace fast_containers {
 
+// Enum to control search strategy
+enum class SearchMode {
+  Binary,  // Binary search using std::lower_bound (O(log n))
+  Linear,  // Linear search for small arrays (better cache behavior)
+  SIMD     // Reserved for future AVX2/AVX-512 implementations
+};
+
 // Concept to enforce that Key type supports comparison operations
 template <typename T>
 concept Comparable = requires(T a, T b) {
@@ -24,8 +31,10 @@ concept Comparable = requires(T a, T b) {
  * @tparam Key The key type (must be Comparable)
  * @tparam Value The value type
  * @tparam Length The maximum number of elements
+ * @tparam Mode The search mode (Binary, Linear, or SIMD)
  */
-template <Comparable Key, typename Value, std::size_t Length>
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode Mode = SearchMode::Binary>
 class ordered_array {
  private:
   // Forward declare iterator classes
@@ -64,8 +73,8 @@ class ordered_array {
       throw std::runtime_error("Cannot insert: array is full");
     }
 
-    // Find the position where the key should be inserted using binary search
-    auto pos = std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    // Find the position where the key should be inserted
+    auto pos = lower_bound_key(key);
 
     // Calculate index
     size_type idx = pos - keys_.begin();
@@ -94,7 +103,7 @@ class ordered_array {
    * @return Iterator to the found element, or end() if not found
    */
   iterator find(const Key& key) {
-    auto pos = std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    auto pos = lower_bound_key(key);
     size_type idx = pos - keys_.begin();
 
     if (idx < size_ && keys_[idx] == key) {
@@ -110,7 +119,7 @@ class ordered_array {
    * @return Const iterator to the found element, or end() if not found
    */
   const_iterator find(const Key& key) const {
-    auto pos = std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    auto pos = lower_bound_key(key);
     size_type idx = pos - keys_.begin();
 
     if (idx < size_ && keys_[idx] == key) {
@@ -159,7 +168,7 @@ class ordered_array {
     }
 
     // Find insertion position
-    auto pos = std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    auto pos = lower_bound_key(key);
     size_type idx = pos - keys_.begin();
 
     // Shift elements to make space in both arrays
@@ -209,6 +218,33 @@ class ordered_array {
   void clear() { size_ = 0; }
 
  private:
+  /**
+   * Find the insertion position for a key using the configured search mode.
+   * Returns an iterator to the first element not less than the given key.
+   *
+   * @param key The key to search for
+   * @return Iterator to the insertion position
+   */
+  auto lower_bound_key(const Key& key) const {
+    if constexpr (Mode == SearchMode::Linear) {
+      // Linear search: scan from beginning until we find key >= search key
+      auto it = keys_.begin();
+      auto end_it = keys_.begin() + size_;
+      while (it != end_it && *it < key) {
+        ++it;
+      }
+      return it;
+    } else if constexpr (Mode == SearchMode::Binary) {
+      // Binary search using standard library
+      return std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    } else {
+      // SIMD mode - not yet implemented, fall back to binary search
+      static_assert(Mode == SearchMode::SIMD,
+                    "Invalid SearchMode - must be Binary, Linear, or SIMD");
+      return std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    }
+  }
+
   // Separate arrays for keys and values
   std::array<Key, Length> keys_;
   std::array<Value, Length> values_;
@@ -356,14 +392,14 @@ class ordered_array {
 };
 
 // Non-member operator+ for iterator + difference
-template <Comparable Key, typename Value, std::size_t Length, bool IsConst>
-typename ordered_array<Key, Value,
-                       Length>::template ordered_array_iterator<IsConst>
-operator+(
-    typename ordered_array<Key, Value, Length>::template ordered_array_iterator<
-        IsConst>::difference_type n,
-    const typename ordered_array<
-        Key, Value, Length>::template ordered_array_iterator<IsConst>& it) {
+template <Comparable Key, typename Value, std::size_t Length, SearchMode Mode,
+          bool IsConst>
+typename ordered_array<Key, Value, Length,
+                       Mode>::template ordered_array_iterator<IsConst>
+operator+(typename ordered_array<Key, Value, Length, Mode>::
+              template ordered_array_iterator<IsConst>::difference_type n,
+          const typename ordered_array<Key, Value, Length, Mode>::
+              template ordered_array_iterator<IsConst>& it) {
   return it + n;
 }
 

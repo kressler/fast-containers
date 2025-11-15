@@ -332,3 +332,165 @@ TEST_CASE("ordered_array concept enforcement", "[ordered_array]") {
     REQUIRE(true);
   }
 }
+
+TEST_CASE("ordered_array linear search mode", "[ordered_array][search_mode]") {
+  using LinearArray = ordered_array<int, std::string, 10, SearchMode::Linear>;
+  LinearArray arr;
+
+  SECTION("Insert with linear search") {
+    arr.insert(5, "five");
+    arr.insert(3, "three");
+    arr.insert(7, "seven");
+    arr.insert(1, "one");
+    arr.insert(9, "nine");
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify elements are in sorted order
+    auto it = arr.begin();
+    REQUIRE(it->first == 1);
+    ++it;
+    REQUIRE(it->first == 3);
+    ++it;
+    REQUIRE(it->first == 5);
+    ++it;
+    REQUIRE(it->first == 7);
+    ++it;
+    REQUIRE(it->first == 9);
+  }
+
+  SECTION("Find with linear search") {
+    arr.insert(10, "ten");
+    arr.insert(20, "twenty");
+    arr.insert(30, "thirty");
+    arr.insert(40, "forty");
+
+    auto it1 = arr.find(10);
+    REQUIRE(it1 != arr.end());
+    REQUIRE(it1->second == "ten");
+
+    auto it2 = arr.find(30);
+    REQUIRE(it2 != arr.end());
+    REQUIRE(it2->second == "thirty");
+
+    auto it3 = arr.find(40);
+    REQUIRE(it3 != arr.end());
+    REQUIRE(it3->second == "forty");
+
+    auto it4 = arr.find(25);
+    REQUIRE(it4 == arr.end());
+  }
+
+  SECTION("Remove with linear search") {
+    arr.insert(10, "ten");
+    arr.insert(20, "twenty");
+    arr.insert(30, "thirty");
+    arr.insert(40, "forty");
+
+    arr.remove(30);
+    REQUIRE(arr.size() == 3);
+    REQUIRE(arr.find(30) == arr.end());
+
+    // Verify order is maintained
+    auto it = arr.begin();
+    REQUIRE(it->first == 10);
+    ++it;
+    REQUIRE(it->first == 20);
+    ++it;
+    REQUIRE(it->first == 40);
+  }
+
+  SECTION("Subscript operator with linear search") {
+    arr[30] = "thirty";
+    arr[10] = "ten";
+    arr[20] = "twenty";
+
+    REQUIRE(arr.size() == 3);
+
+    auto it = arr.begin();
+    REQUIRE(it->first == 10);
+    ++it;
+    REQUIRE(it->first == 20);
+    ++it;
+    REQUIRE(it->first == 30);
+
+    REQUIRE(arr[20] == "twenty");
+  }
+
+  SECTION("Linear search with duplicate key detection") {
+    arr.insert(5, "five");
+    REQUIRE_THROWS_AS(arr.insert(5, "cinco"), std::runtime_error);
+  }
+}
+
+TEST_CASE("ordered_array search mode comparison",
+          "[ordered_array][search_mode]") {
+  using BinaryArray = ordered_array<int, std::string, 20, SearchMode::Binary>;
+  using LinearArray = ordered_array<int, std::string, 20, SearchMode::Linear>;
+
+  BinaryArray binary_arr;
+  LinearArray linear_arr;
+
+  // Insert the same data into both arrays
+  std::vector<std::pair<int, std::string>> test_data = {
+      {5, "five"},  {10, "ten"},     {15, "fifteen"}, {3, "three"},
+      {7, "seven"}, {12, "twelve"},  {1, "one"},      {20, "twenty"},
+      {8, "eight"}, {14, "fourteen"}};
+
+  for (const auto& [key, value] : test_data) {
+    binary_arr.insert(key, value);
+    linear_arr.insert(key, value);
+  }
+
+  SECTION("Both modes produce same sorted order") {
+    auto binary_it = binary_arr.begin();
+    auto linear_it = linear_arr.begin();
+
+    while (binary_it != binary_arr.end() && linear_it != linear_arr.end()) {
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+      ++binary_it;
+      ++linear_it;
+    }
+
+    REQUIRE(binary_it == binary_arr.end());
+    REQUIRE(linear_it == linear_arr.end());
+  }
+
+  SECTION("Both modes find same elements") {
+    for (int key : {1, 5, 10, 15, 20}) {
+      auto binary_it = binary_arr.find(key);
+      auto linear_it = linear_arr.find(key);
+
+      REQUIRE(binary_it != binary_arr.end());
+      REQUIRE(linear_it != linear_arr.end());
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+    }
+
+    // Test non-existing keys
+    for (int key : {0, 2, 100}) {
+      REQUIRE(binary_arr.find(key) == binary_arr.end());
+      REQUIRE(linear_arr.find(key) == linear_arr.end());
+    }
+  }
+
+  SECTION("Both modes handle removal the same way") {
+    binary_arr.remove(10);
+    linear_arr.remove(10);
+
+    REQUIRE(binary_arr.size() == linear_arr.size());
+    REQUIRE(binary_arr.find(10) == binary_arr.end());
+    REQUIRE(linear_arr.find(10) == linear_arr.end());
+
+    auto binary_it = binary_arr.begin();
+    auto linear_it = linear_arr.begin();
+
+    while (binary_it != binary_arr.end()) {
+      REQUIRE(binary_it->first == linear_it->first);
+      REQUIRE(binary_it->second == linear_it->second);
+      ++binary_it;
+      ++linear_it;
+    }
+  }
+}
