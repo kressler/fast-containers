@@ -48,10 +48,32 @@ git submodule update --init --recursive
 ```
 
 ### Building
+
+**Standard Debug Build:**
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
+
+**Optimized Release Build:**
+```bash
+# Standard Release build (optimized for native CPU)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+**Release Build with AVX2 Optimizations:**
+```bash
+# For CPUs with AVX2 support (Intel Haswell or later, AMD Excavator or later)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build build
+```
+
+**Build Options:**
+- `CMAKE_BUILD_TYPE=Release`: Enables aggressive optimizations (-O3, -ffast-math, -funroll-loops, -march=native)
+- `ENABLE_AVX2=ON`: Adds AVX2 SIMD instructions (-mavx2, -mfma, -march=haswell)
+- Use AVX2 build for maximum performance on compatible CPUs
+- Check CPU support: `grep -o 'avx2' /proc/cpuinfo | head -1` (Linux)
 
 ### Testing
 ```bash
@@ -60,12 +82,19 @@ ctest --test-dir build --output-on-failure
 
 ### Benchmarking
 ```bash
-# Build specific benchmark
-cmake --build build --target sample_benchmark
+# Build benchmarks in Release mode for accurate results
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build build
 
-# Run benchmark
+# Run specific benchmark
 ./build/src/sample_benchmark
+./build/src/ordered_array_search_benchmark
+
+# Or build specific benchmark target
+cmake --build build --target ordered_array_search_benchmark
 ```
+
+**Note:** Always benchmark in Release mode with optimizations enabled for accurate performance measurements.
 
 ### Code Formatting
 ```bash
@@ -240,26 +269,53 @@ git submodule update --remote third_party/benchmark
 
 ## Performance Notes
 
-### Compiler Flags
-For maximum performance in benchmarks:
+### Build Configuration for Maximum Performance
+
+**For AVX2-capable CPUs (recommended):**
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=ON
+cmake --build build
+```
+
+This enables:
+- `-O3`: Aggressive optimizations
+- `-mavx2`, `-mfma`: AVX2 SIMD instructions
+- `-march=haswell`: Target Haswell (AVX2) architecture or later
+- `-ffast-math`: Fast floating-point math
+- `-funroll-loops`: Loop unrolling
+- `-mtune=native`: Tune for current CPU
+
+**For general-purpose builds:**
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+This uses `-march=native` to optimize for your specific CPU without forcing AVX2.
+
+### Check AVX2 Support
+Before enabling AVX2, verify your CPU supports it:
+```bash
+# Linux
+grep -o 'avx2' /proc/cpuinfo | head -1
+
+# macOS
+sysctl -a | grep machdep.cpu.features | grep AVX2
+
+# Or in C++ at runtime
+#include <immintrin.h>
+// AVX2 intrinsics available: _mm256_* functions
+```
+
+**Compatible CPUs:**
+- Intel: Haswell (2013) or later
+- AMD: Excavator (2015) or later
 
 ### CPU Scaling
 Disable CPU frequency scaling for consistent benchmarks:
 ```bash
 # Linux
 echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-```
-
-### AVX2 Availability
-Check CPU support before using AVX2:
-```cpp
-#include <immintrin.h>
-// AVX2 intrinsics available
-// Use _mm256_* functions
 ```
 
 ## Future Optimization Opportunities
