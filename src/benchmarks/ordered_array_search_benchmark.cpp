@@ -2,21 +2,38 @@
 
 #include <random>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 #include "../ordered_array.hpp"
 
 using namespace fast_containers;
 
+// Generate unique random keys for benchmarking
+template <std::size_t Size>
+std::vector<int> GenerateUniqueKeys() {
+  std::mt19937 rng(42);
+  std::uniform_int_distribution<int> dist(1, 1000000);
+  std::unordered_set<int> unique_keys;
+
+  // Keep generating until we have enough unique keys
+  while (unique_keys.size() < Size) {
+    unique_keys.insert(dist(rng));
+  }
+
+  return std::vector<int>(unique_keys.begin(), unique_keys.end());
+}
+
 // Benchmark insert operations with binary search
 template <std::size_t Size>
 static void BM_OrderedArray_Insert_Binary(benchmark::State& state) {
-  std::mt19937 rng(42);
-  std::uniform_int_distribution<int> dist(1, 100000);
+  // Pre-generate unique keys outside the benchmark loop
+  auto keys = GenerateUniqueKeys<Size>();
 
   for (auto _ : state) {
     ordered_array<int, int, Size, SearchMode::Binary> arr;
     for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(dist(rng), i);
+      arr.insert(keys[i], i);
     }
     benchmark::DoNotOptimize(arr);
   }
@@ -26,13 +43,13 @@ static void BM_OrderedArray_Insert_Binary(benchmark::State& state) {
 // Benchmark insert operations with linear search
 template <std::size_t Size>
 static void BM_OrderedArray_Insert_Linear(benchmark::State& state) {
-  std::mt19937 rng(42);
-  std::uniform_int_distribution<int> dist(1, 100000);
+  // Pre-generate unique keys outside the benchmark loop
+  auto keys = GenerateUniqueKeys<Size>();
 
   for (auto _ : state) {
     ordered_array<int, int, Size, SearchMode::Linear> arr;
     for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(dist(rng), i);
+      arr.insert(keys[i], i);
     }
     benchmark::DoNotOptimize(arr);
   }
@@ -42,16 +59,13 @@ static void BM_OrderedArray_Insert_Linear(benchmark::State& state) {
 // Benchmark find operations with binary search
 template <std::size_t Size>
 static void BM_OrderedArray_Find_Binary(benchmark::State& state) {
-  ordered_array<int, int, Size, SearchMode::Binary> arr;
-  std::mt19937 rng(42);
-  std::uniform_int_distribution<int> dist(1, 100000);
+  // Pre-generate unique keys
+  auto keys = GenerateUniqueKeys<Size>();
 
   // Pre-populate the array
-  std::vector<int> keys;
+  ordered_array<int, int, Size, SearchMode::Binary> arr;
   for (std::size_t i = 0; i < Size; ++i) {
-    int key = dist(rng);
-    arr.insert(key, i);
-    keys.push_back(key);
+    arr.insert(keys[i], i);
   }
 
   std::size_t idx = 0;
@@ -66,16 +80,13 @@ static void BM_OrderedArray_Find_Binary(benchmark::State& state) {
 // Benchmark find operations with linear search
 template <std::size_t Size>
 static void BM_OrderedArray_Find_Linear(benchmark::State& state) {
-  ordered_array<int, int, Size, SearchMode::Linear> arr;
-  std::mt19937 rng(42);
-  std::uniform_int_distribution<int> dist(1, 100000);
+  // Pre-generate unique keys
+  auto keys = GenerateUniqueKeys<Size>();
 
   // Pre-populate the array
-  std::vector<int> keys;
+  ordered_array<int, int, Size, SearchMode::Linear> arr;
   for (std::size_t i = 0; i < Size; ++i) {
-    int key = dist(rng);
-    arr.insert(key, i);
-    keys.push_back(key);
+    arr.insert(keys[i], i);
   }
 
   std::size_t idx = 0;

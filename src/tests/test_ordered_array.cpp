@@ -1,9 +1,19 @@
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
 #include "../ordered_array.hpp"
 
 using namespace fast_containers;
+
+// Template types for parametrized testing of different search modes
+template <SearchMode Mode>
+struct SearchModeType {
+  static constexpr SearchMode value = Mode;
+};
+
+using BinarySearchMode = SearchModeType<SearchMode::Binary>;
+using LinearSearchMode = SearchModeType<SearchMode::Linear>;
 
 TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   ordered_array<int, std::string, 10> arr;
@@ -14,8 +24,10 @@ TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   REQUIRE(arr.capacity() == 10);
 }
 
-TEST_CASE("ordered_array insert operations", "[ordered_array]") {
-  ordered_array<int, std::string, 5> arr;
+TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 5, Mode> arr;
 
   SECTION("Insert single element") {
     arr.insert(5, "five");
@@ -68,8 +80,10 @@ TEST_CASE("ordered_array insert operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array find operations", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -108,8 +122,10 @@ TEST_CASE("ordered_array find operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array remove operations", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -156,8 +172,10 @@ TEST_CASE("ordered_array remove operations", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array subscript operator", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  ordered_array<int, std::string, 10, Mode> arr;
 
   SECTION("Access non-existing element inserts with default value") {
     auto& val = arr[5];
@@ -330,96 +348,6 @@ TEST_CASE("ordered_array concept enforcement", "[ordered_array]") {
   SECTION("Floating point types are comparable") {
     ordered_array<double, int, 5> arr;
     REQUIRE(true);
-  }
-}
-
-TEST_CASE("ordered_array linear search mode", "[ordered_array][search_mode]") {
-  using LinearArray = ordered_array<int, std::string, 10, SearchMode::Linear>;
-  LinearArray arr;
-
-  SECTION("Insert with linear search") {
-    arr.insert(5, "five");
-    arr.insert(3, "three");
-    arr.insert(7, "seven");
-    arr.insert(1, "one");
-    arr.insert(9, "nine");
-
-    REQUIRE(arr.size() == 5);
-
-    // Verify elements are in sorted order
-    auto it = arr.begin();
-    REQUIRE(it->first == 1);
-    ++it;
-    REQUIRE(it->first == 3);
-    ++it;
-    REQUIRE(it->first == 5);
-    ++it;
-    REQUIRE(it->first == 7);
-    ++it;
-    REQUIRE(it->first == 9);
-  }
-
-  SECTION("Find with linear search") {
-    arr.insert(10, "ten");
-    arr.insert(20, "twenty");
-    arr.insert(30, "thirty");
-    arr.insert(40, "forty");
-
-    auto it1 = arr.find(10);
-    REQUIRE(it1 != arr.end());
-    REQUIRE(it1->second == "ten");
-
-    auto it2 = arr.find(30);
-    REQUIRE(it2 != arr.end());
-    REQUIRE(it2->second == "thirty");
-
-    auto it3 = arr.find(40);
-    REQUIRE(it3 != arr.end());
-    REQUIRE(it3->second == "forty");
-
-    auto it4 = arr.find(25);
-    REQUIRE(it4 == arr.end());
-  }
-
-  SECTION("Remove with linear search") {
-    arr.insert(10, "ten");
-    arr.insert(20, "twenty");
-    arr.insert(30, "thirty");
-    arr.insert(40, "forty");
-
-    arr.remove(30);
-    REQUIRE(arr.size() == 3);
-    REQUIRE(arr.find(30) == arr.end());
-
-    // Verify order is maintained
-    auto it = arr.begin();
-    REQUIRE(it->first == 10);
-    ++it;
-    REQUIRE(it->first == 20);
-    ++it;
-    REQUIRE(it->first == 40);
-  }
-
-  SECTION("Subscript operator with linear search") {
-    arr[30] = "thirty";
-    arr[10] = "ten";
-    arr[20] = "twenty";
-
-    REQUIRE(arr.size() == 3);
-
-    auto it = arr.begin();
-    REQUIRE(it->first == 10);
-    ++it;
-    REQUIRE(it->first == 20);
-    ++it;
-    REQUIRE(it->first == 30);
-
-    REQUIRE(arr[20] == "twenty");
-  }
-
-  SECTION("Linear search with duplicate key detection") {
-    arr.insert(5, "five");
-    REQUIRE_THROWS_AS(arr.insert(5, "cinco"), std::runtime_error);
   }
 }
 
