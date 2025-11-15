@@ -55,6 +55,13 @@ cmake -S . -B cmake-build-debug
 cmake --build cmake-build-debug --parallel
 ```
 
+**Debug Build with AVX2 (for debugging SIMD code):**
+```bash
+# Enable AVX2 in Debug builds for testing/debugging SIMD optimizations
+cmake -S . -B cmake-build-debug -DENABLE_AVX2=ON
+cmake --build cmake-build-debug --parallel
+```
+
 **Optimized Release Build:**
 ```bash
 # Release build with AVX2 enabled by default (Intel Haswell 2013+, AMD Excavator 2015+)
@@ -71,9 +78,11 @@ cmake --build cmake-build-release --parallel
 
 **Build Options:**
 - `CMAKE_BUILD_TYPE=Release`: Enables aggressive optimizations (-O3, -ffast-math, -funroll-loops)
-- `ENABLE_AVX2`: **ON by default for Release builds** - adds AVX2 SIMD instructions (-mavx2, -mfma, -march=haswell)
+- `ENABLE_AVX2`:
+  - **ON by default for Release builds** - adds AVX2 SIMD instructions (-mavx2, -mfma, -march=haswell)
+  - **OFF by default for Debug builds** - can be enabled with `-DENABLE_AVX2=ON` for debugging SIMD code
 - `--parallel`: Use all available CPU cores for faster builds
-- Disable AVX2 with `-DENABLE_AVX2=OFF` only if targeting older hardware
+- Override defaults with `-DENABLE_AVX2=ON` (Debug) or `-DENABLE_AVX2=OFF` (Release)
 
 **Note:** Using separate build directories (`cmake-build-debug` and `cmake-build-release`) allows you to maintain both debug and release builds simultaneously.
 
