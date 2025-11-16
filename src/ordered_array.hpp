@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <concepts>
 #include <cstring>
 #include <iterator>
@@ -255,8 +256,12 @@ class ordered_array {
       // Check if any key is >= search_key
       int mask = _mm256_movemask_epi8(cmp_lt);
       if (mask != static_cast<int>(0xFFFFFFFF)) {
-        // Found a position where key >= search_key, finish with scalar search
-        break;
+        // Found a position where key >= search_key
+        // Use bit manipulation to find the exact index within this block
+        // Each 4-byte element contributes 4 bits to the mask
+        // Count trailing ones and divide by 4 to get element offset
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
       }
     }
 
@@ -293,8 +298,12 @@ class ordered_array {
       // Check if any key is >= search_key
       int mask = _mm256_movemask_epi8(cmp_lt);
       if (mask != static_cast<int>(0xFFFFFFFF)) {
-        // Found a position where key >= search_key, finish with scalar search
-        break;
+        // Found a position where key >= search_key
+        // Use bit manipulation to find the exact index within this block
+        // Each 8-byte element contributes 8 bits to the mask
+        // Count trailing ones and divide by 8 to get element offset
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
       }
     }
 

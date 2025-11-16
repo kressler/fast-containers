@@ -164,5 +164,8 @@ BENCHMARK(BM_OrderedArray_Find_SIMD<64>);
 BENCHMARK(BM_OrderedArray_Find_Binary<128>);
 BENCHMARK(BM_OrderedArray_Find_Linear<128>);
 BENCHMARK(BM_OrderedArray_Find_SIMD<128>);
+BENCHMARK(BM_OrderedArray_Find_Binary<256>);
+BENCHMARK(BM_OrderedArray_Find_Linear<256>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<256>);
 
 BENCHMARK_MAIN();
