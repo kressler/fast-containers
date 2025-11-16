@@ -24,21 +24,29 @@ std::vector<int> GenerateUniqueKeys() {
   return std::vector<int>(unique_keys.begin(), unique_keys.end());
 }
 
-// Consolidated benchmark for insert operations
+// Benchmark insert into nearly-full array
+// Pre-populates array to Size-1, then measures inserting one element.
+// This tests worst-case insert: maximum data movement and full-size search.
 template <std::size_t Size, SearchMode search_mode,
           MoveMode move_mode = MoveMode::SIMD>
 static void BM_OrderedArray_Insert(benchmark::State& state) {
-  // Pre-generate unique keys outside the benchmark loop
+  // Need Size keys for pre-population and the insert being measured
   auto keys = GenerateUniqueKeys<Size>();
 
   for (auto _ : state) {
+    state.PauseTiming();
     ordered_array<int, int, Size, search_mode, move_mode> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
+    // Pre-populate to Size-1 (nearly full)
+    for (std::size_t i = 0; i < Size - 1; ++i) {
       arr.insert(keys[i], i);
     }
+    state.ResumeTiming();
+
+    // Measure single insert into array of size (Size-1)
+    arr.insert(keys[Size - 1], Size - 1);
     benchmark::DoNotOptimize(arr);
   }
-  state.SetItemsProcessed(state.iterations() * Size);
+  state.SetItemsProcessed(state.iterations());
 }
 
 // Consolidated benchmark for find operations
@@ -63,32 +71,16 @@ static void BM_OrderedArray_Find(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations());
 }
 
-// Benchmark insert into pre-populated array
-// This measures insert performance when searching arrays of known size,
-// rather than progressively growing from empty (which penalizes SIMD overhead)
-template <std::size_t Capacity, std::size_t PrePopulateSize,
-          SearchMode search_mode, MoveMode move_mode = MoveMode::SIMD>
-static void BM_OrderedArray_Insert_PrePopulated(benchmark::State& state) {
-  // Need extra keys for both pre-population and the insert being measured
-  auto keys = GenerateUniqueKeys<Capacity>();
-
-  for (auto _ : state) {
-    state.PauseTiming();
-    ordered_array<int, int, Capacity, search_mode, move_mode> arr;
-    // Pre-populate to specific size
-    for (std::size_t i = 0; i < PrePopulateSize; ++i) {
-      arr.insert(keys[i], i);
-    }
-    state.ResumeTiming();
-
-    // Measure single insert into array of size PrePopulateSize
-    arr.insert(keys[PrePopulateSize], PrePopulateSize);
-    benchmark::DoNotOptimize(arr);
-  }
-  state.SetItemsProcessed(state.iterations());
-}
-
-// Register insert benchmarks for small arrays (where linear/SIMD might win)
+// Register insert benchmarks (insert into nearly-full arrays)
+BENCHMARK(BM_OrderedArray_Insert<1, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<1, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<1, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<2, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<2, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<2, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<4, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<4, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<4, SearchMode::SIMD>);
 BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary>);
 BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Linear>);
 BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::SIMD>);
@@ -145,6 +137,12 @@ BENCHMARK(BM_OrderedArray_Find<255, SearchMode::SIMD>);
 
 // MoveMode comparison benchmarks: Standard vs SIMD data movement
 // These benchmarks compare insert performance with different move modes
+BENCHMARK(BM_OrderedArray_Insert<1, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<1, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<2, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<2, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<4, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<4, SearchMode::Binary, MoveMode::SIMD>);
 BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::Standard>);
 BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::SIMD>);
 BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::Standard>);
@@ -155,21 +153,5 @@ BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::Standard>);
 BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::SIMD>);
 BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::Standard>);
 BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::SIMD>);
-
-// Pre-populated insert benchmarks: measuring insert into arrays of known size
-// This gives a fair comparison of SearchMode performance without the penalty
-// of SIMD overhead on very small arrays (0-7 elements)
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<16, 8, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<16, 8, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<16, 8, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<32, 16, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<32, 16, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<32, 16, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<64, 32, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<64, 32, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<64, 32, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<128, 64, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<128, 64, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert_PrePopulated<128, 64, SearchMode::SIMD>);
 
 BENCHMARK_MAIN();
