@@ -24,14 +24,15 @@ std::vector<int> GenerateUniqueKeys() {
   return std::vector<int>(unique_keys.begin(), unique_keys.end());
 }
 
-// Benchmark insert operations with binary search
-template <std::size_t Size>
-static void BM_OrderedArray_Insert_Binary(benchmark::State& state) {
+// Consolidated benchmark for insert operations
+template <std::size_t Size, SearchMode search_mode,
+          MoveMode move_mode = MoveMode::SIMD>
+static void BM_OrderedArray_Insert(benchmark::State& state) {
   // Pre-generate unique keys outside the benchmark loop
   auto keys = GenerateUniqueKeys<Size>();
 
   for (auto _ : state) {
-    ordered_array<int, int, Size, SearchMode::Binary> arr;
+    ordered_array<int, int, Size, search_mode, move_mode> arr;
     for (std::size_t i = 0; i < Size; ++i) {
       arr.insert(keys[i], i);
     }
@@ -40,46 +41,15 @@ static void BM_OrderedArray_Insert_Binary(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * Size);
 }
 
-// Benchmark insert operations with linear search
-template <std::size_t Size>
-static void BM_OrderedArray_Insert_Linear(benchmark::State& state) {
-  // Pre-generate unique keys outside the benchmark loop
-  auto keys = GenerateUniqueKeys<Size>();
-
-  for (auto _ : state) {
-    ordered_array<int, int, Size, SearchMode::Linear> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(keys[i], i);
-    }
-    benchmark::DoNotOptimize(arr);
-  }
-  state.SetItemsProcessed(state.iterations() * Size);
-}
-
-// Benchmark insert operations with SIMD search
-template <std::size_t Size>
-static void BM_OrderedArray_Insert_SIMD(benchmark::State& state) {
-  // Pre-generate unique keys outside the benchmark loop
-  auto keys = GenerateUniqueKeys<Size>();
-
-  for (auto _ : state) {
-    ordered_array<int, int, Size, SearchMode::SIMD> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(keys[i], i);
-    }
-    benchmark::DoNotOptimize(arr);
-  }
-  state.SetItemsProcessed(state.iterations() * Size);
-}
-
-// Benchmark find operations with binary search
-template <std::size_t Size>
-static void BM_OrderedArray_Find_Binary(benchmark::State& state) {
+// Consolidated benchmark for find operations
+template <std::size_t Size, SearchMode search_mode,
+          MoveMode move_mode = MoveMode::SIMD>
+static void BM_OrderedArray_Find(benchmark::State& state) {
   // Pre-generate unique keys
   auto keys = GenerateUniqueKeys<Size>();
 
   // Pre-populate the array
-  ordered_array<int, int, Size, SearchMode::Binary> arr;
+  ordered_array<int, int, Size, search_mode, move_mode> arr;
   for (std::size_t i = 0; i < Size; ++i) {
     arr.insert(keys[i], i);
   }
@@ -93,143 +63,72 @@ static void BM_OrderedArray_Find_Binary(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations());
 }
 
-// Benchmark find operations with linear search
-template <std::size_t Size>
-static void BM_OrderedArray_Find_Linear(benchmark::State& state) {
-  // Pre-generate unique keys
-  auto keys = GenerateUniqueKeys<Size>();
+// Register insert benchmarks for small arrays (where linear/SIMD might win)
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::SIMD>);
 
-  // Pre-populate the array
-  ordered_array<int, int, Size, SearchMode::Linear> arr;
-  for (std::size_t i = 0; i < Size; ++i) {
-    arr.insert(keys[i], i);
-  }
-
-  std::size_t idx = 0;
-  for (auto _ : state) {
-    auto it = arr.find(keys[idx % Size]);
-    benchmark::DoNotOptimize(it);
-    ++idx;
-  }
-  state.SetItemsProcessed(state.iterations());
-}
-
-// Benchmark find operations with SIMD search
-template <std::size_t Size>
-static void BM_OrderedArray_Find_SIMD(benchmark::State& state) {
-  // Pre-generate unique keys
-  auto keys = GenerateUniqueKeys<Size>();
-
-  // Pre-populate the array
-  ordered_array<int, int, Size, SearchMode::SIMD> arr;
-  for (std::size_t i = 0; i < Size; ++i) {
-    arr.insert(keys[i], i);
-  }
-
-  std::size_t idx = 0;
-  for (auto _ : state) {
-    auto it = arr.find(keys[idx % Size]);
-    benchmark::DoNotOptimize(it);
-    ++idx;
-  }
-  state.SetItemsProcessed(state.iterations());
-}
-
-// Register benchmarks for small arrays (where linear/SIMD might win)
-BENCHMARK(BM_OrderedArray_Insert_Binary<8>);
-BENCHMARK(BM_OrderedArray_Insert_Linear<8>);
-BENCHMARK(BM_OrderedArray_Insert_SIMD<8>);
-BENCHMARK(BM_OrderedArray_Insert_Binary<16>);
-BENCHMARK(BM_OrderedArray_Insert_Linear<16>);
-BENCHMARK(BM_OrderedArray_Insert_SIMD<16>);
-BENCHMARK(BM_OrderedArray_Insert_Binary<32>);
-BENCHMARK(BM_OrderedArray_Insert_Linear<32>);
-BENCHMARK(BM_OrderedArray_Insert_SIMD<32>);
-BENCHMARK(BM_OrderedArray_Insert_Binary<64>);
-BENCHMARK(BM_OrderedArray_Insert_Linear<64>);
-BENCHMARK(BM_OrderedArray_Insert_SIMD<64>);
-
-BENCHMARK(BM_OrderedArray_Find_Binary<8>);
-BENCHMARK(BM_OrderedArray_Find_Linear<8>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<8>);
-BENCHMARK(BM_OrderedArray_Find_Binary<16>);
-BENCHMARK(BM_OrderedArray_Find_Linear<16>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<16>);
-BENCHMARK(BM_OrderedArray_Find_Binary<32>);
-BENCHMARK(BM_OrderedArray_Find_Linear<32>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<32>);
-BENCHMARK(BM_OrderedArray_Find_Binary<64>);
-BENCHMARK(BM_OrderedArray_Find_Linear<64>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<64>);
-BENCHMARK(BM_OrderedArray_Find_Binary<128>);
-BENCHMARK(BM_OrderedArray_Find_Linear<128>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<128>);
-BENCHMARK(BM_OrderedArray_Find_Binary<256>);
-BENCHMARK(BM_OrderedArray_Find_Linear<256>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<256>);
+// Register find benchmarks for various sizes
+BENCHMARK(BM_OrderedArray_Find<8, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<8, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<8, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<16, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<16, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<16, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<32, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<32, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<32, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<64, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<64, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<64, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<128, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<128, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<128, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<256, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<256, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<256, SearchMode::SIMD>);
 
 // Non-power-of-2 benchmarks to exercise progressive SIMD fallback
 // These sizes (2^n - 1) test all fallback paths: 8→4→2→1 for 32-bit keys
-BENCHMARK(BM_OrderedArray_Find_Binary<7>);
-BENCHMARK(BM_OrderedArray_Find_Linear<7>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<7>);
-BENCHMARK(BM_OrderedArray_Find_Binary<15>);
-BENCHMARK(BM_OrderedArray_Find_Linear<15>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<15>);
-BENCHMARK(BM_OrderedArray_Find_Binary<31>);
-BENCHMARK(BM_OrderedArray_Find_Linear<31>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<31>);
-BENCHMARK(BM_OrderedArray_Find_Binary<63>);
-BENCHMARK(BM_OrderedArray_Find_Linear<63>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<63>);
-BENCHMARK(BM_OrderedArray_Find_Binary<127>);
-BENCHMARK(BM_OrderedArray_Find_Linear<127>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<127>);
-BENCHMARK(BM_OrderedArray_Find_Binary<255>);
-BENCHMARK(BM_OrderedArray_Find_Linear<255>);
-BENCHMARK(BM_OrderedArray_Find_SIMD<255>);
+BENCHMARK(BM_OrderedArray_Find<7, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<7, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<7, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<15, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<15, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<15, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<31, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<31, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<31, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<63, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<63, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<63, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<127, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<127, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<127, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Find<255, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Find<255, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Find<255, SearchMode::SIMD>);
 
 // MoveMode comparison benchmarks: Standard vs SIMD data movement
 // These benchmarks compare insert performance with different move modes
-template <std::size_t Size>
-static void BM_OrderedArray_Insert_Binary_StandardMove(
-    benchmark::State& state) {
-  auto keys = GenerateUniqueKeys<Size>();
-
-  for (auto _ : state) {
-    ordered_array<int, int, Size, SearchMode::Binary, MoveMode::Standard> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(keys[i], i);
-    }
-    benchmark::DoNotOptimize(arr);
-  }
-  state.SetItemsProcessed(state.iterations() * Size);
-}
-
-template <std::size_t Size>
-static void BM_OrderedArray_Insert_Binary_SIMDMove(benchmark::State& state) {
-  auto keys = GenerateUniqueKeys<Size>();
-
-  for (auto _ : state) {
-    ordered_array<int, int, Size, SearchMode::Binary, MoveMode::SIMD> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(keys[i], i);
-    }
-    benchmark::DoNotOptimize(arr);
-  }
-  state.SetItemsProcessed(state.iterations() * Size);
-}
-
-// Register MoveMode comparison benchmarks
-BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<8>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<8>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<16>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<16>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<32>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<32>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<64>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<64>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<128>);
-BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<128>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::SIMD>);
 
 BENCHMARK_MAIN();
