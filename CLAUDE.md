@@ -243,6 +243,109 @@ This allows `it->first` and `it->second` syntax.
 - SIMD vs non-SIMD measurements
 - Different data sizes and patterns
 
+## Benchmarking Best Practices
+
+### Template-Based Benchmark Consolidation
+
+**Problem**: Duplicated benchmark code for different configurations (SearchMode, MoveMode, sizes)
+
+**Solution**: Use templated benchmark functions with compile-time parameters
+
+**Example Pattern**:
+```cpp
+// Instead of separate functions for each mode:
+// BM_OrderedArray_Insert_Binary, BM_OrderedArray_Insert_Linear, etc.
+
+// Use a single template:
+template <std::size_t Size, SearchMode search_mode,
+          MoveMode move_mode = MoveMode::SIMD>
+static void BM_OrderedArray_Insert(benchmark::State& state) {
+  auto keys = GenerateUniqueKeys<Size>();
+
+  for (auto _ : state) {
+    ordered_array<int, int, Size, search_mode, move_mode> arr;
+    for (std::size_t i = 0; i < Size; ++i) {
+      arr.insert(keys[i], i);
+    }
+    benchmark::DoNotOptimize(arr);
+  }
+  state.SetItemsProcessed(state.iterations() * Size);
+}
+
+// Register specific instantiations:
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::Standard>);
+```
+
+**Benefits**:
+- Reduces code duplication significantly (43% reduction in our case)
+- Easier to add new configurations (just add BENCHMARK() registration)
+- Ensures consistent implementation across all variants
+- Type-safe compile-time configuration
+- Less maintenance burden
+
+**Key Learnings**:
+1. **Default template parameters**: Use defaults for optional configurations (e.g., `MoveMode = MoveMode::SIMD`)
+2. **Template registrations**: Each `BENCHMARK()` call instantiates the template with specific parameters
+3. **Compile-time validation**: Template errors caught at compile time, not runtime
+4. **Code organization**: Keep template definitions before registration macros
+5. **Naming**: Benchmark names auto-generated from template instantiation
+
+**When to consolidate**:
+- ✅ Multiple benchmarks with only parameter differences
+- ✅ Same measurement logic across variants
+- ✅ Configurations representable as compile-time constants
+- ❌ Fundamentally different measurement approaches
+- ❌ Runtime-only configuration differences
+
+### SIMD Data Movement
+
+**Implementation**: AVX2-accelerated array shifting for insert/remove operations
+
+**Progressive Fallback Strategy** (32→16→1 bytes):
+```cpp
+// Move data in progressively smaller chunks
+while (num_bytes >= 32) {
+  // AVX2: 256-bit (32 bytes)
+  __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
+  // ... advance pointers
+}
+
+if (num_bytes >= 16) {
+  // SSE: 128-bit (16 bytes)
+  __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+  _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
+  // ... advance pointers
+}
+
+// Remaining 0-15 bytes: simple byte-by-byte loop
+while (num_bytes > 0) {
+  *dst = *src;
+  // ... advance pointers
+}
+```
+
+**Key Learnings**:
+1. **Byte-based arithmetic**: Cast to `char*` and work with byte counts for simplicity
+2. **Trivially copyable check**: Only use SIMD for `std::is_trivially_copyable_v<T>`
+3. **Manual chunking unnecessary**: After SIMD blocks, simple byte loop performs better than `std::move` for small remainders (0-15 bytes)
+4. **Unaligned loads**: Use `_mm256_loadu_si256` (unaligned) not `_mm256_load_si256` (aligned)
+5. **Direction matters**: Use `move_backward` for overlapping ranges when shifting right
+
+**Performance Results** (Insert operations, 32-bit keys/values):
+- Size 8: SIMD 14% faster than Standard
+- Size 16: SIMD 20% faster than Standard
+- Size 64: SIMD 8% faster than Standard
+
+**Trade-offs**:
+- Best gains on small-medium sizes (8-64 elements)
+- Diminishes for very large sizes due to memory bandwidth limits
+- Adds code complexity and platform dependencies
+- Worth it for hot paths in performance-critical code
+
 ## Common Pitfalls and Solutions
 
 ### 1. Iterator References
@@ -385,13 +488,22 @@ echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governo
 3. **Iterator Proxies**: Range-based for requires `auto` not `auto&`
 4. **Move-Only Values**: Not yet tested (may need additional work)
 
+## Recent Improvements
+
+- ✅ **SIMD Search Implementation** (PR #16): Added AVX2-accelerated linear search with progressive fallback
+- ✅ **AVX2 Build Configuration** (PR #14): Configurable AVX2 support with Release/Debug defaults
+- ✅ **SIMD Data Movement** (PR #18): AVX2-accelerated array shifts for insert/remove operations
+- ✅ **Benchmark Consolidation** (PR #20): Reduced benchmark code duplication by 43% using templates
+
 ## Open Questions / TODO
 
 - [ ] Should we support move semantics for insert operations?
 - [ ] Add alignment attributes for AVX2 compatibility?
 - [ ] Implement custom allocator support?
 - [ ] Add statistics tracking (inserts, removals, searches)?
-- [ ] Create dedicated benchmark suite for ordered_array?
+- [x] Create dedicated benchmark suite for ordered_array? ✅ Done
+- [ ] Implement AVX2 vectorized binary search?
+- [ ] Add support for custom comparators?
 
 ---
 
