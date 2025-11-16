@@ -168,4 +168,25 @@ BENCHMARK(BM_OrderedArray_Find_Binary<256>);
 BENCHMARK(BM_OrderedArray_Find_Linear<256>);
 BENCHMARK(BM_OrderedArray_Find_SIMD<256>);
 
+// Non-power-of-2 benchmarks to exercise progressive SIMD fallback
+// These sizes (2^n - 1) test all fallback paths: 8→4→2→1 for 32-bit keys
+BENCHMARK(BM_OrderedArray_Find_Binary<7>);
+BENCHMARK(BM_OrderedArray_Find_Linear<7>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<7>);
+BENCHMARK(BM_OrderedArray_Find_Binary<15>);
+BENCHMARK(BM_OrderedArray_Find_Linear<15>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<15>);
+BENCHMARK(BM_OrderedArray_Find_Binary<31>);
+BENCHMARK(BM_OrderedArray_Find_Linear<31>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<31>);
+BENCHMARK(BM_OrderedArray_Find_Binary<63>);
+BENCHMARK(BM_OrderedArray_Find_Linear<63>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<63>);
+BENCHMARK(BM_OrderedArray_Find_Binary<127>);
+BENCHMARK(BM_OrderedArray_Find_Linear<127>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<127>);
+BENCHMARK(BM_OrderedArray_Find_Binary<255>);
+BENCHMARK(BM_OrderedArray_Find_Linear<255>);
+BENCHMARK(BM_OrderedArray_Find_SIMD<255>);
+
 BENCHMARK_MAIN();
