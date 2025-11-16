@@ -189,4 +189,47 @@ BENCHMARK(BM_OrderedArray_Find_Binary<255>);
 BENCHMARK(BM_OrderedArray_Find_Linear<255>);
 BENCHMARK(BM_OrderedArray_Find_SIMD<255>);
 
+// MoveMode comparison benchmarks: Standard vs SIMD data movement
+// These benchmarks compare insert performance with different move modes
+template <std::size_t Size>
+static void BM_OrderedArray_Insert_Binary_StandardMove(
+    benchmark::State& state) {
+  auto keys = GenerateUniqueKeys<Size>();
+
+  for (auto _ : state) {
+    ordered_array<int, int, Size, SearchMode::Binary, MoveMode::Standard> arr;
+    for (std::size_t i = 0; i < Size; ++i) {
+      arr.insert(keys[i], i);
+    }
+    benchmark::DoNotOptimize(arr);
+  }
+  state.SetItemsProcessed(state.iterations() * Size);
+}
+
+template <std::size_t Size>
+static void BM_OrderedArray_Insert_Binary_SIMDMove(benchmark::State& state) {
+  auto keys = GenerateUniqueKeys<Size>();
+
+  for (auto _ : state) {
+    ordered_array<int, int, Size, SearchMode::Binary, MoveMode::SIMD> arr;
+    for (std::size_t i = 0; i < Size; ++i) {
+      arr.insert(keys[i], i);
+    }
+    benchmark::DoNotOptimize(arr);
+  }
+  state.SetItemsProcessed(state.iterations() * Size);
+}
+
+// Register MoveMode comparison benchmarks
+BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<8>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<8>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<16>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<16>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<32>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<32>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<64>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<64>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_StandardMove<128>);
+BENCHMARK(BM_OrderedArray_Insert_Binary_SIMDMove<128>);
+
 BENCHMARK_MAIN();

@@ -23,6 +23,12 @@ enum class SearchMode {
   SIMD     // SIMD-accelerated linear search for small arrays
 };
 
+// Enum to control data movement strategy
+enum class MoveMode {
+  Standard,  // Use std::move/std::move_backward
+  SIMD       // Use SIMD-accelerated moves (default)
+};
+
 // Concept to enforce that Key type supports comparison operations
 template <typename T>
 concept Comparable = requires(T a, T b) {
@@ -43,10 +49,12 @@ concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
  * @tparam Key The key type (must be Comparable)
  * @tparam Value The value type
  * @tparam Length The maximum number of elements
- * @tparam Mode The search mode (Binary, Linear, or SIMD)
+ * @tparam SearchModeT The search mode (Binary, Linear, or SIMD)
+ * @tparam MoveModeT The data movement mode (Standard or SIMD, defaults to SIMD)
  */
 template <Comparable Key, typename Value, std::size_t Length,
-          SearchMode Mode = SearchMode::Binary>
+          SearchMode SearchModeT = SearchMode::Binary,
+          MoveMode MoveModeT = MoveMode::SIMD>
 class ordered_array {
  private:
   // Forward declare iterator classes
@@ -366,8 +374,15 @@ class ordered_array {
    */
   template <typename T>
   void simd_move_backward(T* first, T* last, T* dest_last) {
+    if constexpr (MoveModeT == MoveMode::Standard) {
+      // Use standard library move
+      std::move_backward(first, last, dest_last);
+      return;
+    }
+
 #ifdef __AVX2__
-    if constexpr (std::is_trivially_copyable_v<T>) {
+    if constexpr (MoveModeT == MoveMode::SIMD &&
+                  std::is_trivially_copyable_v<T>) {
       // Calculate number of elements to move
       size_type count = last - first;
       if (count == 0)
@@ -443,8 +458,15 @@ class ordered_array {
    */
   template <typename T>
   void simd_move_forward(T* first, T* last, T* dest_first) {
+    if constexpr (MoveModeT == MoveMode::Standard) {
+      // Use standard library move
+      std::move(first, last, dest_first);
+      return;
+    }
+
 #ifdef __AVX2__
-    if constexpr (std::is_trivially_copyable_v<T>) {
+    if constexpr (MoveModeT == MoveMode::SIMD &&
+                  std::is_trivially_copyable_v<T>) {
       // Calculate number of elements to move
       size_type count = last - first;
       if (count == 0)
@@ -517,7 +539,7 @@ class ordered_array {
    * @return Iterator to the insertion position
    */
   auto lower_bound_key(const Key& key) const {
-    if constexpr (Mode == SearchMode::Linear) {
+    if constexpr (SearchModeT == SearchMode::Linear) {
       // Linear search: scan from beginning until we find key >= search key
       auto it = keys_.begin();
       auto end_it = keys_.begin() + size_;
@@ -525,10 +547,10 @@ class ordered_array {
         ++it;
       }
       return it;
-    } else if constexpr (Mode == SearchMode::Binary) {
+    } else if constexpr (SearchModeT == SearchMode::Binary) {
       // Binary search using standard library
       return std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
-    } else if constexpr (Mode == SearchMode::SIMD) {
+    } else if constexpr (SearchModeT == SearchMode::SIMD) {
       // SIMD-accelerated linear search
 #ifdef __AVX2__
       if constexpr (SIMDSearchable<Key>) {
@@ -556,8 +578,9 @@ class ordered_array {
       return it;
 #endif
     } else {
-      static_assert(Mode == SearchMode::Binary || Mode == SearchMode::Linear ||
-                        Mode == SearchMode::SIMD,
+      static_assert(SearchModeT == SearchMode::Binary ||
+                        SearchModeT == SearchMode::Linear ||
+                        SearchModeT == SearchMode::SIMD,
                     "Invalid SearchMode");
     }
   }
@@ -709,14 +732,15 @@ class ordered_array {
 };
 
 // Non-member operator+ for iterator + difference
-template <Comparable Key, typename Value, std::size_t Length, SearchMode Mode,
-          bool IsConst>
-typename ordered_array<Key, Value, Length,
-                       Mode>::template ordered_array_iterator<IsConst>
-operator+(typename ordered_array<Key, Value, Length, Mode>::
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT, bool IsConst>
+typename ordered_array<Key, Value, Length, SearchModeT,
+                       MoveModeT>::template ordered_array_iterator<IsConst>
+operator+(typename ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
               template ordered_array_iterator<IsConst>::difference_type n,
-          const typename ordered_array<Key, Value, Length, Mode>::
-              template ordered_array_iterator<IsConst>& it) {
+          const typename ordered_array<
+              Key, Value, Length, SearchModeT,
+              MoveModeT>::template ordered_array_iterator<IsConst>& it) {
   return it + n;
 }
 
