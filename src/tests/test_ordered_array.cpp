@@ -14,6 +14,7 @@ struct SearchModeType {
 
 using BinarySearchMode = SearchModeType<SearchMode::Binary>;
 using LinearSearchMode = SearchModeType<SearchMode::Linear>;
+using SIMDSearchMode = SearchModeType<SearchMode::SIMD>;
 
 TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   ordered_array<int, std::string, 10> arr;
@@ -25,7 +26,7 @@ TEST_CASE("ordered_array basic construction", "[ordered_array]") {
 }
 
 TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
-                   BinarySearchMode, LinearSearchMode) {
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   ordered_array<int, std::string, 5, Mode> arr;
 
@@ -81,7 +82,7 @@ TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
 }
 
 TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
-                   BinarySearchMode, LinearSearchMode) {
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
@@ -123,7 +124,7 @@ TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
 }
 
 TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
-                   BinarySearchMode, LinearSearchMode) {
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   ordered_array<int, std::string, 10, Mode> arr;
   arr.insert(10, "ten");
@@ -173,7 +174,7 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
 }
 
 TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
-                   BinarySearchMode, LinearSearchMode) {
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   ordered_array<int, std::string, 10, Mode> arr;
 

@@ -3,9 +3,15 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cstring>
 #include <iterator>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
+
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
 
 namespace fast_containers {
 
@@ -13,7 +19,7 @@ namespace fast_containers {
 enum class SearchMode {
   Binary,  // Binary search using std::lower_bound (O(log n))
   Linear,  // Linear search for small arrays (better cache behavior)
-  SIMD     // Reserved for future AVX2/AVX-512 implementations
+  SIMD     // SIMD-accelerated linear search for small arrays
 };
 
 // Concept to enforce that Key type supports comparison operations
@@ -22,6 +28,11 @@ concept Comparable = requires(T a, T b) {
   { a < b } -> std::convertible_to<bool>;
   { a == b } -> std::convertible_to<bool>;
 };
+
+// Concept for types that can use SIMD-accelerated search
+template <typename T>
+concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
+                         (sizeof(T) == 4 || sizeof(T) == 8);
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
@@ -218,6 +229,84 @@ class ordered_array {
   void clear() { size_ = 0; }
 
  private:
+#ifdef __AVX2__
+  /**
+   * SIMD-accelerated linear search for 32-bit keys (int32_t, uint32_t, float)
+   * Compares 8 keys at a time using AVX2
+   */
+  template <typename K>
+    requires(sizeof(K) == 4)
+  auto simd_lower_bound_4byte(const K& key) const {
+    // Prepare search key in SIMD register (broadcast to all 8 lanes)
+    int32_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+    __m256i search_vec = _mm256_set1_epi32(key_bits);
+
+    size_type i = 0;
+    // Process 8 keys at a time
+    for (; i + 8 <= size_; i += 8) {
+      // Load 8 keys from array
+      __m256i keys_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
+      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec, keys_vec);
+
+      // Check if any key is >= search_key
+      int mask = _mm256_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Found a position where key >= search_key, finish with scalar search
+        break;
+      }
+    }
+
+    // Handle remaining keys with scalar loop
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
+  }
+
+  /**
+   * SIMD-accelerated linear search for 64-bit keys (int64_t, uint64_t, double)
+   * Compares 4 keys at a time using AVX2
+   */
+  template <typename K>
+    requires(sizeof(K) == 8)
+  auto simd_lower_bound_8byte(const K& key) const {
+    // Prepare search key in SIMD register (broadcast to all 4 lanes)
+    int64_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+    __m256i search_vec = _mm256_set1_epi64x(key_bits);
+
+    size_type i = 0;
+    // Process 4 keys at a time
+    for (; i + 4 <= size_; i += 4) {
+      // Load 4 keys from array
+      __m256i keys_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
+      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec, keys_vec);
+
+      // Check if any key is >= search_key
+      int mask = _mm256_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Found a position where key >= search_key, finish with scalar search
+        break;
+      }
+    }
+
+    // Handle remaining keys with scalar loop
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
+  }
+#endif
+
   /**
    * Find the insertion position for a key using the configured search mode.
    * Returns an iterator to the first element not less than the given key.
@@ -237,11 +326,37 @@ class ordered_array {
     } else if constexpr (Mode == SearchMode::Binary) {
       // Binary search using standard library
       return std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+    } else if constexpr (Mode == SearchMode::SIMD) {
+      // SIMD-accelerated linear search
+#ifdef __AVX2__
+      if constexpr (SIMDSearchable<Key>) {
+        if constexpr (sizeof(Key) == 4) {
+          return simd_lower_bound_4byte(key);
+        } else if constexpr (sizeof(Key) == 8) {
+          return simd_lower_bound_8byte(key);
+        }
+      } else {
+        // Fallback to regular linear search if type doesn't support SIMD
+        auto it = keys_.begin();
+        auto end_it = keys_.begin() + size_;
+        while (it != end_it && *it < key) {
+          ++it;
+        }
+        return it;
+      }
+#else
+      // AVX2 not available, fall back to linear search
+      auto it = keys_.begin();
+      auto end_it = keys_.begin() + size_;
+      while (it != end_it && *it < key) {
+        ++it;
+      }
+      return it;
+#endif
     } else {
-      // SIMD mode - not yet implemented, fall back to binary search
-      static_assert(Mode == SearchMode::SIMD,
-                    "Invalid SearchMode - must be Binary, Linear, or SIMD");
-      return std::lower_bound(keys_.begin(), keys_.begin() + size_, key);
+      static_assert(Mode == SearchMode::Binary || Mode == SearchMode::Linear ||
+                        Mode == SearchMode::SIMD,
+                    "Invalid SearchMode");
     }
   }
 
