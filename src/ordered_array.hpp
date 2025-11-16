@@ -383,59 +383,58 @@ class ordered_array {
 #ifdef __AVX2__
     if constexpr (MoveModeT == MoveMode::SIMD &&
                   std::is_trivially_copyable_v<T>) {
-      // Calculate number of elements to move
-      size_type count = last - first;
-      if (count == 0)
+      // Work with bytes - cast to char* for simplicity
+      size_type num_bytes = (last - first) * sizeof(T);
+      if (num_bytes == 0)
         return;
 
       // Work backwards to avoid overwriting source data
-      T* src = last;
-      T* dst = dest_last;
+      char* src = reinterpret_cast<char*>(last);
+      char* dst = reinterpret_cast<char*>(dest_last);
 
       // Move 32-byte blocks (256-bit AVX2)
-      constexpr size_type bytes_per_256 = 32;
-      constexpr size_type elems_per_256 = bytes_per_256 / sizeof(T);
-
-      while (count >= elems_per_256 && elems_per_256 > 0) {
-        src -= elems_per_256;
-        dst -= elems_per_256;
+      while (num_bytes >= 32) {
+        src -= 32;
+        dst -= 32;
         __m256i data =
             _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
-        count -= elems_per_256;
+        num_bytes -= 32;
       }
 
       // Move 16-byte blocks (128-bit SSE)
-      constexpr size_type bytes_per_128 = 16;
-      constexpr size_type elems_per_128 = bytes_per_128 / sizeof(T);
-
-      if (count >= elems_per_128 && elems_per_128 > 0) {
-        src -= elems_per_128;
-        dst -= elems_per_128;
+      if (num_bytes >= 16) {
+        src -= 16;
+        dst -= 16;
         __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
         _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
-        count -= elems_per_128;
+        num_bytes -= 16;
       }
 
       // Move 8-byte blocks
-      constexpr size_type bytes_per_64 = 8;
-      constexpr size_type elems_per_64 = bytes_per_64 / sizeof(T);
-
-      if (count >= elems_per_64 && elems_per_64 > 0) {
-        src -= elems_per_64;
-        dst -= elems_per_64;
-        // Use 64-bit load/store via double cast
-        double data = *reinterpret_cast<const double*>(src);
-        *reinterpret_cast<double*>(dst) = data;
-        count -= elems_per_64;
+      if (num_bytes >= 8) {
+        src -= 8;
+        dst -= 8;
+        *reinterpret_cast<uint64_t*>(dst) =
+            *reinterpret_cast<const uint64_t*>(src);
+        num_bytes -= 8;
       }
 
-      // Move remaining elements with scalar
-      while (count > 0) {
+      // Move 4-byte blocks
+      if (num_bytes >= 4) {
+        src -= 4;
+        dst -= 4;
+        *reinterpret_cast<uint32_t*>(dst) =
+            *reinterpret_cast<const uint32_t*>(src);
+        num_bytes -= 4;
+      }
+
+      // Move remaining bytes
+      while (num_bytes > 0) {
         --src;
         --dst;
-        *dst = std::move(*src);
-        --count;
+        *dst = *src;
+        --num_bytes;
       }
     } else {
       // Non-trivially copyable: use std::move_backward
@@ -467,59 +466,58 @@ class ordered_array {
 #ifdef __AVX2__
     if constexpr (MoveModeT == MoveMode::SIMD &&
                   std::is_trivially_copyable_v<T>) {
-      // Calculate number of elements to move
-      size_type count = last - first;
-      if (count == 0)
+      // Work with bytes - cast to char* for simplicity
+      size_type num_bytes = (last - first) * sizeof(T);
+      if (num_bytes == 0)
         return;
 
       // Work forwards (safe since dest < src for remove operations)
-      T* src = first;
-      T* dst = dest_first;
+      char* src = reinterpret_cast<char*>(first);
+      char* dst = reinterpret_cast<char*>(dest_first);
 
       // Move 32-byte blocks (256-bit AVX2)
-      constexpr size_type bytes_per_256 = 32;
-      constexpr size_type elems_per_256 = bytes_per_256 / sizeof(T);
-
-      while (count >= elems_per_256 && elems_per_256 > 0) {
+      while (num_bytes >= 32) {
         __m256i data =
             _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
-        src += elems_per_256;
-        dst += elems_per_256;
-        count -= elems_per_256;
+        src += 32;
+        dst += 32;
+        num_bytes -= 32;
       }
 
       // Move 16-byte blocks (128-bit SSE)
-      constexpr size_type bytes_per_128 = 16;
-      constexpr size_type elems_per_128 = bytes_per_128 / sizeof(T);
-
-      if (count >= elems_per_128 && elems_per_128 > 0) {
+      if (num_bytes >= 16) {
         __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
         _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
-        src += elems_per_128;
-        dst += elems_per_128;
-        count -= elems_per_128;
+        src += 16;
+        dst += 16;
+        num_bytes -= 16;
       }
 
       // Move 8-byte blocks
-      constexpr size_type bytes_per_64 = 8;
-      constexpr size_type elems_per_64 = bytes_per_64 / sizeof(T);
-
-      if (count >= elems_per_64 && elems_per_64 > 0) {
-        // Use 64-bit load/store via double cast
-        double data = *reinterpret_cast<const double*>(src);
-        *reinterpret_cast<double*>(dst) = data;
-        src += elems_per_64;
-        dst += elems_per_64;
-        count -= elems_per_64;
+      if (num_bytes >= 8) {
+        *reinterpret_cast<uint64_t*>(dst) =
+            *reinterpret_cast<const uint64_t*>(src);
+        src += 8;
+        dst += 8;
+        num_bytes -= 8;
       }
 
-      // Move remaining elements with scalar
-      while (count > 0) {
-        *dst = std::move(*src);
+      // Move 4-byte blocks
+      if (num_bytes >= 4) {
+        *reinterpret_cast<uint32_t*>(dst) =
+            *reinterpret_cast<const uint32_t*>(src);
+        src += 4;
+        dst += 4;
+        num_bytes -= 4;
+      }
+
+      // Move remaining bytes
+      while (num_bytes > 0) {
+        *dst = *src;
         ++src;
         ++dst;
-        --count;
+        --num_bytes;
       }
     } else {
       // Non-trivially copyable: use std::move
