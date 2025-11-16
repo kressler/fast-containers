@@ -411,25 +411,7 @@ class ordered_array {
         num_bytes -= 16;
       }
 
-      // Move 8-byte blocks
-      if (num_bytes >= 8) {
-        src -= 8;
-        dst -= 8;
-        *reinterpret_cast<uint64_t*>(dst) =
-            *reinterpret_cast<const uint64_t*>(src);
-        num_bytes -= 8;
-      }
-
-      // Move 4-byte blocks
-      if (num_bytes >= 4) {
-        src -= 4;
-        dst -= 4;
-        *reinterpret_cast<uint32_t*>(dst) =
-            *reinterpret_cast<const uint32_t*>(src);
-        num_bytes -= 4;
-      }
-
-      // Move remaining bytes
+      // Move remaining bytes one at a time
       while (num_bytes > 0) {
         --src;
         --dst;
@@ -494,25 +476,7 @@ class ordered_array {
         num_bytes -= 16;
       }
 
-      // Move 8-byte blocks
-      if (num_bytes >= 8) {
-        *reinterpret_cast<uint64_t*>(dst) =
-            *reinterpret_cast<const uint64_t*>(src);
-        src += 8;
-        dst += 8;
-        num_bytes -= 8;
-      }
-
-      // Move 4-byte blocks
-      if (num_bytes >= 4) {
-        *reinterpret_cast<uint32_t*>(dst) =
-            *reinterpret_cast<const uint32_t*>(src);
-        src += 4;
-        dst += 4;
-        num_bytes -= 4;
-      }
-
-      // Move remaining bytes
+      // Move remaining bytes one at a time
       while (num_bytes > 0) {
         *dst = *src;
         ++src;
