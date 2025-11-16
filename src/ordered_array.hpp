@@ -241,17 +241,17 @@ class ordered_array {
     // Prepare search key in SIMD register (broadcast to all 8 lanes)
     int32_t key_bits;
     std::memcpy(&key_bits, &key, sizeof(K));
-    __m256i search_vec = _mm256_set1_epi32(key_bits);
+    __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
 
     size_type i = 0;
-    // Process 8 keys at a time
+    // Process 8 keys at a time with full AVX2
     for (; i + 8 <= size_; i += 8) {
       // Load 8 keys from array
       __m256i keys_vec =
           _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
-      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec, keys_vec);
+      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
 
       // Check if any key is >= search_key
       int mask = _mm256_movemask_epi8(cmp_lt);
@@ -265,7 +265,37 @@ class ordered_array {
       }
     }
 
-    // Handle remaining keys with scalar loop
+    // Process 4 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 4 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      __m128i keys_vec =
+          _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 4;
+    }
+
+    // Process 2 keys at a time with 64-bit SIMD
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      __m128i keys_vec = _mm_castpd_si128(
+          _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if ((mask & 0xFF) != 0xFF) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
     while (i < size_ && keys_[i] < key) {
       ++i;
     }
@@ -283,17 +313,17 @@ class ordered_array {
     // Prepare search key in SIMD register (broadcast to all 4 lanes)
     int64_t key_bits;
     std::memcpy(&key_bits, &key, sizeof(K));
-    __m256i search_vec = _mm256_set1_epi64x(key_bits);
+    __m256i search_vec_256 = _mm256_set1_epi64x(key_bits);
 
     size_type i = 0;
-    // Process 4 keys at a time
+    // Process 4 keys at a time with full AVX2
     for (; i + 4 <= size_; i += 4) {
       // Load 4 keys from array
       __m256i keys_vec =
           _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
-      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec, keys_vec);
+      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
 
       // Check if any key is >= search_key
       int mask = _mm256_movemask_epi8(cmp_lt);
@@ -307,7 +337,22 @@ class ordered_array {
       }
     }
 
-    // Handle remaining keys with scalar loop
+    // Process 2 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi64x(key_bits);
+      __m128i keys_vec =
+          _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
     while (i < size_ && keys_[i] < key) {
       ++i;
     }
