@@ -97,10 +97,8 @@ class ordered_array {
     }
 
     // Shift elements to the right to make space in both arrays
-    std::move_backward(keys_.begin() + idx, keys_.begin() + size_,
-                       keys_.begin() + size_ + 1);
-    std::move_backward(values_.begin() + idx, values_.begin() + size_,
-                       values_.begin() + size_ + 1);
+    simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+    simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
     // Insert the new elements
     keys_[idx] = key;
@@ -151,10 +149,8 @@ class ordered_array {
     if (it != end()) {
       size_type idx = it.index();
       // Shift elements to the left to fill the gap in both arrays
-      std::move(keys_.begin() + idx + 1, keys_.begin() + size_,
-                keys_.begin() + idx);
-      std::move(values_.begin() + idx + 1, values_.begin() + size_,
-                values_.begin() + idx);
+      simd_move_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
+      simd_move_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
       --size_;
     }
   }
@@ -184,10 +180,8 @@ class ordered_array {
     size_type idx = pos - keys_.begin();
 
     // Shift elements to make space in both arrays
-    std::move_backward(keys_.begin() + idx, keys_.begin() + size_,
-                       keys_.begin() + size_ + 1);
-    std::move_backward(values_.begin() + idx, values_.begin() + size_,
-                       values_.begin() + size_ + 1);
+    simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+    simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
     // Insert with default-constructed value
     keys_[idx] = key;
@@ -360,6 +354,160 @@ class ordered_array {
     return keys_.begin() + i;
   }
 #endif
+
+  /**
+   * Move elements backward (towards higher indices) using SIMD when possible.
+   * Used for insert operations to shift elements right and make space.
+   *
+   * @tparam T The element type
+   * @param first Start of the source range
+   * @param last End of the source range
+   * @param dest_last End of the destination range
+   */
+  template <typename T>
+  void simd_move_backward(T* first, T* last, T* dest_last) {
+#ifdef __AVX2__
+    if constexpr (std::is_trivially_copyable_v<T>) {
+      // Calculate number of elements to move
+      size_type count = last - first;
+      if (count == 0)
+        return;
+
+      // Work backwards to avoid overwriting source data
+      T* src = last;
+      T* dst = dest_last;
+
+      // Move 32-byte blocks (256-bit AVX2)
+      constexpr size_type bytes_per_256 = 32;
+      constexpr size_type elems_per_256 = bytes_per_256 / sizeof(T);
+
+      while (count >= elems_per_256 && elems_per_256 > 0) {
+        src -= elems_per_256;
+        dst -= elems_per_256;
+        __m256i data =
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
+        count -= elems_per_256;
+      }
+
+      // Move 16-byte blocks (128-bit SSE)
+      constexpr size_type bytes_per_128 = 16;
+      constexpr size_type elems_per_128 = bytes_per_128 / sizeof(T);
+
+      if (count >= elems_per_128 && elems_per_128 > 0) {
+        src -= elems_per_128;
+        dst -= elems_per_128;
+        __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
+        count -= elems_per_128;
+      }
+
+      // Move 8-byte blocks
+      constexpr size_type bytes_per_64 = 8;
+      constexpr size_type elems_per_64 = bytes_per_64 / sizeof(T);
+
+      if (count >= elems_per_64 && elems_per_64 > 0) {
+        src -= elems_per_64;
+        dst -= elems_per_64;
+        // Use 64-bit load/store via double cast
+        double data = *reinterpret_cast<const double*>(src);
+        *reinterpret_cast<double*>(dst) = data;
+        count -= elems_per_64;
+      }
+
+      // Move remaining elements with scalar
+      while (count > 0) {
+        --src;
+        --dst;
+        *dst = std::move(*src);
+        --count;
+      }
+    } else {
+      // Non-trivially copyable: use std::move_backward
+      std::move_backward(first, last, dest_last);
+    }
+#else
+    // No AVX2: fall back to std::move_backward
+    std::move_backward(first, last, dest_last);
+#endif
+  }
+
+  /**
+   * Move elements forward (towards lower indices) using SIMD when possible.
+   * Used for remove operations to shift elements left and fill gaps.
+   *
+   * @tparam T The element type
+   * @param first Start of the source range
+   * @param last End of the source range
+   * @param dest_first Start of the destination range
+   */
+  template <typename T>
+  void simd_move_forward(T* first, T* last, T* dest_first) {
+#ifdef __AVX2__
+    if constexpr (std::is_trivially_copyable_v<T>) {
+      // Calculate number of elements to move
+      size_type count = last - first;
+      if (count == 0)
+        return;
+
+      // Work forwards (safe since dest < src for remove operations)
+      T* src = first;
+      T* dst = dest_first;
+
+      // Move 32-byte blocks (256-bit AVX2)
+      constexpr size_type bytes_per_256 = 32;
+      constexpr size_type elems_per_256 = bytes_per_256 / sizeof(T);
+
+      while (count >= elems_per_256 && elems_per_256 > 0) {
+        __m256i data =
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
+        src += elems_per_256;
+        dst += elems_per_256;
+        count -= elems_per_256;
+      }
+
+      // Move 16-byte blocks (128-bit SSE)
+      constexpr size_type bytes_per_128 = 16;
+      constexpr size_type elems_per_128 = bytes_per_128 / sizeof(T);
+
+      if (count >= elems_per_128 && elems_per_128 > 0) {
+        __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
+        src += elems_per_128;
+        dst += elems_per_128;
+        count -= elems_per_128;
+      }
+
+      // Move 8-byte blocks
+      constexpr size_type bytes_per_64 = 8;
+      constexpr size_type elems_per_64 = bytes_per_64 / sizeof(T);
+
+      if (count >= elems_per_64 && elems_per_64 > 0) {
+        // Use 64-bit load/store via double cast
+        double data = *reinterpret_cast<const double*>(src);
+        *reinterpret_cast<double*>(dst) = data;
+        src += elems_per_64;
+        dst += elems_per_64;
+        count -= elems_per_64;
+      }
+
+      // Move remaining elements with scalar
+      while (count > 0) {
+        *dst = std::move(*src);
+        ++src;
+        ++dst;
+        --count;
+      }
+    } else {
+      // Non-trivially copyable: use std::move
+      std::move(first, last, dest_first);
+    }
+#else
+    // No AVX2: fall back to std::move
+    std::move(first, last, dest_first);
+#endif
+  }
 
   /**
    * Find the insertion position for a key using the configured search mode.
