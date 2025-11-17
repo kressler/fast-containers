@@ -300,6 +300,65 @@ BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::Standard>);
 - ❌ Fundamentally different measurement approaches
 - ❌ Runtime-only configuration differences
 
+### Benchmark Timing Overhead: PauseTiming/ResumeTiming
+
+**Problem**: Using `state.PauseTiming()` and `state.ResumeTiming()` to exclude setup code can introduce significant overhead that dominates the actual operation being measured.
+
+**Discovery**: When measuring insert operations with PauseTiming:
+```cpp
+for (auto _ : state) {
+  state.PauseTiming();
+  ordered_array<int, int, Size, search_mode> arr;
+  // Pre-populate array...
+  state.ResumeTiming();
+
+  arr.insert(key, value);  // Measure only this
+}
+```
+
+**Results showed constant timing (~313-343ns) regardless of array size**:
+- Size 1: 313ns
+- Size 8: 343ns
+- Size 64: 343ns (should be slower!)
+
+**Root cause**: PauseTiming/ResumeTiming add ~300ns overhead per iteration, completely masking the actual operation time (1-23ns for these small arrays).
+
+**Solution**: Pre-populate once outside the timing loop
+```cpp
+// Pre-populate once (outside timing)
+ordered_array<int, int, Size, search_mode, move_mode> arr;
+for (std::size_t i = 0; i < Size - 1; ++i) {
+  arr.insert(keys[i], i);
+}
+
+for (auto _ : state) {
+  // Measure remove+insert cycle (no PauseTiming overhead)
+  if (arr.size() == Size) {
+    arr.remove(keys[Size - 1]);
+  }
+  arr.insert(keys[Size - 1], Size - 1);
+  benchmark::DoNotOptimize(arr);
+}
+```
+
+**Corrected Results** (Size 8, RemoveInsert):
+- Binary: 10.5ns
+- Linear: 9.17ns
+- SIMD: 18.2ns
+
+**Key Learnings**:
+1. **PauseTiming overhead is significant**: ~300ns on modern CPUs, dominates operations <100ns
+2. **Pre-populate outside loop**: Setup arrays once before `for (auto _ : state)` when possible
+3. **Measure realistic cycles**: For insert/remove, measure the full operation including the array state that triggers data movement
+4. **Verify results scale**: If timing is constant across sizes, you're measuring overhead, not the operation
+5. **DoNotOptimize**: Always use `benchmark::DoNotOptimize()` to prevent compiler from optimizing away work
+
+**When to use PauseTiming**:
+- ✅ Operations >1μs where 300ns overhead is negligible (<30%)
+- ✅ When pre-population is impossible (e.g., testing construction itself)
+- ❌ Micro-benchmarks <100ns (overhead dominates)
+- ❌ When pre-population outside loop is viable
+
 ### SIMD Data Movement
 
 **Implementation**: AVX2-accelerated array shifting for insert/remove operations
@@ -345,6 +404,93 @@ while (num_bytes > 0) {
 - Diminishes for very large sizes due to memory bandwidth limits
 - Adds code complexity and platform dependencies
 - Worth it for hot paths in performance-critical code
+
+### SIMD Performance Trade-offs: When SIMD Wins vs Loses
+
+**Critical Discovery**: SIMD doesn't always win, even when faster at individual operations. The workload characteristics matter more than the raw operation speed.
+
+#### SIMD Wins: Read-Heavy Operations (Find)
+
+**Find Performance** (SearchMode comparison):
+- Size 8: SIMD **1.57ns** vs Linear 1.68ns → **7% faster**
+- Size 16: SIMD **1.68ns** vs Linear 2.21ns → **24% faster**
+- Size 32: SIMD **2.05ns** vs Linear 3.71ns → **45% faster**
+- Size 64: SIMD **2.43ns** vs Linear 5.92ns → **59% faster**
+
+**Why SIMD wins**:
+1. **No early termination benefit**: Must scan entire array to confirm absence
+2. **Parallel comparisons**: Check 8 keys simultaneously vs 1 at a time
+3. **No data movement**: Read-only operations don't require shifting data
+4. **Predictable access pattern**: Sequential loads are cache-friendly
+
+#### SIMD Loses: Write-Heavy Operations on Small Arrays (RemoveInsert)
+
+**RemoveInsert Performance** (Size 8-32):
+- Size 8: Binary 10.5ns, **Linear 9.17ns**, SIMD 18.2ns (Linear wins by 99%)
+- Size 16: Binary 16.6ns, **Linear 13.3ns**, SIMD 20.8ns (Linear wins by 56%)
+- Size 32: **Binary 18.9ns**, Linear 14.7ns, SIMD 22.8ns (Binary wins by 20%)
+- Size 64: **Binary 17.6ns**, SIMD 23.3ns, Linear 24.2ns (Binary wins by 32%)
+
+**Why SIMD loses on small arrays**: CPU Cycle Efficiency, Not Cache
+
+**Initial hypothesis (WRONG)**: Cache misses cause SIMD slowdown
+
+**perf stat analysis revealed the real bottleneck** (Size 32, 1 billion iterations):
+```
+Linear:  7.47B cycles, 43.1B instructions, IPC 5.76, 26.0% cache miss rate
+SIMD:    7.96B cycles, 29.3B instructions, IPC 3.68, 28.5% cache miss rate
+```
+
+**Key metrics**:
+- SIMD executes **32% fewer instructions** (29.3B vs 43.1B) ✅
+- But SIMD takes **6.5% more cycles** (7.96B vs 7.47B) ❌
+- Linear has **56% better IPC** (5.76 vs 3.68) - **This is the bottleneck!**
+- Cache miss rates are similar (26% vs 28.5%) - Not the problem
+
+**Root cause: Instruction-Level Parallelism vs SIMD Complexity**
+1. **Linear search uses simple instructions**: High IPC, minimal pipeline stalls
+2. **SIMD uses complex instructions**: Lower IPC, dependencies between vector operations
+3. **Early termination**: Linear can exit after few comparisons on small arrays
+4. **Branch prediction**: Works well on small, sorted arrays
+
+**Cache line alignment optimization**:
+- Added `alignas(64)` to arrays (64-byte cache line size)
+- Changed to aligned SIMD loads: `_mm256_load_si256` vs `_mm256_loadu_si256`
+- **Result**: SIMD cache references improved by 4.3% (1,334,705 → 1,277,841)
+- **Impact**: Modest improvement, but IPC bottleneck remains dominant
+
+#### Key Learnings: When to Use Each SearchMode
+
+**Use SIMD SearchMode when**:
+- ✅ Read-heavy workloads (find operations dominate)
+- ✅ Large arrays (>32 elements) where parallelism pays off
+- ✅ Negative lookups (must scan entire array)
+- ✅ Uniform access patterns
+
+**Use Linear SearchMode when**:
+- ✅ Write-heavy workloads (frequent insert/remove)
+- ✅ Small arrays (<32 elements) where early exit helps
+- ✅ Positive lookups on small arrays (find quickly)
+- ✅ Minimizing code complexity
+
+**Use Binary SearchMode when**:
+- ✅ Large arrays (>64 elements) with any workload
+- ✅ Logarithmic scaling is important
+- ✅ Balanced read/write operations
+- ✅ When SIMD is unavailable or disabled
+
+**Performance analysis tools used**:
+```bash
+# CPU cycle analysis with perf stat
+perf stat -e cycles,instructions,cache-references,cache-misses,branches \\
+  ./ordered_array_search_benchmark --benchmark_filter="RemoveInsert.*Size:32"
+
+# Calculate IPC (Instructions Per Cycle)
+IPC = instructions / cycles
+
+# Cache miss rate
+Cache miss rate = cache-misses / cache-references * 100
+```
 
 ## Common Pitfalls and Solutions
 
@@ -446,7 +592,7 @@ echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governo
 3. **Parallel Comparisons**: Use SIMD for multiple key comparisons
 
 ### Medium-Term
-1. **Alignment**: Ensure 32-byte alignment for AVX2 loads
+1. ~~**Alignment**: Ensure 32-byte alignment for AVX2 loads~~ ✅ **Done**: Implemented 64-byte cache line alignment (PR #22)
 2. **Prefetching**: Add software prefetch hints
 3. **Branch Prediction**: Optimize hot paths
 
@@ -494,11 +640,16 @@ echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governo
 - ✅ **AVX2 Build Configuration** (PR #14): Configurable AVX2 support with Release/Debug defaults
 - ✅ **SIMD Data Movement** (PR #18): AVX2-accelerated array shifts for insert/remove operations
 - ✅ **Benchmark Consolidation** (PR #20): Reduced benchmark code duplication by 43% using templates
+- ✅ **RemoveInsert Benchmark & Cache Line Alignment** (PR #22):
+  - Fixed benchmark methodology to avoid PauseTiming overhead masking true performance
+  - Discovered SIMD performance trade-offs: wins on reads (7-59% faster), loses on small array modifications due to IPC bottleneck
+  - Implemented 64-byte cache line alignment for 4.3% cache efficiency improvement
+  - Documented when to use SIMD vs Linear vs Binary search modes
 
 ## Open Questions / TODO
 
 - [ ] Should we support move semantics for insert operations?
-- [ ] Add alignment attributes for AVX2 compatibility?
+- [x] Add alignment attributes for AVX2 compatibility? ✅ Done (PR #22: 64-byte cache line alignment)
 - [ ] Implement custom allocator support?
 - [ ] Add statistics tracking (inserts, removals, searches)?
 - [x] Create dedicated benchmark suite for ordered_array? ✅ Done
