@@ -17,12 +17,24 @@ hooks/, install-hooks.sh
 |------------|---------|---------------|
 | Debug | `cmake -S . -B cmake-build-debug && cmake --build cmake-build-debug --parallel` | None |
 | Debug+AVX2 | `cmake -S . -B cmake-build-debug -DENABLE_AVX2=ON && cmake --build cmake-build-debug --parallel` | AVX2 |
+| Debug+ASAN | `cmake -S . -B cmake-build-asan -DENABLE_ASAN=ON && cmake --build cmake-build-asan --parallel` | -fsanitize=address, -fno-omit-frame-pointer, -g, -O1 |
 | Release (default) | `cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cmake-build-release --parallel` | -O3, -mavx2, -mfma, -march=haswell, -ffast-math, -funroll-loops, -mtune=native |
 | Release (no AVX2) | `cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release -DENABLE_AVX2=OFF && cmake --build cmake-build-release --parallel` | -O3, -march=native |
 
-- Test: `ctest --test-dir cmake-build-{debug,release} --output-on-failure`
+- Test: `ctest --test-dir cmake-build-{debug,release,asan} --output-on-failure`
 - Format: `cmake --build cmake-build-debug --target format`
 - AVX2 CPUs: Intel Haswell 2013+, AMD Excavator 2015+
+
+### AddressSanitizer (ASAN)
+ASAN detects memory errors at runtime (buffer overflows, use-after-free, memory leaks).
+
+**Use when**:
+- Debugging crashes or unexpected behavior
+- Testing SIMD code for out-of-bounds access
+- Validating array boundary checks
+- Finding memory leaks
+
+**Performance**: ~2x slowdown, ~3x memory usage (debug builds only)
 
 ## ordered_array<Key, Value, Length, SearchMode, MoveMode>
 
