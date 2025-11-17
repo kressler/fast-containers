@@ -80,6 +80,86 @@ class ordered_array {
   ordered_array() : size_(0) {}
 
   /**
+   * Copy constructor - creates a deep copy of another ordered array
+   * Complexity: O(n) where n is the size of the other array
+   *
+   * @param other The ordered array to copy from
+   */
+  ordered_array(const ordered_array& other) : size_(other.size_) {
+    // Copy only the active elements
+    if (size_ > 0) {
+      std::copy(other.keys_.begin(), other.keys_.begin() + size_,
+                keys_.begin());
+      std::copy(other.values_.begin(), other.values_.begin() + size_,
+                values_.begin());
+    }
+  }
+
+  /**
+   * Move constructor - transfers ownership from another ordered array
+   * Note: Due to inline storage, this is still O(n) as data must be copied.
+   * The move only provides benefit for non-POD Value types.
+   *
+   * @param other The ordered array to move from (will be left empty)
+   */
+  ordered_array(ordered_array&& other) noexcept : size_(other.size_) {
+    // Move the active elements
+    if (size_ > 0) {
+      simd_move_forward(other.keys_.data(), other.keys_.data() + size_,
+                        keys_.data());
+      simd_move_forward(other.values_.data(), other.values_.data() + size_,
+                        values_.data());
+    }
+    // Leave other in valid empty state
+    other.size_ = 0;
+  }
+
+  /**
+   * Copy assignment operator - replaces contents with a copy of another array
+   * Complexity: O(n) where n is the size of the other array
+   *
+   * @param other The ordered array to copy from
+   * @return Reference to this array
+   */
+  ordered_array& operator=(const ordered_array& other) {
+    if (this != &other) {
+      size_ = other.size_;
+      // Copy only the active elements
+      if (size_ > 0) {
+        std::copy(other.keys_.begin(), other.keys_.begin() + size_,
+                  keys_.begin());
+        std::copy(other.values_.begin(), other.values_.begin() + size_,
+                  values_.begin());
+      }
+    }
+    return *this;
+  }
+
+  /**
+   * Move assignment operator - replaces contents by moving from another array
+   * Note: Due to inline storage, this is still O(n) as data must be copied.
+   * The move only provides benefit for non-POD Value types.
+   *
+   * @param other The ordered array to move from (will be left empty)
+   * @return Reference to this array
+   */
+  ordered_array& operator=(ordered_array&& other) noexcept {
+    if (this != &other) {
+      size_ = other.size_;
+      // Move the active elements
+      if (size_ > 0) {
+        simd_move_forward(other.keys_.data(), other.keys_.data() + size_,
+                          keys_.data());
+        simd_move_forward(other.values_.data(), other.values_.data() + size_,
+                          values_.data());
+      }
+      // Leave other in valid empty state
+      other.size_ = 0;
+    }
+    return *this;
+  }
+
+  /**
    * Insert a new key-value pair into the array in sorted order.
    *
    * @param key The key to insert
