@@ -1052,17 +1052,17 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
 
   SECTION("Transfer prefix to non-empty array") {
     ordered_array<int, std::string, 10, Mode> dest;
-    dest.insert(5, "five");
-    dest.insert(6, "six");
+    dest.insert(1, "one");
+    dest.insert(2, "two");
 
     ordered_array<int, std::string, 10, Mode> source;
-    source.insert(1, "one");
-    source.insert(2, "two");
-    source.insert(3, "three");
+    source.insert(5, "five");
+    source.insert(6, "six");
+    source.insert(7, "seven");
 
     dest.transfer_prefix_from(source, 2);
 
-    // Dest should have [1, 2, 5, 6]
+    // Dest should have [1, 2, 5, 6] (appended [5,6] to end)
     REQUIRE(dest.size() == 4);
     auto it = dest.begin();
     REQUIRE(it->first == 1);
@@ -1071,12 +1071,14 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
     REQUIRE(it->first == 2);
     ++it;
     REQUIRE(it->first == 5);
+    REQUIRE(it->second == "five");
     ++it;
     REQUIRE(it->first == 6);
+    REQUIRE(it->second == "six");
 
-    // Source should have [3]
+    // Source should have [7]
     REQUIRE(source.size() == 1);
-    REQUIRE(source.find(3)->second == "three");
+    REQUIRE(source.find(7)->second == "seven");
   }
 
   SECTION("Transfer zero elements") {
@@ -1094,11 +1096,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
 
   SECTION("Transfer all elements from source") {
     ordered_array<int, std::string, 10, Mode> dest;
-    dest.insert(10, "ten");
+    dest.insert(1, "one");
 
     ordered_array<int, std::string, 10, Mode> source;
-    source.insert(1, "one");
-    source.insert(2, "two");
+    source.insert(10, "ten");
+    source.insert(11, "eleven");
 
     dest.transfer_prefix_from(source, 2);
 
@@ -1131,28 +1133,29 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
 
   SECTION("Transfer maintains element order and values") {
     ordered_array<int, std::string, 20, Mode> dest;
-    for (int i = 10; i <= 15; ++i) {
+    for (int i = 1; i <= 6; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
     ordered_array<int, std::string, 20, Mode> source;
-    for (int i = 1; i <= 5; ++i) {
+    for (int i = 10; i <= 14; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
 
     dest.transfer_prefix_from(source, 3);
 
-    // Verify dest has [1, 2, 3, 10, 11, 12, 13, 14, 15]
+    // Verify dest has [1, 2, 3, 4, 5, 6, 10, 11, 12] (appended [10,11,12])
     REQUIRE(dest.size() == 9);
-    REQUIRE(dest.find(1)->second == "100");
-    REQUIRE(dest.find(2)->second == "200");
-    REQUIRE(dest.find(3)->second == "300");
-    REQUIRE(dest.find(10)->second == "100");
+    REQUIRE(dest.find(1)->second == "10");
+    REQUIRE(dest.find(6)->second == "60");
+    REQUIRE(dest.find(10)->second == "1000");
+    REQUIRE(dest.find(11)->second == "1100");
+    REQUIRE(dest.find(12)->second == "1200");
 
-    // Verify source has [4, 5]
+    // Verify source has [13, 14]
     REQUIRE(source.size() == 2);
-    REQUIRE(source.find(4)->second == "400");
-    REQUIRE(source.find(5)->second == "500");
+    REQUIRE(source.find(13)->second == "1300");
+    REQUIRE(source.find(14)->second == "1400");
   }
 }
 
@@ -1180,31 +1183,32 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
 
   SECTION("Transfer suffix to non-empty array") {
     ordered_array<int, std::string, 10, Mode> dest;
-    dest.insert(1, "one");
-    dest.insert(2, "two");
+    dest.insert(5, "five");
+    dest.insert(6, "six");
 
     ordered_array<int, std::string, 10, Mode> source;
-    source.insert(5, "five");
-    source.insert(6, "six");
-    source.insert(7, "seven");
+    source.insert(1, "one");
+    source.insert(2, "two");
+    source.insert(3, "three");
 
     dest.transfer_suffix_from(source, 2);
 
-    // Dest should have [1, 2, 6, 7]
+    // Dest should have [2, 3, 5, 6] (prepended [2,3] to beginning)
     REQUIRE(dest.size() == 4);
     auto it = dest.begin();
-    REQUIRE(it->first == 1);
-    ++it;
     REQUIRE(it->first == 2);
+    REQUIRE(it->second == "two");
+    ++it;
+    REQUIRE(it->first == 3);
+    REQUIRE(it->second == "three");
+    ++it;
+    REQUIRE(it->first == 5);
     ++it;
     REQUIRE(it->first == 6);
-    REQUIRE(it->second == "six");
-    ++it;
-    REQUIRE(it->first == 7);
 
-    // Source should have [5]
+    // Source should have [1]
     REQUIRE(source.size() == 1);
-    REQUIRE(source.find(5)->second == "five");
+    REQUIRE(source.find(1)->second == "one");
   }
 
   SECTION("Transfer zero elements") {
@@ -1222,11 +1226,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
 
   SECTION("Transfer all elements from source") {
     ordered_array<int, std::string, 10, Mode> dest;
-    dest.insert(1, "one");
+    dest.insert(10, "ten");
 
     ordered_array<int, std::string, 10, Mode> source;
-    source.insert(5, "five");
-    source.insert(6, "six");
+    source.insert(1, "one");
+    source.insert(2, "two");
 
     dest.transfer_suffix_from(source, 2);
 
@@ -1259,28 +1263,29 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
 
   SECTION("Transfer maintains element order and values") {
     ordered_array<int, std::string, 20, Mode> dest;
-    for (int i = 1; i <= 5; ++i) {
+    for (int i = 10; i <= 14; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
     ordered_array<int, std::string, 20, Mode> source;
-    for (int i = 10; i <= 15; ++i) {
+    for (int i = 1; i <= 6; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
 
     dest.transfer_suffix_from(source, 3);
 
-    // Verify dest has [1, 2, 3, 4, 5, 13, 14, 15]
+    // Verify dest has [4, 5, 6, 10, 11, 12, 13, 14] (prepended [4,5,6])
     REQUIRE(dest.size() == 8);
-    REQUIRE(dest.find(5)->second == "50");
-    REQUIRE(dest.find(13)->second == "1300");
-    REQUIRE(dest.find(14)->second == "1400");
-    REQUIRE(dest.find(15)->second == "1500");
+    REQUIRE(dest.find(4)->second == "400");
+    REQUIRE(dest.find(5)->second == "500");
+    REQUIRE(dest.find(6)->second == "600");
+    REQUIRE(dest.find(10)->second == "100");
+    REQUIRE(dest.find(14)->second == "140");
 
-    // Verify source has [10, 11, 12]
+    // Verify source has [1, 2, 3]
     REQUIRE(source.size() == 3);
-    REQUIRE(source.find(10)->second == "1000");
-    REQUIRE(source.find(12)->second == "1200");
+    REQUIRE(source.find(1)->second == "100");
+    REQUIRE(source.find(3)->second == "300");
   }
 }
 
@@ -1303,19 +1308,21 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
     }
 
     // Transfer prefix from right to left (rebalance)
-    left.transfer_suffix_from(right, 2);
+    left.transfer_prefix_from(right, 2);
 
-    REQUIRE(left.size() == 4);   // [1, 2, 8, 9]
-    REQUIRE(right.size() == 3);  // [5, 6, 7]
+    REQUIRE(left.size() == 4);   // [1, 2, 5, 6]
+    REQUIRE(right.size() == 3);  // [7, 8, 9]
 
     // Verify left has correct elements
     REQUIRE(left.find(1)->second == 10);
-    REQUIRE(left.find(9)->second == 90);
+    REQUIRE(left.find(2)->second == 20);
+    REQUIRE(left.find(5)->second == 50);
+    REQUIRE(left.find(6)->second == 60);
 
     // Verify right has correct elements
-    REQUIRE(right.find(5)->second == 50);
     REQUIRE(right.find(7)->second == 70);
-    REQUIRE(right.find(9) == right.end());
+    REQUIRE(right.find(8)->second == 80);
+    REQUIRE(right.find(9)->second == 90);
   }
 
   SECTION("Multiple transfers in sequence") {
@@ -1333,20 +1340,20 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
     node3.insert(10, "j");
     node3.insert(11, "k");
 
-    // Transfer from node2 to node1 (suffix)
-    node1.transfer_suffix_from(node2, 1);
-    REQUIRE(node1.size() == 3);  // [1, 2, 8]
-    REQUIRE(node2.size() == 3);  // [5, 6, 7]
+    // Transfer prefix from node2 to node1 (append to node1)
+    node1.transfer_prefix_from(node2, 1);
+    REQUIRE(node1.size() == 3);  // [1, 2, 5]
+    REQUIRE(node2.size() == 3);  // [6, 7, 8]
 
-    // Transfer from node2 to node3 (prefix)
-    node3.transfer_prefix_from(node2, 2);
-    REQUIRE(node3.size() == 4);  // [5, 6, 10, 11]
-    REQUIRE(node2.size() == 1);  // [7]
+    // Transfer suffix from node2 to node3 (prepend to node3)
+    node3.transfer_suffix_from(node2, 2);
+    REQUIRE(node3.size() == 4);  // [7, 8, 10, 11]
+    REQUIRE(node2.size() == 1);  // [6]
 
     // Verify final states
-    REQUIRE(node1.find(8)->second == "h");
-    REQUIRE(node2.find(7)->second == "g");
-    REQUIRE(node3.find(5)->second == "e");
-    REQUIRE(node3.find(6)->second == "f");
+    REQUIRE(node1.find(5)->second == "e");
+    REQUIRE(node2.find(6)->second == "f");
+    REQUIRE(node3.find(7)->second == "g");
+    REQUIRE(node3.find(8)->second == "h");
   }
 }

@@ -410,11 +410,11 @@ class ordered_array {
   }
 
   /**
-   * Transfer elements from the beginning of source array to the beginning of
-   * this array. Elements from this array are shifted right to make space.
+   * Transfer elements from the beginning of source array to the end of
+   * this array (append behavior).
    *
-   * Precondition (debug mode only): All keys in the transferred prefix must be
-   * less than all keys currently in this array.
+   * Precondition (debug mode only): All keys currently in this array must be
+   * less than all keys in the transferred prefix.
    *
    * Note: Invalidates all iterators to both arrays.
    *
@@ -424,8 +424,7 @@ class ordered_array {
    * @throws std::runtime_error if this array has insufficient capacity or
    * count exceeds source size
    *
-   * Complexity: O(n + m) where n is the current size of this array and m is
-   * count
+   * Complexity: O(m) where m is count
    */
   template <std::size_t SourceLength>
   void transfer_prefix_from(
@@ -444,26 +443,20 @@ class ordered_array {
     }
 
     // Debug assertion: ordering precondition
-    // All keys in source prefix must be < all keys in this array
-    assert((empty() || count == 0 || source.keys_[count - 1] < keys_[0]) &&
-           "Ordering precondition violated: all keys in source prefix must be "
-           "< all keys in this");
+    // All keys in this array must be < all keys in source prefix
+    assert((empty() || count == 0 || keys_[size_ - 1] < source.keys_[0]) &&
+           "Ordering precondition violated: all keys in this must be < all "
+           "keys in source prefix");
 
     if (count == 0) {
       return;
     }
 
-    // Shift current elements right to make space for incoming prefix
-    if (size_ > 0) {
-      simd_move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
-      simd_move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
-    }
-
-    // Copy prefix from source to beginning of this array
+    // Copy prefix from source to end of this array (append)
     simd_move_forward(source.keys_.data(), source.keys_.data() + count,
-                      keys_.data());
+                      &keys_[size_]);
     simd_move_forward(source.values_.data(), source.values_.data() + count,
-                      values_.data());
+                      &values_[size_]);
 
     // Shift remaining elements in source left to fill the gap
     if (count < source.size_) {
@@ -479,10 +472,12 @@ class ordered_array {
   }
 
   /**
-   * Transfer elements from the end of source array to the end of this array.
+   * Transfer elements from the end of source array to the beginning of this
+   * array (prepend behavior). Elements from this array are shifted right to
+   * make space.
    *
-   * Precondition (debug mode only): All keys currently in this array must be
-   * less than all keys in the transferred suffix.
+   * Precondition (debug mode only): All keys in the transferred suffix must be
+   * less than all keys currently in this array.
    *
    * Note: Invalidates all iterators to both arrays.
    *
@@ -492,7 +487,8 @@ class ordered_array {
    * @throws std::runtime_error if this array has insufficient capacity or
    * count exceeds source size
    *
-   * Complexity: O(count) for the direct append
+   * Complexity: O(n + m) where n is the current size of this array and m is
+   * count
    */
   template <std::size_t SourceLength>
   void transfer_suffix_from(
@@ -511,26 +507,32 @@ class ordered_array {
     }
 
     // Debug assertion: ordering precondition
-    // All keys in this array must be < all keys in source suffix
-    assert((empty() || count == 0 ||
-            keys_[size_ - 1] < source.keys_[source.size_ - count]) &&
-           "Ordering precondition violated: all keys in this must be < all "
-           "keys in source suffix");
+    // All keys in source suffix must be < all keys in this array
+    assert(
+        (empty() || count == 0 || source.keys_[source.size_ - 1] < keys_[0]) &&
+        "Ordering precondition violated: all keys in source suffix must be "
+        "< all keys in this");
 
     if (count == 0) {
       return;
     }
 
+    // Shift current elements right to make space for incoming suffix
+    if (size_ > 0) {
+      simd_move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
+      simd_move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
+    }
+
     // Calculate starting position of suffix in source
     size_type suffix_start = source.size_ - count;
 
-    // Copy suffix from source to end of this array
+    // Copy suffix from source to beginning of this array (prepend)
     simd_move_forward(&source.keys_[suffix_start], &source.keys_[source.size_],
-                      &keys_[size_]);
+                      keys_.data());
     simd_move_forward(&source.values_[suffix_start],
-                      &source.values_[source.size_], &values_[size_]);
+                      &source.values_[source.size_], values_.data());
 
-    // Update sizes
+    // Update sizes (no need to shift source - we took from the end)
     size_ += count;
     source.size_ -= count;
   }
