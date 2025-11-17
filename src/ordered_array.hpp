@@ -248,9 +248,10 @@ class ordered_array {
     size_type i = 0;
     // Process 8 keys at a time with full AVX2
     for (; i + 8 <= size_; i += 8) {
-      // Load 8 keys from array
+      // Load 8 keys from array (aligned - array is 64-byte aligned, i is
+      // multiple of 8)
       __m256i keys_vec =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
       __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
@@ -270,8 +271,9 @@ class ordered_array {
     // Process 4 keys at a time with half AVX2 (128-bit SSE)
     if (i + 4 <= size_) {
       __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      // Aligned load (i is multiple of 8 from previous loop)
       __m128i keys_vec =
-          _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
       __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
 
       int mask = _mm_movemask_epi8(cmp_lt);
@@ -320,9 +322,10 @@ class ordered_array {
     size_type i = 0;
     // Process 4 keys at a time with full AVX2
     for (; i + 4 <= size_; i += 4) {
-      // Load 4 keys from array
+      // Load 4 keys from array (aligned - array is 64-byte aligned, i is
+      // multiple of 4)
       __m256i keys_vec =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
       __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
@@ -342,8 +345,9 @@ class ordered_array {
     // Process 2 keys at a time with half AVX2 (128-bit SSE)
     if (i + 2 <= size_) {
       __m128i search_vec_128 = _mm_set1_epi64x(key_bits);
+      // Aligned load (i is multiple of 4 from previous loop)
       __m128i keys_vec =
-          _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
       __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
 
       int mask = _mm_movemask_epi8(cmp_lt);
@@ -548,8 +552,9 @@ class ordered_array {
   }
 
   // Separate arrays for keys and values
-  std::array<Key, Length> keys_;
-  std::array<Value, Length> values_;
+  // Align to 64-byte cache lines for optimal SIMD performance
+  alignas(64) std::array<Key, Length> keys_;
+  alignas(64) std::array<Value, Length> values_;
   size_type size_;
 
   // Proxy class to represent a key-value pair reference
