@@ -123,6 +123,31 @@ perf stat -e cycles,instructions,cache-references,cache-misses,branches \\
 # Cache miss rate = cache-misses / cache-references * 100
 ```
 
+## GitHub Workflow
+
+### Updating PR Descriptions
+**Problem**: `gh pr edit <num> --body` fails with GraphQL deprecation error (Projects classic)
+
+**Solution**: Use REST API directly
+```bash
+# Write description to file first
+cat > /tmp/pr_body.md <<'EOF'
+Your PR description here...
+EOF
+
+# Update PR using REST API
+gh api \
+  --method PATCH \
+  -H "Accept: application/vnd.github+json" \
+  repos/kressler/fast-containers/pulls/<PR_NUM> \
+  -F body="$(cat /tmp/pr_body.md)"
+```
+
+**Key points**:
+- `-F body=` handles multi-line text correctly
+- `$(cat file)` preserves formatting
+- Works when `gh pr edit` fails with GraphQL errors
+
 ## Common Pitfalls
 
 | Issue | Wrong | Correct |
