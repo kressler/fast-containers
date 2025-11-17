@@ -24,21 +24,32 @@ std::vector<int> GenerateUniqueKeys() {
   return std::vector<int>(unique_keys.begin(), unique_keys.end());
 }
 
-// Consolidated benchmark for insert operations
+// Benchmark remove + insert cycle on nearly-full array
+// Pre-populates to Size-1 elements, then repeatedly removes and re-inserts
+// the last element. Measures combined remove+insert cost without the ~300ns
+// overhead of PauseTiming/ResumeTiming on every iteration.
 template <std::size_t Size, SearchMode search_mode,
           MoveMode move_mode = MoveMode::SIMD>
-static void BM_OrderedArray_Insert(benchmark::State& state) {
-  // Pre-generate unique keys outside the benchmark loop
+static void BM_OrderedArray_RemoveInsert(benchmark::State& state) {
   auto keys = GenerateUniqueKeys<Size>();
 
+  // Pre-populate once outside the timing loop
+  ordered_array<int, int, Size, search_mode, move_mode> arr;
+  for (std::size_t i = 0; i < Size - 1; ++i) {
+    arr.insert(keys[i], i);
+  }
+
   for (auto _ : state) {
-    ordered_array<int, int, Size, search_mode, move_mode> arr;
-    for (std::size_t i = 0; i < Size; ++i) {
-      arr.insert(keys[i], i);
+    // Remove the element we're about to insert (if it exists)
+    if (arr.size() == Size) {
+      arr.remove(keys[Size - 1]);
     }
+
+    // Measure insert into array of size (Size-1)
+    arr.insert(keys[Size - 1], Size - 1);
     benchmark::DoNotOptimize(arr);
   }
-  state.SetItemsProcessed(state.iterations() * Size);
+  state.SetItemsProcessed(state.iterations());
 }
 
 // Consolidated benchmark for find operations
@@ -63,19 +74,28 @@ static void BM_OrderedArray_Find(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations());
 }
 
-// Register insert benchmarks for small arrays (where linear/SIMD might win)
-BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary>);
-BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Linear>);
-BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::SIMD>);
+// Register remove+insert benchmarks (cycle on nearly-full arrays)
+BENCHMARK(BM_OrderedArray_RemoveInsert<1, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<1, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<1, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<2, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<2, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<2, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<4, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<4, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<4, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<8, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<8, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<8, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<16, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<16, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<16, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<32, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<32, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<32, SearchMode::SIMD>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<64, SearchMode::Binary>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<64, SearchMode::Linear>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<64, SearchMode::SIMD>);
 
 // Register find benchmarks for various sizes
 BENCHMARK(BM_OrderedArray_Find<8, SearchMode::Binary>);
@@ -119,16 +139,31 @@ BENCHMARK(BM_OrderedArray_Find<255, SearchMode::Linear>);
 BENCHMARK(BM_OrderedArray_Find<255, SearchMode::SIMD>);
 
 // MoveMode comparison benchmarks: Standard vs SIMD data movement
-// These benchmarks compare insert performance with different move modes
-BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::Standard>);
-BENCHMARK(BM_OrderedArray_Insert<8, SearchMode::Binary, MoveMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::Standard>);
-BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::Binary, MoveMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary, MoveMode::Standard>);
-BENCHMARK(BM_OrderedArray_Insert<32, SearchMode::Binary, MoveMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::Standard>);
-BENCHMARK(BM_OrderedArray_Insert<64, SearchMode::Binary, MoveMode::SIMD>);
-BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::Standard>);
-BENCHMARK(BM_OrderedArray_Insert<128, SearchMode::Binary, MoveMode::SIMD>);
+// These benchmarks compare remove+insert performance with different move modes
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<1, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<1, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<2, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<2, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<4, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<4, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<8, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<8, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<16, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<16, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<32, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<32, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<64, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(BM_OrderedArray_RemoveInsert<64, SearchMode::Binary, MoveMode::SIMD>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<128, SearchMode::Binary, MoveMode::Standard>);
+BENCHMARK(
+    BM_OrderedArray_RemoveInsert<128, SearchMode::Binary, MoveMode::SIMD>);
 
 BENCHMARK_MAIN();
