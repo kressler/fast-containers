@@ -40,6 +40,30 @@ else()
     endif()
 endif()
 
+# Option to enable AddressSanitizer (ASAN) for memory error detection
+# Useful for debugging memory issues like buffer overflows, use-after-free, etc.
+option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)
+
+if(ENABLE_ASAN)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Building with AddressSanitizer (ASAN) enabled")
+        add_compile_options(-fsanitize=address)
+        add_compile_options(-fno-omit-frame-pointer)
+        add_compile_options(-g)
+        add_link_options(-fsanitize=address)
+
+        # Disable optimizations that interfere with ASAN
+        add_compile_options(-O1)
+        add_compile_options(-fno-optimize-sibling-calls)
+    elseif(MSVC)
+        message(STATUS "Building with AddressSanitizer (ASAN) enabled (MSVC)")
+        add_compile_options(/fsanitize=address)
+        add_compile_options(/Zi)
+    else()
+        message(WARNING "AddressSanitizer not supported for this compiler")
+    endif()
+endif()
+
 # Set aggressive optimization flags for Release builds only
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -60,6 +84,10 @@ add_subdirectory(third_party/catch2)
 # Add Google Benchmark
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark tests" FORCE)
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable gtest tests" FORCE)
+# Disable -Werror in Google Benchmark when ASAN is enabled to avoid false positives
+if(ENABLE_ASAN)
+    set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "Disable -Werror for ASAN builds" FORCE)
+endif()
 add_subdirectory(third_party/benchmark)
 
 # Enable testing
