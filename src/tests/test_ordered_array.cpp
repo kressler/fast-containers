@@ -1027,3 +1027,326 @@ TEMPLATE_TEST_CASE("ordered_array split and append together", "[ordered_array]",
     REQUIRE(node3.find(7)->second == 70);
   }
 }
+
+TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
+                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+                   SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Transfer prefix to empty array") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+    source.insert(3, "three");
+
+    dest.transfer_prefix_from(source, 2);
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(1)->second == "one");
+    REQUIRE(dest.find(2)->second == "two");
+
+    REQUIRE(source.size() == 1);
+    REQUIRE(source.find(3)->second == "three");
+  }
+
+  SECTION("Transfer prefix to non-empty array") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(5, "five");
+    dest.insert(6, "six");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+    source.insert(3, "three");
+
+    dest.transfer_prefix_from(source, 2);
+
+    // Dest should have [1, 2, 5, 6]
+    REQUIRE(dest.size() == 4);
+    auto it = dest.begin();
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == "one");
+    ++it;
+    REQUIRE(it->first == 2);
+    ++it;
+    REQUIRE(it->first == 5);
+    ++it;
+    REQUIRE(it->first == 6);
+
+    // Source should have [3]
+    REQUIRE(source.size() == 1);
+    REQUIRE(source.find(3)->second == "three");
+  }
+
+  SECTION("Transfer zero elements") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(5, "five");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+
+    dest.transfer_prefix_from(source, 0);
+
+    REQUIRE(dest.size() == 1);
+    REQUIRE(source.size() == 1);
+  }
+
+  SECTION("Transfer all elements from source") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(10, "ten");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+
+    dest.transfer_prefix_from(source, 2);
+
+    REQUIRE(dest.size() == 3);
+    REQUIRE(source.size() == 0);
+    REQUIRE(source.empty());
+  }
+
+  SECTION("Transfer throws if count exceeds source size") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+
+    REQUIRE_THROWS_AS(dest.transfer_prefix_from(source, 2), std::runtime_error);
+  }
+
+  SECTION("Transfer throws if destination has insufficient capacity") {
+    ordered_array<int, std::string, 5, Mode> dest;
+    for (int i = 0; i < 4; ++i) {
+      dest.insert(i + 10, std::to_string(i));
+    }
+
+    ordered_array<int, std::string, 5, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+
+    // Dest has 4 elements, capacity 5, trying to add 2 more (total 6)
+    REQUIRE_THROWS_AS(dest.transfer_prefix_from(source, 2), std::runtime_error);
+  }
+
+  SECTION("Transfer maintains element order and values") {
+    ordered_array<int, std::string, 20, Mode> dest;
+    for (int i = 10; i <= 15; ++i) {
+      dest.insert(i, std::to_string(i * 10));
+    }
+
+    ordered_array<int, std::string, 20, Mode> source;
+    for (int i = 1; i <= 5; ++i) {
+      source.insert(i, std::to_string(i * 100));
+    }
+
+    dest.transfer_prefix_from(source, 3);
+
+    // Verify dest has [1, 2, 3, 10, 11, 12, 13, 14, 15]
+    REQUIRE(dest.size() == 9);
+    REQUIRE(dest.find(1)->second == "100");
+    REQUIRE(dest.find(2)->second == "200");
+    REQUIRE(dest.find(3)->second == "300");
+    REQUIRE(dest.find(10)->second == "100");
+
+    // Verify source has [4, 5]
+    REQUIRE(source.size() == 2);
+    REQUIRE(source.find(4)->second == "400");
+    REQUIRE(source.find(5)->second == "500");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
+                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+                   SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Transfer suffix to empty array") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+    source.insert(3, "three");
+
+    dest.transfer_suffix_from(source, 2);
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(2)->second == "two");
+    REQUIRE(dest.find(3)->second == "three");
+
+    REQUIRE(source.size() == 1);
+    REQUIRE(source.find(1)->second == "one");
+  }
+
+  SECTION("Transfer suffix to non-empty array") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(1, "one");
+    dest.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(5, "five");
+    source.insert(6, "six");
+    source.insert(7, "seven");
+
+    dest.transfer_suffix_from(source, 2);
+
+    // Dest should have [1, 2, 6, 7]
+    REQUIRE(dest.size() == 4);
+    auto it = dest.begin();
+    REQUIRE(it->first == 1);
+    ++it;
+    REQUIRE(it->first == 2);
+    ++it;
+    REQUIRE(it->first == 6);
+    REQUIRE(it->second == "six");
+    ++it;
+    REQUIRE(it->first == 7);
+
+    // Source should have [5]
+    REQUIRE(source.size() == 1);
+    REQUIRE(source.find(5)->second == "five");
+  }
+
+  SECTION("Transfer zero elements") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(1, "one");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(5, "five");
+
+    dest.transfer_suffix_from(source, 0);
+
+    REQUIRE(dest.size() == 1);
+    REQUIRE(source.size() == 1);
+  }
+
+  SECTION("Transfer all elements from source") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(1, "one");
+
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(5, "five");
+    source.insert(6, "six");
+
+    dest.transfer_suffix_from(source, 2);
+
+    REQUIRE(dest.size() == 3);
+    REQUIRE(source.size() == 0);
+    REQUIRE(source.empty());
+  }
+
+  SECTION("Transfer throws if count exceeds source size") {
+    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, 10, Mode> source;
+    source.insert(5, "five");
+
+    REQUIRE_THROWS_AS(dest.transfer_suffix_from(source, 2), std::runtime_error);
+  }
+
+  SECTION("Transfer throws if destination has insufficient capacity") {
+    ordered_array<int, std::string, 5, Mode> dest;
+    for (int i = 0; i < 4; ++i) {
+      dest.insert(i, std::to_string(i));
+    }
+
+    ordered_array<int, std::string, 5, Mode> source;
+    source.insert(10, "ten");
+    source.insert(11, "eleven");
+
+    // Dest has 4 elements, capacity 5, trying to add 2 more (total 6)
+    REQUIRE_THROWS_AS(dest.transfer_suffix_from(source, 2), std::runtime_error);
+  }
+
+  SECTION("Transfer maintains element order and values") {
+    ordered_array<int, std::string, 20, Mode> dest;
+    for (int i = 1; i <= 5; ++i) {
+      dest.insert(i, std::to_string(i * 10));
+    }
+
+    ordered_array<int, std::string, 20, Mode> source;
+    for (int i = 10; i <= 15; ++i) {
+      source.insert(i, std::to_string(i * 100));
+    }
+
+    dest.transfer_suffix_from(source, 3);
+
+    // Verify dest has [1, 2, 3, 4, 5, 13, 14, 15]
+    REQUIRE(dest.size() == 8);
+    REQUIRE(dest.find(5)->second == "50");
+    REQUIRE(dest.find(13)->second == "1300");
+    REQUIRE(dest.find(14)->second == "1400");
+    REQUIRE(dest.find(15)->second == "1500");
+
+    // Verify source has [10, 11, 12]
+    REQUIRE(source.size() == 3);
+    REQUIRE(source.find(10)->second == "1000");
+    REQUIRE(source.find(12)->second == "1200");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
+                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+                   SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Rebalancing simulation: transfer from overfull to underfull node") {
+    // Simulate B+ tree rebalancing
+    ordered_array<int, int, 10, Mode> left, right;
+
+    // Left node is underfull
+    left.insert(1, 10);
+    left.insert(2, 20);
+
+    // Right node is overfull
+    for (int i = 5; i <= 9; ++i) {
+      right.insert(i, i * 10);
+    }
+
+    // Transfer prefix from right to left (rebalance)
+    left.transfer_suffix_from(right, 2);
+
+    REQUIRE(left.size() == 4);   // [1, 2, 8, 9]
+    REQUIRE(right.size() == 3);  // [5, 6, 7]
+
+    // Verify left has correct elements
+    REQUIRE(left.find(1)->second == 10);
+    REQUIRE(left.find(9)->second == 90);
+
+    // Verify right has correct elements
+    REQUIRE(right.find(5)->second == 50);
+    REQUIRE(right.find(7)->second == 70);
+    REQUIRE(right.find(9) == right.end());
+  }
+
+  SECTION("Multiple transfers in sequence") {
+    ordered_array<int, std::string, 15, Mode> node1, node2, node3;
+
+    // Setup initial nodes
+    node1.insert(1, "a");
+    node1.insert(2, "b");
+
+    node2.insert(5, "e");
+    node2.insert(6, "f");
+    node2.insert(7, "g");
+    node2.insert(8, "h");
+
+    node3.insert(10, "j");
+    node3.insert(11, "k");
+
+    // Transfer from node2 to node1 (suffix)
+    node1.transfer_suffix_from(node2, 1);
+    REQUIRE(node1.size() == 3);  // [1, 2, 8]
+    REQUIRE(node2.size() == 3);  // [5, 6, 7]
+
+    // Transfer from node2 to node3 (prefix)
+    node3.transfer_prefix_from(node2, 2);
+    REQUIRE(node3.size() == 4);  // [5, 6, 10, 11]
+    REQUIRE(node2.size() == 1);  // [7]
+
+    // Verify final states
+    REQUIRE(node1.find(8)->second == "h");
+    REQUIRE(node2.find(7)->second == "g");
+    REQUIRE(node3.find(5)->second == "e");
+    REQUIRE(node3.find(6)->second == "f");
+  }
+}
