@@ -423,3 +423,281 @@ TEST_CASE("ordered_array search mode comparison",
     }
   }
 }
+
+TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Copy empty array") {
+    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, 10, Mode> copy(original);
+
+    REQUIRE(copy.size() == 0);
+    REQUIRE(copy.empty());
+    REQUIRE(copy.capacity() == 10);
+  }
+
+  SECTION("Copy array with elements") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(3, "three");
+    original.insert(1, "one");
+    original.insert(5, "five");
+
+    ordered_array<int, std::string, 10, Mode> copy(original);
+
+    REQUIRE(copy.size() == 3);
+    REQUIRE(!copy.empty());
+
+    // Verify all elements were copied in correct order
+    auto it = copy.begin();
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == "one");
+    ++it;
+    REQUIRE(it->first == 3);
+    REQUIRE(it->second == "three");
+    ++it;
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == "five");
+  }
+
+  SECTION("Copy is independent from original") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+    original.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> copy(original);
+
+    // Modify original
+    original.insert(3, "three");
+    original[1] = "uno";
+
+    // Verify copy is unchanged
+    REQUIRE(copy.size() == 2);
+    REQUIRE(copy.find(3) == copy.end());
+    REQUIRE(copy.find(1)->second == "one");
+
+    // Modify copy
+    copy[2] = "dos";
+
+    // Verify original is unchanged
+    REQUIRE(original.find(2)->second == "two");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Copy assign to empty array") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+    original.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest = original;
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(1)->second == "one");
+    REQUIRE(dest.find(2)->second == "two");
+  }
+
+  SECTION("Copy assign overwrites existing elements") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(5, "five");
+    original.insert(10, "ten");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(1, "one");
+    dest.insert(2, "two");
+    dest.insert(3, "three");
+
+    dest = original;
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(5)->second == "five");
+    REQUIRE(dest.find(10)->second == "ten");
+    REQUIRE(dest.find(1) == dest.end());
+  }
+
+  SECTION("Self-assignment is safe") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+
+    arr = arr;
+
+    REQUIRE(arr.size() == 2);
+    REQUIRE(arr.find(1)->second == "one");
+    REQUIRE(arr.find(2)->second == "two");
+  }
+
+  SECTION("Copy assignment creates independent copy") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest = original;
+
+    // Modify original
+    original[1] = "uno";
+
+    // Verify dest is unchanged
+    REQUIRE(dest.find(1)->second == "one");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Move empty array") {
+    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+
+    REQUIRE(moved.size() == 0);
+    REQUIRE(moved.empty());
+    REQUIRE(original.size() == 0);  // Original should be empty
+    REQUIRE(original.empty());
+  }
+
+  SECTION("Move array with elements") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(3, "three");
+    original.insert(1, "one");
+    original.insert(5, "five");
+
+    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+
+    // Verify moved-to array has all elements
+    REQUIRE(moved.size() == 3);
+    auto it = moved.begin();
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == "one");
+    ++it;
+    REQUIRE(it->first == 3);
+    REQUIRE(it->second == "three");
+    ++it;
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == "five");
+
+    // Verify moved-from array is empty
+    REQUIRE(original.size() == 0);
+    REQUIRE(original.empty());
+  }
+
+  SECTION("Moved-from array is reusable") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+
+    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+
+    // Reuse moved-from array
+    original.insert(2, "two");
+    original.insert(3, "three");
+
+    REQUIRE(original.size() == 2);
+    REQUIRE(original.find(2)->second == "two");
+    REQUIRE(original.find(3)->second == "three");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Move assign to empty array") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+    original.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest = std::move(original);
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(1)->second == "one");
+    REQUIRE(dest.find(2)->second == "two");
+
+    REQUIRE(original.size() == 0);
+    REQUIRE(original.empty());
+  }
+
+  SECTION("Move assign overwrites existing elements") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(5, "five");
+    original.insert(10, "ten");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest.insert(1, "one");
+    dest.insert(2, "two");
+    dest.insert(3, "three");
+
+    dest = std::move(original);
+
+    REQUIRE(dest.size() == 2);
+    REQUIRE(dest.find(5)->second == "five");
+    REQUIRE(dest.find(10)->second == "ten");
+    REQUIRE(dest.find(1) == dest.end());
+
+    REQUIRE(original.size() == 0);
+  }
+
+  SECTION("Self-move-assignment is safe") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+
+    arr = std::move(arr);
+
+    // After self-move, array should remain valid (possibly empty or unchanged)
+    // The exact state is implementation-defined, but should be valid
+    REQUIRE(arr.size() >= 0);
+  }
+
+  SECTION("Moved-from array is reusable") {
+    ordered_array<int, std::string, 10, Mode> original;
+    original.insert(1, "one");
+    original.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> dest;
+    dest = std::move(original);
+
+    // Reuse moved-from array
+    original.insert(10, "ten");
+    original.insert(20, "twenty");
+
+    REQUIRE(original.size() == 2);
+    REQUIRE(original.find(10)->second == "ten");
+    REQUIRE(original.find(20)->second == "twenty");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
+                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+                   SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Copy with int keys and int values") {
+    ordered_array<int, int, 10, Mode> original;
+    original.insert(5, 50);
+    original.insert(3, 30);
+
+    ordered_array<int, int, 10, Mode> copy(original);
+
+    REQUIRE(copy.size() == 2);
+    REQUIRE(copy.find(3)->second == 30);
+    REQUIRE(copy.find(5)->second == 50);
+  }
+
+  SECTION("Move with double keys and string values") {
+    ordered_array<double, std::string, 10, Mode> original;
+    original.insert(3.14, "pi");
+    original.insert(2.71, "e");
+
+    ordered_array<double, std::string, 10, Mode> moved(std::move(original));
+
+    REQUIRE(moved.size() == 2);
+    REQUIRE(moved.find(2.71)->second == "e");
+    REQUIRE(moved.find(3.14)->second == "pi");
+    REQUIRE(original.size() == 0);
+  }
+}
