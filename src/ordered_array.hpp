@@ -409,6 +409,134 @@ class ordered_array {
     }
   }
 
+  /**
+   * Transfer elements from the beginning of source array to the end of
+   * this array (append behavior).
+   *
+   * Precondition (debug mode only): All keys currently in this array must be
+   * less than all keys in the transferred prefix.
+   *
+   * Note: Invalidates all iterators to both arrays.
+   *
+   * @tparam SourceLength The capacity of the source array
+   * @param source The array to transfer from (will have elements removed)
+   * @param count Number of elements to transfer from the beginning of source
+   * @throws std::runtime_error if this array has insufficient capacity or
+   * count exceeds source size
+   *
+   * Complexity: O(m) where m is count
+   */
+  template <std::size_t SourceLength>
+  void transfer_prefix_from(
+      ordered_array<Key, Value, SourceLength, SearchModeT, MoveModeT>& source,
+      size_type count) {
+    // Validate count
+    if (count > source.size_) {
+      throw std::runtime_error(
+          "Cannot transfer prefix: count exceeds source size");
+    }
+
+    // Check capacity constraint
+    if (size_ + count > Length) {
+      throw std::runtime_error(
+          "Cannot transfer prefix: insufficient capacity in destination");
+    }
+
+    // Debug assertion: ordering precondition
+    // All keys in this array must be < all keys in source prefix
+    assert((empty() || count == 0 || keys_[size_ - 1] < source.keys_[0]) &&
+           "Ordering precondition violated: all keys in this must be < all "
+           "keys in source prefix");
+
+    if (count == 0) {
+      return;
+    }
+
+    // Copy prefix from source to end of this array (append)
+    simd_move_forward(source.keys_.data(), source.keys_.data() + count,
+                      &keys_[size_]);
+    simd_move_forward(source.values_.data(), source.values_.data() + count,
+                      &values_[size_]);
+
+    // Shift remaining elements in source left to fill the gap
+    if (count < source.size_) {
+      simd_move_forward(&source.keys_[count], &source.keys_[source.size_],
+                        source.keys_.data());
+      simd_move_forward(&source.values_[count], &source.values_[source.size_],
+                        source.values_.data());
+    }
+
+    // Update sizes
+    size_ += count;
+    source.size_ -= count;
+  }
+
+  /**
+   * Transfer elements from the end of source array to the beginning of this
+   * array (prepend behavior). Elements from this array are shifted right to
+   * make space.
+   *
+   * Precondition (debug mode only): All keys in the transferred suffix must be
+   * less than all keys currently in this array.
+   *
+   * Note: Invalidates all iterators to both arrays.
+   *
+   * @tparam SourceLength The capacity of the source array
+   * @param source The array to transfer from (will have elements removed)
+   * @param count Number of elements to transfer from the end of source
+   * @throws std::runtime_error if this array has insufficient capacity or
+   * count exceeds source size
+   *
+   * Complexity: O(n + m) where n is the current size of this array and m is
+   * count
+   */
+  template <std::size_t SourceLength>
+  void transfer_suffix_from(
+      ordered_array<Key, Value, SourceLength, SearchModeT, MoveModeT>& source,
+      size_type count) {
+    // Validate count
+    if (count > source.size_) {
+      throw std::runtime_error(
+          "Cannot transfer suffix: count exceeds source size");
+    }
+
+    // Check capacity constraint
+    if (size_ + count > Length) {
+      throw std::runtime_error(
+          "Cannot transfer suffix: insufficient capacity in destination");
+    }
+
+    // Debug assertion: ordering precondition
+    // All keys in source suffix must be < all keys in this array
+    assert(
+        (empty() || count == 0 || source.keys_[source.size_ - 1] < keys_[0]) &&
+        "Ordering precondition violated: all keys in source suffix must be "
+        "< all keys in this");
+
+    if (count == 0) {
+      return;
+    }
+
+    // Shift current elements right to make space for incoming suffix
+    if (size_ > 0) {
+      simd_move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
+      simd_move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
+    }
+
+    // Calculate starting position of suffix in source
+    size_type suffix_start = source.size_ - count;
+
+    // Copy suffix from source to beginning of this array (prepend)
+    simd_move_forward(&source.keys_[suffix_start], &source.keys_[source.size_],
+                      keys_.data());
+    simd_move_forward(&source.values_[suffix_start],
+                      &source.values_[source.size_], values_.data());
+
+    // Update sizes (no need to shift source - we took from the end)
+    size_ += count;
+    source.size_ -= count;
+  }
+
  private:
 #ifdef __AVX2__
   /**
