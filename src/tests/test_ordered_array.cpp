@@ -701,3 +701,329 @@ TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
     REQUIRE(original.size() == 0);
   }
 }
+
+TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Split empty array") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, 10, Mode> output;
+
+    arr.split_at(arr.begin(), output);
+
+    REQUIRE(arr.size() == 0);
+    REQUIRE(output.size() == 0);
+  }
+
+  SECTION("Split at beginning (move all elements)") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+    arr.insert(3, "three");
+
+    ordered_array<int, std::string, 10, Mode> output;
+    arr.split_at(arr.begin(), output);
+
+    REQUIRE(arr.size() == 0);
+    REQUIRE(arr.empty());
+
+    REQUIRE(output.size() == 3);
+    auto it = output.begin();
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == "one");
+    ++it;
+    REQUIRE(it->first == 2);
+    ++it;
+    REQUIRE(it->first == 3);
+  }
+
+  SECTION("Split at end (move no elements)") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+    arr.insert(3, "three");
+
+    ordered_array<int, std::string, 10, Mode> output;
+    arr.split_at(arr.end(), output);
+
+    REQUIRE(arr.size() == 3);
+    REQUIRE(output.size() == 0);
+    REQUIRE(output.empty());
+  }
+
+  SECTION("Split in middle") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+    arr.insert(3, "three");
+    arr.insert(4, "four");
+    arr.insert(5, "five");
+
+    ordered_array<int, std::string, 10, Mode> output;
+    auto it = arr.begin();
+    ++it;
+    ++it;  // Points to element with key 3
+    arr.split_at(it, output);
+
+    // Original should have [1, 2]
+    REQUIRE(arr.size() == 2);
+    auto arr_it = arr.begin();
+    REQUIRE(arr_it->first == 1);
+    ++arr_it;
+    REQUIRE(arr_it->first == 2);
+
+    // Output should have [3, 4, 5]
+    REQUIRE(output.size() == 3);
+    auto out_it = output.begin();
+    REQUIRE(out_it->first == 3);
+    REQUIRE(out_it->second == "three");
+    ++out_it;
+    REQUIRE(out_it->first == 4);
+    ++out_it;
+    REQUIRE(out_it->first == 5);
+  }
+
+  SECTION("Split throws if output is not empty") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> output;
+    output.insert(10, "ten");
+
+    REQUIRE_THROWS_AS(arr.split_at(arr.begin(), output), std::runtime_error);
+  }
+
+  SECTION("Split throws if output has insufficient capacity") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    for (int i = 0; i < 10; ++i) {
+      arr.insert(i, std::to_string(i));
+    }
+
+    ordered_array<int, std::string, 5, Mode> small_output;
+
+    // Trying to move 10 elements to capacity-5 array should throw
+    REQUIRE_THROWS_AS(arr.split_at(arr.begin(), small_output),
+                      std::runtime_error);
+  }
+
+  SECTION("Split maintains element order and values") {
+    ordered_array<int, std::string, 20, Mode> arr;
+    for (int i = 1; i <= 10; ++i) {
+      arr.insert(i, std::to_string(i * 10));
+    }
+
+    ordered_array<int, std::string, 20, Mode> output;
+    auto split_pos = arr.begin();
+    std::advance(split_pos, 6);  // Split at key 7
+
+    arr.split_at(split_pos, output);
+
+    // Verify first array [1..6]
+    REQUIRE(arr.size() == 6);
+    for (int i = 1; i <= 6; ++i) {
+      auto it = arr.find(i);
+      REQUIRE(it != arr.end());
+      REQUIRE(it->second == std::to_string(i * 10));
+    }
+
+    // Verify second array [7..10]
+    REQUIRE(output.size() == 4);
+    for (int i = 7; i <= 10; ++i) {
+      auto it = output.find(i);
+      REQUIRE(it != output.end());
+      REQUIRE(it->second == std::to_string(i * 10));
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Append to empty array") {
+    ordered_array<int, std::string, 10, Mode> arr;
+
+    ordered_array<int, std::string, 10, Mode> other;
+    other.insert(1, "one");
+    other.insert(2, "two");
+
+    arr.append(std::move(other));
+
+    REQUIRE(arr.size() == 2);
+    REQUIRE(arr.find(1)->second == "one");
+    REQUIRE(arr.find(2)->second == "two");
+
+    REQUIRE(other.size() == 0);
+    REQUIRE(other.empty());
+  }
+
+  SECTION("Append empty array to non-empty array") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> other;
+
+    arr.append(std::move(other));
+
+    REQUIRE(arr.size() == 2);
+    REQUIRE(arr.find(1)->second == "one");
+    REQUIRE(arr.find(2)->second == "two");
+  }
+
+  SECTION("Append maintains sorted order") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+
+    ordered_array<int, std::string, 10, Mode> other;
+    other.insert(5, "five");
+    other.insert(6, "six");
+
+    arr.append(std::move(other));
+
+    REQUIRE(arr.size() == 4);
+
+    // Verify sorted order
+    auto it = arr.begin();
+    REQUIRE(it->first == 1);
+    ++it;
+    REQUIRE(it->first == 2);
+    ++it;
+    REQUIRE(it->first == 5);
+    ++it;
+    REQUIRE(it->first == 6);
+
+    REQUIRE(other.size() == 0);
+  }
+
+  SECTION("Append throws if combined size exceeds capacity") {
+    ordered_array<int, std::string, 5, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+    arr.insert(3, "three");
+
+    ordered_array<int, std::string, 5, Mode> other;
+    other.insert(4, "four");
+    other.insert(5, "five");
+    other.insert(6, "six");
+
+    // Combined size 6 exceeds capacity 5
+    REQUIRE_THROWS_AS(arr.append(std::move(other)), std::runtime_error);
+  }
+
+  SECTION("Append preserves all values") {
+    ordered_array<int, std::string, 20, Mode> arr;
+    arr.insert(1, "value1");
+    arr.insert(3, "value3");
+
+    ordered_array<int, std::string, 20, Mode> other;
+    other.insert(10, "value10");
+    other.insert(15, "value15");
+    other.insert(20, "value20");
+
+    arr.append(std::move(other));
+
+    REQUIRE(arr.size() == 5);
+    REQUIRE(arr.find(1)->second == "value1");
+    REQUIRE(arr.find(3)->second == "value3");
+    REQUIRE(arr.find(10)->second == "value10");
+    REQUIRE(arr.find(15)->second == "value15");
+    REQUIRE(arr.find(20)->second == "value20");
+  }
+
+  SECTION("Moved-from array is reusable after append") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+
+    ordered_array<int, std::string, 10, Mode> other;
+    other.insert(5, "five");
+
+    arr.append(std::move(other));
+
+    // Reuse moved-from array
+    other.insert(10, "ten");
+    other.insert(20, "twenty");
+
+    REQUIRE(other.size() == 2);
+    REQUIRE(other.find(10)->second == "ten");
+    REQUIRE(other.find(20)->second == "twenty");
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array split and append together", "[ordered_array]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Split then append to reconstruct") {
+    ordered_array<int, std::string, 10, Mode> arr;
+    arr.insert(1, "one");
+    arr.insert(2, "two");
+    arr.insert(3, "three");
+    arr.insert(4, "four");
+
+    ordered_array<int, std::string, 10, Mode> upper;
+    auto mid = arr.begin();
+    ++mid;
+    ++mid;  // Split at key 3
+
+    arr.split_at(mid, upper);
+
+    REQUIRE(arr.size() == 2);
+    REQUIRE(upper.size() == 2);
+
+    // Reconstruct by appending upper back to arr
+    arr.append(std::move(upper));
+
+    REQUIRE(arr.size() == 4);
+    auto it = arr.begin();
+    REQUIRE(it->first == 1);
+    ++it;
+    REQUIRE(it->first == 2);
+    ++it;
+    REQUIRE(it->first == 3);
+    ++it;
+    REQUIRE(it->first == 4);
+  }
+
+  SECTION("Multiple splits and appends (simulating B+ tree operations)") {
+    // Simulate splitting a node and merging with siblings
+    ordered_array<int, int, 10, Mode> node1, node2, node3;
+
+    // Fill node1 with [1..5]
+    for (int i = 1; i <= 5; ++i) {
+      node1.insert(i, i * 10);
+    }
+
+    // Split node1 into two parts
+    auto split_point = node1.begin();
+    std::advance(split_point, 3);
+    node1.split_at(split_point, node2);
+
+    REQUIRE(node1.size() == 3);  // [1, 2, 3]
+    REQUIRE(node2.size() == 2);  // [4, 5]
+
+    // Add more elements to node2
+    node2.insert(6, 60);
+    node2.insert(7, 70);
+
+    // Split node2
+    split_point = node2.begin();
+    std::advance(split_point, 2);
+    node2.split_at(split_point, node3);
+
+    REQUIRE(node2.size() == 2);  // [4, 5]
+    REQUIRE(node3.size() == 2);  // [6, 7]
+
+    // Merge node2 back into node1
+    node1.append(std::move(node2));
+    REQUIRE(node1.size() == 5);  // [1, 2, 3, 4, 5]
+
+    // Verify node3 is independent
+    REQUIRE(node3.size() == 2);
+    REQUIRE(node3.find(6)->second == 60);
+    REQUIRE(node3.find(7)->second == 70);
+  }
+}

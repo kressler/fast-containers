@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <concepts>
 #include <cstring>
 #include <iterator>
@@ -60,6 +61,10 @@ class ordered_array {
   // Forward declare iterator classes
   template <bool IsConst>
   class ordered_array_iterator;
+
+  // Allow different instantiations to access each other's private members
+  template <Comparable, typename, std::size_t, SearchMode, MoveMode>
+  friend class ordered_array;
 
  public:
   // Type aliases for key-value pair
@@ -310,6 +315,99 @@ class ordered_array {
   bool full() const { return size_ == Length; }
 
   void clear() { size_ = 0; }
+
+  /**
+   * Split this array at the given position, moving elements to output array.
+   * Elements [begin(), pos) remain in this array.
+   * Elements [pos, end()) are moved to the output array.
+   *
+   * Note: Invalidates all iterators to both arrays.
+   *
+   * @tparam OutputLength The capacity of the output array
+   * @param pos Iterator to the first element to move to output
+   * @param output Destination array (must be empty)
+   * @throws std::runtime_error if output is not empty or has insufficient
+   * capacity
+   *
+   * Complexity: O(n) where n is the number of elements moved
+   */
+  template <std::size_t OutputLength>
+  void split_at(
+      iterator pos,
+      ordered_array<Key, Value, OutputLength, SearchModeT, MoveModeT>& output) {
+    // Debug assertion: iterator must belong to this array
+    assert(pos.array_ == this && "Iterator does not belong to this array");
+
+    // Runtime check: output must be empty
+    if (!output.empty()) {
+      throw std::runtime_error("Cannot split: output array is not empty");
+    }
+
+    // Calculate the split index
+    size_type split_idx = pos.index_;
+
+    // Calculate how many elements to move
+    size_type num_to_move = size_ - split_idx;
+
+    // Check if output has sufficient capacity
+    if (num_to_move > output.capacity()) {
+      throw std::runtime_error(
+          "Cannot split: output array has insufficient capacity");
+    }
+
+    // Move elements from [split_idx, size_) to output
+    if (num_to_move > 0) {
+      simd_move_forward(&keys_[split_idx], &keys_[size_], output.keys_.data());
+      simd_move_forward(&values_[split_idx], &values_[size_],
+                        output.values_.data());
+      output.size_ = num_to_move;
+    }
+
+    // Update this array's size
+    size_ = split_idx;
+  }
+
+  /**
+   * Append all elements from another array to the end of this array.
+   * The other array is left empty after the operation.
+   *
+   * Precondition (debug mode only): All keys in other must be greater than
+   * all keys in this array.
+   *
+   * Note: Invalidates all iterators to both arrays.
+   *
+   * @tparam OtherLength The capacity of the other array
+   * @param other The array to append (rvalue reference, will be emptied)
+   * @throws std::runtime_error if combined size exceeds capacity
+   *
+   * Complexity: O(n) where n is the size of other
+   */
+  template <std::size_t OtherLength>
+  void append(
+      ordered_array<Key, Value, OtherLength, SearchModeT, MoveModeT>&& other) {
+    // Check capacity constraint
+    if (size_ + other.size_ > Length) {
+      throw std::runtime_error("Cannot append: combined size exceeds capacity");
+    }
+
+    // Debug assertion: ordering precondition
+    // All keys in other must be > all keys in this
+    assert((empty() || other.empty() || keys_[size_ - 1] < other.keys_[0]) &&
+           "Ordering precondition violated: all keys in other must be > all "
+           "keys in this");
+
+    // Append other's elements to the end of this array
+    if (other.size_ > 0) {
+      simd_move_forward(other.keys_.data(), other.keys_.data() + other.size_,
+                        &keys_[size_]);
+      simd_move_forward(other.values_.data(),
+                        other.values_.data() + other.size_, &values_[size_]);
+      size_ += other.size_;
+
+      // Leave other in empty state
+      other.size_ = 0;
+    }
+  }
 
  private:
 #ifdef __AVX2__
