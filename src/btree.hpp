@@ -458,28 +458,20 @@ class btree {
   void merge_with_right_internal_sibling(InternalNode* node);
 
   /**
-   * Find the left sibling of a leaf node.
+   * Template helper to find the left sibling of a node.
+   * Works for both LeafNode and InternalNode.
    * Returns nullptr if no left sibling exists.
    */
-  LeafNode* find_left_leaf_sibling(LeafNode* leaf) const;
+  template <typename NodeType>
+  NodeType* find_left_sibling(NodeType* node) const;
 
   /**
-   * Find the right sibling of a leaf node.
+   * Template helper to find the right sibling of a node.
+   * Works for both LeafNode and InternalNode.
    * Returns nullptr if no right sibling exists.
    */
-  LeafNode* find_right_leaf_sibling(LeafNode* leaf) const;
-
-  /**
-   * Find the left sibling of an internal node.
-   * Returns nullptr if no left sibling exists.
-   */
-  InternalNode* find_left_internal_sibling(InternalNode* node) const;
-
-  /**
-   * Find the right sibling of an internal node.
-   * Returns nullptr if no right sibling exists.
-   */
-  InternalNode* find_right_internal_sibling(InternalNode* node) const;
+  template <typename NodeType>
+  NodeType* find_right_sibling(NodeType* node) const;
 
   /**
    * Minimum number of elements in a non-root leaf node.
@@ -962,214 +954,176 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-               MoveModeT>::LeafNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find_left_leaf_sibling(LeafNode* leaf) const {
-  if (leaf->parent == nullptr || leaf->data.empty()) {
-    return nullptr;  // Root has no siblings, or leaf is empty
+template <typename NodeType>
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::find_left_sibling(NodeType* node) const {
+  if (node->parent == nullptr) {
+    return nullptr;  // Root has no siblings
   }
 
-  InternalNode* parent = leaf->parent;
-  auto& children = parent->leaf_children;
+  InternalNode* parent = node->parent;
 
-  // Use lower_bound to efficiently find this leaf's position
-  const Key& leaf_min = leaf->data.begin()->first;
-  auto it = children.lower_bound(leaf_min);
+  // Get node's minimum key and children array reference
+  const Key* node_min = nullptr;
 
-  // The entry pointing to this leaf should be at 'it' or one position before
-  // Check 'it' first
-  if (it != children.end() && it->second == leaf) {
-    // Found at lower_bound position
-    if (it == children.begin()) {
-      return nullptr;  // This is the leftmost child
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if (node->data.empty()) {
+      return nullptr;  // Empty leaf, can't find it
     }
-    auto prev_it = it;
-    --prev_it;
-    return prev_it->second;
-  } else if (it != children.begin()) {
-    // Check the previous entry
-    --it;
-    if (it->second == leaf) {
-      // Found at previous position
+    node_min = &(node->data.begin()->first);
+    auto& children = parent->leaf_children;
+
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
+
+    // The entry pointing to this node should be at 'it' or one position before
+    if (it != children.end() && it->second == node) {
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
       }
       auto prev_it = it;
       --prev_it;
       return prev_it->second;
-    }
-  }
-
-  assert(false && "Leaf not found in parent's children");
-  return nullptr;
-}
-
-template <Comparable Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
-          MoveMode MoveModeT>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-               MoveModeT>::LeafNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find_right_leaf_sibling(LeafNode* leaf) const {
-  if (leaf->parent == nullptr || leaf->data.empty()) {
-    return nullptr;  // Root has no siblings, or leaf is empty
-  }
-
-  InternalNode* parent = leaf->parent;
-  auto& children = parent->leaf_children;
-
-  // Use lower_bound to efficiently find this leaf's position
-  const Key& leaf_min = leaf->data.begin()->first;
-  auto it = children.lower_bound(leaf_min);
-
-  // The entry pointing to this leaf should be at 'it' or one position before
-  // Check 'it' first
-  if (it != children.end() && it->second == leaf) {
-    // Found at lower_bound position - check for right sibling
-    auto next_it = it;
-    ++next_it;
-    if (next_it == children.end()) {
-      return nullptr;  // This is the rightmost child
-    }
-    return next_it->second;
-  } else if (it != children.begin()) {
-    // Check the previous entry
-    --it;
-    if (it->second == leaf) {
-      // Found at previous position - check for right sibling
-      auto next_it = it;
-      ++next_it;
-      if (next_it == children.end()) {
-        return nullptr;  // This is the rightmost child
+    } else if (it != children.begin()) {
+      --it;
+      if (it->second == node) {
+        if (it == children.begin()) {
+          return nullptr;  // This is the leftmost child
+        }
+        auto prev_it = it;
+        --prev_it;
+        return prev_it->second;
       }
-      return next_it->second;
-    }
-  }
-
-  assert(false && "Leaf not found in parent's children");
-  return nullptr;
-}
-
-template <Comparable Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
-          MoveMode MoveModeT>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-               MoveModeT>::InternalNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find_left_internal_sibling(InternalNode* node) const {
-  if (node->parent == nullptr) {
-    return nullptr;  // Root has no siblings
-  }
-
-  InternalNode* parent = node->parent;
-  auto& children = parent->internal_children;
-
-  // Get this node's minimum key for efficient lookup
-  const Key* node_min = nullptr;
-  if (node->children_are_leaves) {
-    if (!node->leaf_children.empty()) {
-      node_min = &(node->leaf_children.begin()->first);
     }
   } else {
-    if (!node->internal_children.empty()) {
+    // InternalNode
+    if (node->children_are_leaves) {
+      if (node->leaf_children.empty()) {
+        return nullptr;  // Empty node, can't find it
+      }
+      node_min = &(node->leaf_children.begin()->first);
+    } else {
+      if (node->internal_children.empty()) {
+        return nullptr;  // Empty node, can't find it
+      }
       node_min = &(node->internal_children.begin()->first);
     }
-  }
 
-  if (node_min == nullptr) {
-    return nullptr;  // Node has no children, can't find it
-  }
+    auto& children = parent->internal_children;
 
-  // Use lower_bound to efficiently find this node's position
-  auto it = children.lower_bound(*node_min);
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
 
-  // The entry pointing to this node should be at 'it' or one position before
-  // Check 'it' first
-  if (it != children.end() && it->second == node) {
-    // Found at lower_bound position
-    if (it == children.begin()) {
-      return nullptr;  // This is the leftmost child
-    }
-    auto prev_it = it;
-    --prev_it;
-    return prev_it->second;
-  } else if (it != children.begin()) {
-    // Check the previous entry
-    --it;
-    if (it->second == node) {
-      // Found at previous position
+    // The entry pointing to this node should be at 'it' or one position before
+    if (it != children.end() && it->second == node) {
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
       }
       auto prev_it = it;
       --prev_it;
       return prev_it->second;
+    } else if (it != children.begin()) {
+      --it;
+      if (it->second == node) {
+        if (it == children.begin()) {
+          return nullptr;  // This is the leftmost child
+        }
+        auto prev_it = it;
+        --prev_it;
+        return prev_it->second;
+      }
     }
   }
 
-  assert(false && "Internal node not found in parent's children");
+  assert(false && "Node not found in parent's children");
   return nullptr;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-               MoveModeT>::InternalNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find_right_internal_sibling(InternalNode* node) const {
+template <typename NodeType>
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::find_right_sibling(NodeType* node) const {
   if (node->parent == nullptr) {
     return nullptr;  // Root has no siblings
   }
 
   InternalNode* parent = node->parent;
-  auto& children = parent->internal_children;
 
-  // Get this node's minimum key for efficient lookup
+  // Get node's minimum key and children array reference
   const Key* node_min = nullptr;
-  if (node->children_are_leaves) {
-    if (!node->leaf_children.empty()) {
-      node_min = &(node->leaf_children.begin()->first);
-    }
-  } else {
-    if (!node->internal_children.empty()) {
-      node_min = &(node->internal_children.begin()->first);
-    }
-  }
 
-  if (node_min == nullptr) {
-    return nullptr;  // Node has no children, can't find it
-  }
-
-  // Use lower_bound to efficiently find this node's position
-  auto it = children.lower_bound(*node_min);
-
-  // The entry pointing to this node should be at 'it' or one position before
-  // Check 'it' first
-  if (it != children.end() && it->second == node) {
-    // Found at lower_bound position - check for right sibling
-    auto next_it = it;
-    ++next_it;
-    if (next_it == children.end()) {
-      return nullptr;  // This is the rightmost child
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if (node->data.empty()) {
+      return nullptr;  // Empty leaf, can't find it
     }
-    return next_it->second;
-  } else if (it != children.begin()) {
-    // Check the previous entry
-    --it;
-    if (it->second == node) {
-      // Found at previous position - check for right sibling
+    node_min = &(node->data.begin()->first);
+    auto& children = parent->leaf_children;
+
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
+
+    // The entry pointing to this node should be at 'it' or one position before
+    if (it != children.end() && it->second == node) {
       auto next_it = it;
       ++next_it;
       if (next_it == children.end()) {
         return nullptr;  // This is the rightmost child
       }
       return next_it->second;
+    } else if (it != children.begin()) {
+      --it;
+      if (it->second == node) {
+        auto next_it = it;
+        ++next_it;
+        if (next_it == children.end()) {
+          return nullptr;  // This is the rightmost child
+        }
+        return next_it->second;
+      }
+    }
+  } else {
+    // InternalNode
+    if (node->children_are_leaves) {
+      if (node->leaf_children.empty()) {
+        return nullptr;  // Empty node, can't find it
+      }
+      node_min = &(node->leaf_children.begin()->first);
+    } else {
+      if (node->internal_children.empty()) {
+        return nullptr;  // Empty node, can't find it
+      }
+      node_min = &(node->internal_children.begin()->first);
+    }
+
+    auto& children = parent->internal_children;
+
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
+
+    // The entry pointing to this node should be at 'it' or one position before
+    if (it != children.end() && it->second == node) {
+      auto next_it = it;
+      ++next_it;
+      if (next_it == children.end()) {
+        return nullptr;  // This is the rightmost child
+      }
+      return next_it->second;
+    } else if (it != children.begin()) {
+      --it;
+      if (it->second == node) {
+        auto next_it = it;
+        ++next_it;
+        if (next_it == children.end()) {
+          return nullptr;  // This is the rightmost child
+        }
+        return next_it->second;
+      }
     }
   }
 
-  assert(false && "Internal node not found in parent's children");
+  assert(false && "Node not found in parent's children");
   return nullptr;
 }
 
@@ -1178,7 +1132,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::borrow_from_left_leaf_sibling(LeafNode* leaf) {
-  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+  LeafNode* left_sibling = find_left_sibling(leaf);
 
   // Can't borrow if no left sibling or sibling would underflow
   if (left_sibling == nullptr || left_sibling->data.size() <= min_leaf_size()) {
@@ -1210,7 +1164,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::borrow_from_right_leaf_sibling(LeafNode* leaf) {
-  LeafNode* right_sibling = find_right_leaf_sibling(leaf);
+  LeafNode* right_sibling = find_right_sibling(leaf);
 
   // Can't borrow if no right sibling or sibling would underflow
   if (right_sibling == nullptr ||
@@ -1243,7 +1197,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::merge_with_left_leaf_sibling(LeafNode* leaf) {
-  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+  LeafNode* left_sibling = find_left_sibling(leaf);
   assert(left_sibling != nullptr &&
          "merge_with_left_leaf_sibling requires left sibling");
 
@@ -1300,7 +1254,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::merge_with_right_leaf_sibling(LeafNode* leaf) {
-  LeafNode* right_sibling = find_right_leaf_sibling(leaf);
+  LeafNode* right_sibling = find_right_sibling(leaf);
   assert(right_sibling != nullptr &&
          "merge_with_right_leaf_sibling requires right sibling");
 
@@ -1373,7 +1327,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Can't borrow - must merge
   // Prefer merging with left sibling if it exists
-  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+  LeafNode* left_sibling = find_left_sibling(leaf);
   if (left_sibling != nullptr) {
     merge_with_left_leaf_sibling(leaf);
   } else {
@@ -1387,7 +1341,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::borrow_from_left_internal_sibling(InternalNode* node) {
-  InternalNode* left_sibling = find_left_internal_sibling(node);
+  InternalNode* left_sibling = find_left_sibling(node);
 
   // Can't borrow if no left sibling or sibling would underflow
   if (left_sibling == nullptr) {
@@ -1460,7 +1414,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::borrow_from_right_internal_sibling(InternalNode* node) {
-  InternalNode* right_sibling = find_right_internal_sibling(node);
+  InternalNode* right_sibling = find_right_sibling(node);
 
   // Can't borrow if no right sibling or sibling would underflow
   if (right_sibling == nullptr) {
@@ -1531,7 +1485,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::merge_with_left_internal_sibling(InternalNode* node) {
-  InternalNode* left_sibling = find_left_internal_sibling(node);
+  InternalNode* left_sibling = find_left_sibling(node);
   assert(left_sibling != nullptr &&
          "merge_with_left_internal_sibling requires left sibling");
 
@@ -1595,7 +1549,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::merge_with_right_internal_sibling(InternalNode* node) {
-  InternalNode* right_sibling = find_right_internal_sibling(node);
+  InternalNode* right_sibling = find_right_sibling(node);
   assert(right_sibling != nullptr &&
          "merge_with_right_internal_sibling requires right sibling");
 
@@ -1678,7 +1632,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Can't borrow - must merge
   // Prefer merging with left sibling if it exists
-  InternalNode* left_sibling = find_left_internal_sibling(node);
+  InternalNode* left_sibling = find_left_sibling(node);
   if (left_sibling != nullptr) {
     merge_with_left_internal_sibling(node);
   } else {
