@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ordered_array.hpp"
@@ -36,35 +37,12 @@ class btree {
   using size_type = std::size_t;
 
   /**
-   * Default constructor - creates an empty B+ tree.
-   */
-  btree();
-
-  /**
-   * Destructor - deallocates all nodes.
-   */
-  ~btree();
-
-  /**
-   * Returns the number of elements in the tree.
-   * Complexity: O(1)
-   */
-  size_type size() const { return size_; }
-
-  /**
-   * Returns true if the tree is empty.
-   * Complexity: O(1)
-   */
-  bool empty() const { return size_ == 0; }
-
- private:
-  // Forward declarations
-  struct InternalNode;
-
-  /**
    * Leaf node - stores actual key-value pairs in an ordered_array.
    * Forms a doubly-linked list with other leaf nodes for iteration.
    */
+  // Forward declaration for LeafNode to use in InternalNode
+  struct InternalNode;
+
   struct LeafNode {
     ordered_array<Key, Value, LeafNodeSize, SearchModeT, MoveModeT> data;
     LeafNode* next_leaf;
@@ -91,8 +69,8 @@ class btree {
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
 
     // Constructor for leaf children
-    explicit InternalNode(bool leaf_children)
-        : children_are_leaves(leaf_children), parent(nullptr) {
+    explicit InternalNode(bool has_leaf_children)
+        : children_are_leaves(has_leaf_children), parent(nullptr) {
       if (children_are_leaves) {
         new (&leaf_children) decltype(leaf_children)();
       } else {
@@ -115,7 +93,157 @@ class btree {
   };
 
   /**
+   * Default constructor - creates an empty B+ tree.
+   */
+  btree();
+
+  /**
+   * Destructor - deallocates all nodes.
+   */
+  ~btree();
+
+  /**
+   * Returns the number of elements in the tree.
+   * Complexity: O(1)
+   */
+  size_type size() const { return size_; }
+
+  /**
+   * Returns true if the tree is empty.
+   * Complexity: O(1)
+   */
+  bool empty() const { return size_ == 0; }
+
+  /**
+   * Forward iterator for btree.
+   * Iterates through elements in sorted order using the leaf node chain.
+   */
+  class iterator {
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = btree::value_type;
+    using pointer = value_type*;
+    using reference =
+        typename ordered_array<Key, Value, LeafNodeSize, SearchModeT,
+                               MoveModeT>::iterator::reference;
+
+    iterator() : leaf_node_(nullptr) {}
+
+    reference operator*() const {
+      assert(leaf_node_ != nullptr && "Dereferencing end iterator");
+      return *leaf_it_.value();
+    }
+
+    typename ordered_array<Key, Value, LeafNodeSize, SearchModeT,
+                           MoveModeT>::iterator::arrow_proxy
+    operator->() const {
+      assert(leaf_node_ != nullptr && "Dereferencing end iterator");
+      return leaf_it_.value().operator->();
+    }
+
+    iterator& operator++() {
+      assert(leaf_node_ != nullptr && "Incrementing end iterator");
+      ++(*leaf_it_);
+      // If we've reached the end of this leaf, move to next leaf
+      if (*leaf_it_ == leaf_node_->data.end()) {
+        leaf_node_ = leaf_node_->next_leaf;
+        if (leaf_node_ != nullptr) {
+          leaf_it_ = leaf_node_->data.begin();
+        } else {
+          leaf_it_.reset();
+        }
+      }
+      return *this;
+    }
+
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const iterator& other) const {
+      // If both are end iterators (leaf_node_ == nullptr), they're equal
+      if (leaf_node_ == nullptr && other.leaf_node_ == nullptr) {
+        return true;
+      }
+      // If only one is end iterator, they're not equal
+      if (leaf_node_ == nullptr || other.leaf_node_ == nullptr) {
+        return false;
+      }
+      // Both valid - compare leaf node and position
+      return leaf_node_ == other.leaf_node_ && *leaf_it_ == *other.leaf_it_;
+    }
+
+    bool operator!=(const iterator& other) const { return !(*this == other); }
+
+   private:
+    friend class btree;
+
+    iterator(LeafNode* node,
+             typename ordered_array<Key, Value, LeafNodeSize, SearchModeT,
+                                    MoveModeT>::iterator it)
+        : leaf_node_(node), leaf_it_(it) {}
+
+    LeafNode* leaf_node_;
+    std::optional<typename ordered_array<Key, Value, LeafNodeSize, SearchModeT,
+                                         MoveModeT>::iterator>
+        leaf_it_;
+  };
+
+  using const_iterator = iterator;  // For now, treat as const
+
+  /**
+   * Returns an iterator to the first element.
+   * Complexity: O(1)
+   */
+  iterator begin() {
+    if (size_ == 0) {
+      return end();
+    }
+    // Find the leftmost leaf
+    LeafNode* leftmost = find_leftmost_leaf();
+    return iterator(leftmost, leftmost->data.begin());
+  }
+
+  /**
+   * Returns an iterator to one past the last element.
+   * Complexity: O(1)
+   */
+  iterator end() { return iterator(); }
+
+  /**
+   * Finds an element with the given key.
+   * Returns an iterator to the element if found, end() otherwise.
+   * Complexity: O(log n)
+   */
+  iterator find(const Key& key) {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.find(key);
+    if (it != leaf->data.end()) {
+      return iterator(leaf, it);
+    }
+    return end();
+  }
+
+ private:
+  //
+  // TEST-ONLY PUBLIC MEMBERS
+  // These members are exposed for testing.
+  // They will be made private once insert() is implemented in Phase 3.
+  //
+ public:
+  /**
    * Allocate a new leaf node.
+   * @warning For testing only - will be private in Phase 3
    */
   LeafNode* allocate_leaf_node();
 
@@ -123,19 +251,32 @@ class btree {
    * Allocate a new internal node.
    * @param leaf_children If true, children are LeafNode*, otherwise
    * InternalNode*
+   * @warning For testing only - will be private in Phase 3
    */
   InternalNode* allocate_internal_node(bool leaf_children);
 
   /**
    * Deallocate a leaf node.
+   * @warning For testing only - will be private in Phase 3
    */
   void deallocate_leaf_node(LeafNode* node);
 
   /**
    * Deallocate an internal node.
+   * @warning For testing only - will be private in Phase 3
    */
   void deallocate_internal_node(InternalNode* node);
 
+  // Root and size members - exposed for testing
+  // @warning Will be private in Phase 3
+  bool root_is_leaf_;
+  union {
+    LeafNode* leaf_root_;
+    InternalNode* internal_root_;
+  };
+  size_type size_;
+
+ private:
   /**
    * Recursively deallocate all nodes in the tree.
    */
@@ -162,14 +303,73 @@ class btree {
     return leaf_root_;
   }
 
-  // Root can be either a leaf or internal node
-  bool root_is_leaf_;
-  union {
-    LeafNode* leaf_root_;
-    InternalNode* internal_root_;
-  };
+  /**
+   * Finds the leftmost (first) leaf in the tree.
+   * Assumes tree is non-empty.
+   */
+  LeafNode* find_leftmost_leaf() const {
+    if (root_is_leaf_) {
+      return leaf_root_;
+    }
 
-  size_type size_;
+    // Traverse down always taking the first child
+    InternalNode* node = internal_root_;
+    while (!node->children_are_leaves) {
+      auto it = node->internal_children.begin();
+      node = it->second;
+    }
+
+    // Now node has leaf children - return the first one
+    auto it = node->leaf_children.begin();
+    return it->second;
+  }
+
+  /**
+   * Finds the leaf node that should contain the given key.
+   * Assumes tree is non-empty.
+   */
+  LeafNode* find_leaf_for_key(const Key& key) const {
+    if (root_is_leaf_) {
+      return leaf_root_;
+    }
+
+    // Traverse down the tree
+    InternalNode* node = internal_root_;
+    while (!node->children_are_leaves) {
+      // Find the child to follow
+      // In a B+ tree, we use lower_bound to find the right subtree
+      // The key in internal nodes represents the minimum key in the subtree
+      auto it = node->internal_children.begin();
+      auto end = node->internal_children.end();
+
+      // Find first child whose key is > search key
+      while (it != end && it->first < key) {
+        ++it;
+      }
+
+      // If we found such a child and it's not the first, go to previous
+      if (it != node->internal_children.begin() &&
+          (it == end || it->first != key)) {
+        --it;
+      }
+
+      node = it->second;
+    }
+
+    // Now node has leaf children - find the appropriate leaf
+    auto it = node->leaf_children.begin();
+    auto end = node->leaf_children.end();
+
+    while (it != end && it->first < key) {
+      ++it;
+    }
+
+    if (it != node->leaf_children.begin() && (it == end || it->first != key)) {
+      --it;
+    }
+
+    return it->second;
+  }
 };
 
 // Implementation
@@ -243,6 +443,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Reset state
+  root_is_leaf_ = true;
   leaf_root_ = nullptr;
   size_ = 0;
 }
