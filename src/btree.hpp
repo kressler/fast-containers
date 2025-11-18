@@ -484,6 +484,23 @@ class btree {
   static constexpr size_type min_internal_size() {
     return (InternalNodeSize + 1) / 2;
   }
+
+  /**
+   * Hysteresis amount for leaf node rebalancing.
+   * Don't rebalance until size drops below min_leaf_size() - leaf_hysteresis().
+   * When borrowing, try to borrow at least this many elements.
+   */
+  static constexpr size_type leaf_hysteresis() { return min_leaf_size() / 4; }
+
+  /**
+   * Hysteresis amount for internal node rebalancing.
+   * Don't rebalance until size drops below min_internal_size() -
+   * internal_hysteresis(). When borrowing, try to borrow at least this many
+   * children.
+   */
+  static constexpr size_type internal_hysteresis() {
+    return min_internal_size() / 4;
+  }
 };
 
 // Implementation
@@ -937,8 +954,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Check if leaf underflowed (but root can have any size)
+  // Use hysteresis: only rebalance when size drops below min - hysteresis
   bool is_root = (root_is_leaf_ && leaf == leaf_root_);
-  if (!is_root && leaf->data.size() < min_leaf_size()) {
+  size_type underflow_threshold = min_leaf_size() > leaf_hysteresis()
+                                      ? min_leaf_size() - leaf_hysteresis()
+                                      : 0;
+  if (!is_root && leaf->data.size() < underflow_threshold) {
     handle_leaf_underflow(leaf);
   } else if (!leaf->data.empty() && leaf->parent != nullptr) {
     // No underflow, but check if minimum key changed
@@ -1139,22 +1160,41 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
-  // Move the rightmost element from left sibling to this leaf
-  auto last_it = left_sibling->data.end();
-  --last_it;  // Point to last element
+  // Try to borrow at least leaf_hysteresis() elements for efficiency
+  // But don't leave sibling below min_leaf_size()
+  size_type target_borrow = leaf_hysteresis() > 0 ? leaf_hysteresis() : 1;
+  size_type can_borrow = left_sibling->data.size() > min_leaf_size()
+                             ? left_sibling->data.size() - min_leaf_size()
+                             : 0;
+  size_type actual_borrow = std::min(target_borrow, can_borrow);
 
-  Key borrowed_key = last_it->first;
-  Value borrowed_value = last_it->second;
+  if (actual_borrow == 0) {
+    return false;
+  }
 
-  // Remove from left sibling
-  left_sibling->data.remove(borrowed_key);
+  // Move elements from right side of left sibling to this leaf
+  // Collect keys to borrow (from right to left)
+  std::vector<std::pair<Key, Value>> borrowed_elements;
+  auto it = left_sibling->data.end();
+  for (size_type i = 0; i < actual_borrow; ++i) {
+    --it;
+    borrowed_elements.push_back({it->first, it->second});
+  }
 
-  // Insert into this leaf (will go at the beginning since it's smaller)
-  auto [it, inserted] = leaf->data.insert(borrowed_key, borrowed_value);
-  assert(inserted && "Borrowing should always succeed");
+  // Remove from left sibling (in reverse order to avoid iterator invalidation)
+  for (const auto& [key, value] : borrowed_elements) {
+    left_sibling->data.remove(key);
+  }
 
-  // Update parent key for this leaf (minimum changed)
-  update_parent_key_recursive(leaf, borrowed_key);
+  // Insert into this leaf (elements will be sorted at the beginning)
+  for (const auto& [key, value] : borrowed_elements) {
+    auto [insert_it, inserted] = leaf->data.insert(key, value);
+    assert(inserted && "Borrowing should always succeed");
+  }
+
+  // Update parent key for this leaf (minimum changed to smallest borrowed key)
+  const Key& new_min = borrowed_elements.back().first;
+  update_parent_key_recursive(leaf, new_min);
 
   return true;
 }
@@ -1172,18 +1212,37 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
-  // Move the leftmost element from right sibling to this leaf
-  auto first_it = right_sibling->data.begin();
+  // Try to borrow at least leaf_hysteresis() elements for efficiency
+  // But don't leave sibling below min_leaf_size()
+  size_type target_borrow = leaf_hysteresis() > 0 ? leaf_hysteresis() : 1;
+  size_type can_borrow = right_sibling->data.size() > min_leaf_size()
+                             ? right_sibling->data.size() - min_leaf_size()
+                             : 0;
+  size_type actual_borrow = std::min(target_borrow, can_borrow);
 
-  Key borrowed_key = first_it->first;
-  Value borrowed_value = first_it->second;
+  if (actual_borrow == 0) {
+    return false;
+  }
+
+  // Move elements from left side of right sibling to this leaf
+  // Collect keys to borrow (from left to right)
+  std::vector<std::pair<Key, Value>> borrowed_elements;
+  auto it = right_sibling->data.begin();
+  for (size_type i = 0; i < actual_borrow; ++i) {
+    borrowed_elements.push_back({it->first, it->second});
+    ++it;
+  }
 
   // Remove from right sibling
-  right_sibling->data.remove(borrowed_key);
+  for (const auto& [key, value] : borrowed_elements) {
+    right_sibling->data.remove(key);
+  }
 
-  // Insert into this leaf (will go at the end since it's larger)
-  auto [it, inserted] = leaf->data.insert(borrowed_key, borrowed_value);
-  assert(inserted && "Borrowing should always succeed");
+  // Insert into this leaf (elements will be sorted at the end)
+  for (const auto& [key, value] : borrowed_elements) {
+    auto [insert_it, inserted] = leaf->data.insert(key, value);
+    assert(inserted && "Borrowing should always succeed");
+  }
 
   // Update parent key for right sibling (its minimum changed)
   const Key& new_right_min = right_sibling->data.begin()->first;
@@ -1235,9 +1294,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Deallocate this leaf
   deallocate_leaf_node(leaf);
 
-  // Check if parent underflowed
+  // Check if parent underflowed (use hysteresis threshold)
   bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+  size_type parent_underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
     handle_internal_underflow(parent);
   } else if (parent_is_root && parent_children.size() == 1) {
     // Root has only one child left - make that child the new root
@@ -1292,9 +1355,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Deallocate right sibling
   deallocate_leaf_node(right_sibling);
 
-  // Check if parent underflowed
+  // Check if parent underflowed (use hysteresis threshold)
   bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+  size_type parent_underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
     handle_internal_underflow(parent);
   } else if (parent_is_root && parent_children.size() == 1) {
     // Root has only one child left - make that child the new root
@@ -1311,7 +1378,10 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::handle_leaf_underflow(LeafNode* leaf) {
-  assert(leaf->data.size() < min_leaf_size() &&
+  size_type underflow_threshold = min_leaf_size() > leaf_hysteresis()
+                                      ? min_leaf_size() - leaf_hysteresis()
+                                      : 0;
+  assert(leaf->data.size() < underflow_threshold &&
          "handle_leaf_underflow called on non-underflowed leaf");
   assert(leaf->parent != nullptr && "Root leaf cannot underflow");
 
@@ -1350,59 +1420,93 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   if (node->children_are_leaves) {
     auto& left_children = left_sibling->leaf_children;
-    if (left_children.size() <= min_internal_size()) {
+
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = left_children.size() > min_internal_size()
+                               ? left_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
       return false;
     }
 
-    // Move the rightmost child from left sibling to this node
-    auto last_it = left_children.end();
-    --last_it;
+    // Move children from right side of left sibling to this node
+    // Collect children to borrow (from right to left)
+    std::vector<std::pair<Key, LeafNode*>> borrowed_children;
+    auto it = left_children.end();
+    for (size_type i = 0; i < actual_borrow; ++i) {
+      --it;
+      borrowed_children.push_back({it->first, it->second});
+    }
 
-    Key borrowed_key = last_it->first;
-    LeafNode* borrowed_child = last_it->second;
+    // Remove from left sibling (in reverse order to avoid iterator
+    // invalidation)
+    for (const auto& [key, child] : borrowed_children) {
+      left_children.remove(key);
+    }
 
-    // Remove from left sibling
-    left_children.remove(borrowed_key);
-
-    // Insert into this node
+    // Insert into this node (children will be sorted at the beginning)
     auto& children = node->leaf_children;
-    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
-    assert(inserted && "Borrowing should always succeed");
+    for (const auto& [key, child] : borrowed_children) {
+      auto [insert_it, inserted] = children.insert(key, child);
+      assert(inserted && "Borrowing should always succeed");
+      // Update parent pointer
+      child->parent = node;
+    }
 
-    // Update parent pointer
-    borrowed_child->parent = node;
-
-    // Update parent key for this node (minimum changed)
-    const Key& new_min = children.begin()->first;
+    // Update parent key for this node (minimum changed to smallest borrowed
+    // child's key)
+    const Key& new_min = borrowed_children.back().first;
     update_parent_key_recursive(node, new_min);
 
     return true;
   } else {
     auto& left_children = left_sibling->internal_children;
-    if (left_children.size() <= min_internal_size()) {
+
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = left_children.size() > min_internal_size()
+                               ? left_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
       return false;
     }
 
-    // Move the rightmost child from left sibling to this node
-    auto last_it = left_children.end();
-    --last_it;
+    // Move children from right side of left sibling to this node
+    // Collect children to borrow (from right to left)
+    std::vector<std::pair<Key, InternalNode*>> borrowed_children;
+    auto it = left_children.end();
+    for (size_type i = 0; i < actual_borrow; ++i) {
+      --it;
+      borrowed_children.push_back({it->first, it->second});
+    }
 
-    Key borrowed_key = last_it->first;
-    InternalNode* borrowed_child = last_it->second;
+    // Remove from left sibling (in reverse order to avoid iterator
+    // invalidation)
+    for (const auto& [key, child] : borrowed_children) {
+      left_children.remove(key);
+    }
 
-    // Remove from left sibling
-    left_children.remove(borrowed_key);
-
-    // Insert into this node
+    // Insert into this node (children will be sorted at the beginning)
     auto& children = node->internal_children;
-    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
-    assert(inserted && "Borrowing should always succeed");
+    for (const auto& [key, child] : borrowed_children) {
+      auto [insert_it, inserted] = children.insert(key, child);
+      assert(inserted && "Borrowing should always succeed");
+      // Update parent pointer
+      child->parent = node;
+    }
 
-    // Update parent pointer
-    borrowed_child->parent = node;
-
-    // Update parent key for this node (minimum changed)
-    const Key& new_min = children.begin()->first;
+    // Update parent key for this node (minimum changed to smallest borrowed
+    // child's key)
+    const Key& new_min = borrowed_children.back().first;
     update_parent_key_recursive(node, new_min);
 
     return true;
@@ -1423,56 +1527,90 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   if (node->children_are_leaves) {
     auto& right_children = right_sibling->leaf_children;
-    if (right_children.size() <= min_internal_size()) {
+
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = right_children.size() > min_internal_size()
+                               ? right_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
       return false;
     }
 
-    // Move the leftmost child from right sibling to this node
-    auto first_it = right_children.begin();
-
-    Key borrowed_key = first_it->first;
-    LeafNode* borrowed_child = first_it->second;
+    // Move children from left side of right sibling to this node
+    // Collect children to borrow (from left to right)
+    std::vector<std::pair<Key, LeafNode*>> borrowed_children;
+    auto it = right_children.begin();
+    for (size_type i = 0; i < actual_borrow; ++i) {
+      borrowed_children.push_back({it->first, it->second});
+      ++it;
+    }
 
     // Remove from right sibling
-    right_children.remove(borrowed_key);
+    for (const auto& [key, child] : borrowed_children) {
+      right_children.remove(key);
+    }
 
-    // Insert into this node
+    // Insert into this node (children will be sorted at the end)
     auto& children = node->leaf_children;
-    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
-    assert(inserted && "Borrowing should always succeed");
+    for (const auto& [key, child] : borrowed_children) {
+      auto [insert_it, inserted] = children.insert(key, child);
+      assert(inserted && "Borrowing should always succeed");
+      // Update parent pointer
+      child->parent = node;
+    }
 
-    // Update parent pointer
-    borrowed_child->parent = node;
-
-    // Update parent key for right sibling (its minimum changed)
+    // Update parent key for right sibling (its minimum changed to first
+    // remaining child)
     const Key& new_right_min = right_children.begin()->first;
     update_parent_key_recursive(right_sibling, new_right_min);
 
     return true;
   } else {
     auto& right_children = right_sibling->internal_children;
-    if (right_children.size() <= min_internal_size()) {
+
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = right_children.size() > min_internal_size()
+                               ? right_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
       return false;
     }
 
-    // Move the leftmost child from right sibling to this node
-    auto first_it = right_children.begin();
-
-    Key borrowed_key = first_it->first;
-    InternalNode* borrowed_child = first_it->second;
+    // Move children from left side of right sibling to this node
+    // Collect children to borrow (from left to right)
+    std::vector<std::pair<Key, InternalNode*>> borrowed_children;
+    auto it = right_children.begin();
+    for (size_type i = 0; i < actual_borrow; ++i) {
+      borrowed_children.push_back({it->first, it->second});
+      ++it;
+    }
 
     // Remove from right sibling
-    right_children.remove(borrowed_key);
+    for (const auto& [key, child] : borrowed_children) {
+      right_children.remove(key);
+    }
 
-    // Insert into this node
+    // Insert into this node (children will be sorted at the end)
     auto& children = node->internal_children;
-    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
-    assert(inserted && "Borrowing should always succeed");
+    for (const auto& [key, child] : borrowed_children) {
+      auto [insert_it, inserted] = children.insert(key, child);
+      assert(inserted && "Borrowing should always succeed");
+      // Update parent pointer
+      child->parent = node;
+    }
 
-    // Update parent pointer
-    borrowed_child->parent = node;
-
-    // Update parent key for right sibling (its minimum changed)
+    // Update parent key for right sibling (its minimum changed to first
+    // remaining child)
     const Key& new_right_min = right_children.begin()->first;
     update_parent_key_recursive(right_sibling, new_right_min);
 
@@ -1531,9 +1669,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Deallocate this node
   deallocate_internal_node(node);
 
-  // Check if parent underflowed
+  // Check if parent underflowed (use hysteresis threshold)
   bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+  size_type parent_underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
     handle_internal_underflow(parent);
   } else if (parent_is_root && parent_children.size() == 1) {
     // Root has only one child left - make that child the new root
@@ -1593,9 +1735,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Deallocate right sibling
   deallocate_internal_node(right_sibling);
 
-  // Check if parent underflowed
+  // Check if parent underflowed (use hysteresis threshold)
   bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+  size_type parent_underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
     handle_internal_underflow(parent);
   } else if (parent_is_root && parent_children.size() == 1) {
     // Root has only one child left - make that child the new root
@@ -1616,7 +1762,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                             ? node->leaf_children.size()
                             : node->internal_children.size();
 
-  assert(node_size < min_internal_size() &&
+  size_type underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+  assert(node_size < underflow_threshold &&
          "handle_internal_underflow called on non-underflowed node");
   assert(node->parent != nullptr && "Root internal node cannot underflow");
 
