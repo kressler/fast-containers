@@ -579,24 +579,34 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Note: We must do this AFTER the insert because parent keys can become stale
   // from previous non-split inserts. For example, if a leaf has {5,6} with
   // parent key 6 (stale from earlier), and we split+insert 4, the parent still
-  // has key 6, not 5. So we can't use leaf->data.begin()->first to find the old
-  // entry. Instead, we scan for the entry that points to this leaf pointer.
+  // has key 6, not 5. We use lower_bound(new_min) to efficiently find the entry
+  // that should contain this leaf (even with stale keys), then verify by
+  // checking the pointer.
   if (target_leaf == leaf && leaf->parent != nullptr) {
     Key new_left_min = leaf->data.begin()->first;
     auto& children = leaf->parent->leaf_children;
 
-    // Find the entry that points to this leaf
-    for (auto it = children.begin(); it != children.end(); ++it) {
-      if (it->second == leaf) {
-        // Found the entry - check if key needs updating
-        if (it->first != new_left_min) {
-          Key old_key = it->first;
-          children.remove(old_key);
-          auto [new_it, ins] = children.insert(new_left_min, leaf);
-          assert(ins &&
-                 "Re-inserting leaf with new minimum key should succeed");
-        }
-        break;
+    // Use lower_bound to find the entry at or after new_min (O(log n))
+    auto it = children.lower_bound(new_left_min);
+
+    // The entry pointing to this leaf should be at 'it' or one position before
+    // Check 'it' first
+    if (it != children.end() && it->second == leaf) {
+      // Found it at lower_bound position
+      if (it->first != new_left_min) {
+        Key old_key = it->first;
+        children.remove(old_key);
+        auto [new_it, ins] = children.insert(new_left_min, leaf);
+        assert(ins && "Re-inserting leaf with new minimum key should succeed");
+      }
+    } else if (it != children.begin()) {
+      // Check the previous entry
+      --it;
+      if (it->second == leaf && it->first != new_left_min) {
+        Key old_key = it->first;
+        children.remove(old_key);
+        auto [new_it, ins] = children.insert(new_left_min, leaf);
+        assert(ins && "Re-inserting leaf with new minimum key should succeed");
       }
     }
   }
