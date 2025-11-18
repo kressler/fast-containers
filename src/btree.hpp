@@ -816,38 +816,35 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Calculate split point
   size_type split_point = (InternalNodeSize + 1) / 2;
 
+  // Use templated lambda to handle split logic for both child types
+  auto perform_split = [&]<typename ChildPtrType>(
+                           auto& node_children,
+                           auto& new_node_children) -> const Key& {
+    // Get split iterator
+    auto split_it = node_children.begin();
+    std::advance(split_it, split_point);
+
+    // Use split_at() to efficiently move second half to new node
+    node_children.split_at(split_it, new_node_children);
+
+    // Update parent pointers for moved children
+    for (auto it = new_node_children.begin(); it != new_node_children.end();
+         ++it) {
+      it->second->parent = new_node;
+    }
+
+    // Return reference to first key in new node (the promoted key)
+    return new_node_children.begin()->first;
+  };
+
   if (node->children_are_leaves) {
-    // Get split iterator
-    auto split_it = node->leaf_children.begin();
-    std::advance(split_it, split_point);
-
-    // Use split_at() to efficiently move second half to new node
-    node->leaf_children.split_at(split_it, new_node->leaf_children);
-
-    // Update parent pointers for moved children
-    for (auto it = new_node->leaf_children.begin();
-         it != new_node->leaf_children.end(); ++it) {
-      it->second->parent = new_node;
-    }
-
-    // Return reference to first key in new node (the promoted key)
-    return {new_node->leaf_children.begin()->first, new_node};
+    const Key& promoted_key = perform_split.template operator()<LeafNode*>(
+        node->leaf_children, new_node->leaf_children);
+    return {promoted_key, new_node};
   } else {
-    // Get split iterator
-    auto split_it = node->internal_children.begin();
-    std::advance(split_it, split_point);
-
-    // Use split_at() to efficiently move second half to new node
-    node->internal_children.split_at(split_it, new_node->internal_children);
-
-    // Update parent pointers for moved children
-    for (auto it = new_node->internal_children.begin();
-         it != new_node->internal_children.end(); ++it) {
-      it->second->parent = new_node;
-    }
-
-    // Return reference to first key in new node (the promoted key)
-    return {new_node->internal_children.begin()->first, new_node};
+    const Key& promoted_key = perform_split.template operator()<InternalNode*>(
+        node->internal_children, new_node->internal_children);
+    return {promoted_key, new_node};
   }
 }
 
@@ -987,13 +984,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Get node's minimum key and children array reference
   const Key* node_min = nullptr;
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    if (node->data.empty()) {
-      return nullptr;  // Empty leaf, can't find it
-    }
-    node_min = &(node->data.begin()->first);
-    auto& children = parent->leaf_children;
-
+  // Use templated lambda to handle search logic for both node types
+  auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
     // Use lower_bound to efficiently find this node's position
     auto it = children.lower_bound(*node_min);
 
@@ -1016,6 +1008,15 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         return prev_it->second;
       }
     }
+    return nullptr;
+  };
+
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if (node->data.empty()) {
+      return nullptr;  // Empty leaf, can't find it
+    }
+    node_min = &(node->data.begin()->first);
+    return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
   } else {
     // InternalNode
     if (node->children_are_leaves) {
@@ -1029,31 +1030,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       }
       node_min = &(node->internal_children.begin()->first);
     }
-
-    auto& children = parent->internal_children;
-
-    // Use lower_bound to efficiently find this node's position
-    auto it = children.lower_bound(*node_min);
-
-    // The entry pointing to this node should be at 'it' or one position before
-    if (it != children.end() && it->second == node) {
-      if (it == children.begin()) {
-        return nullptr;  // This is the leftmost child
-      }
-      auto prev_it = it;
-      --prev_it;
-      return prev_it->second;
-    } else if (it != children.begin()) {
-      --it;
-      if (it->second == node) {
-        if (it == children.begin()) {
-          return nullptr;  // This is the leftmost child
-        }
-        auto prev_it = it;
-        --prev_it;
-        return prev_it->second;
-      }
-    }
+    return find_sibling.template operator()<InternalNode*>(
+        parent->internal_children);
   }
 
   assert(false && "Node not found in parent's children");
@@ -1075,13 +1053,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Get node's minimum key and children array reference
   const Key* node_min = nullptr;
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    if (node->data.empty()) {
-      return nullptr;  // Empty leaf, can't find it
-    }
-    node_min = &(node->data.begin()->first);
-    auto& children = parent->leaf_children;
-
+  // Use templated lambda to handle search logic for both node types
+  auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
     // Use lower_bound to efficiently find this node's position
     auto it = children.lower_bound(*node_min);
 
@@ -1104,6 +1077,15 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         return next_it->second;
       }
     }
+    return nullptr;
+  };
+
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if (node->data.empty()) {
+      return nullptr;  // Empty leaf, can't find it
+    }
+    node_min = &(node->data.begin()->first);
+    return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
   } else {
     // InternalNode
     if (node->children_are_leaves) {
@@ -1117,31 +1099,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       }
       node_min = &(node->internal_children.begin()->first);
     }
-
-    auto& children = parent->internal_children;
-
-    // Use lower_bound to efficiently find this node's position
-    auto it = children.lower_bound(*node_min);
-
-    // The entry pointing to this node should be at 'it' or one position before
-    if (it != children.end() && it->second == node) {
-      auto next_it = it;
-      ++next_it;
-      if (next_it == children.end()) {
-        return nullptr;  // This is the rightmost child
-      }
-      return next_it->second;
-    } else if (it != children.begin()) {
-      --it;
-      if (it->second == node) {
-        auto next_it = it;
-        ++next_it;
-        if (next_it == children.end()) {
-          return nullptr;  // This is the rightmost child
-        }
-        return next_it->second;
-      }
-    }
+    return find_sibling.template operator()<InternalNode*>(
+        parent->internal_children);
   }
 
   assert(false && "Node not found in parent's children");
