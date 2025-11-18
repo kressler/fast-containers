@@ -913,12 +913,14 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Find the leaf containing the key
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Try to remove from leaf
-  size_type removed = leaf->data.remove(key);
-  if (removed == 0) {
+  // Check if key exists in the leaf
+  auto it = leaf->data.find(key);
+  if (it == leaf->data.end()) {
     return 0;  // Key not found
   }
 
+  // Remove from leaf
+  leaf->data.remove(key);
   size_--;
 
   // Special case: tree is now empty
@@ -964,21 +966,35 @@ typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                MoveModeT>::LeafNode*
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::find_left_leaf_sibling(LeafNode* leaf) const {
-  if (leaf->parent == nullptr) {
-    return nullptr;  // Root has no siblings
+  if (leaf->parent == nullptr || leaf->data.empty()) {
+    return nullptr;  // Root has no siblings, or leaf is empty
   }
 
-  // Find this leaf in parent's children
   InternalNode* parent = leaf->parent;
   auto& children = parent->leaf_children;
 
-  for (auto it = children.begin(); it != children.end(); ++it) {
+  // Use lower_bound to efficiently find this leaf's position
+  const Key& leaf_min = leaf->data.begin()->first;
+  auto it = children.lower_bound(leaf_min);
+
+  // The entry pointing to this leaf should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == leaf) {
+    // Found at lower_bound position
+    if (it == children.begin()) {
+      return nullptr;  // This is the leftmost child
+    }
+    auto prev_it = it;
+    --prev_it;
+    return prev_it->second;
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
     if (it->second == leaf) {
-      // Found the leaf - check if there's a previous sibling
+      // Found at previous position
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
       }
-      // Get previous iterator
       auto prev_it = it;
       --prev_it;
       return prev_it->second;
@@ -996,17 +1012,32 @@ typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                MoveModeT>::LeafNode*
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::find_right_leaf_sibling(LeafNode* leaf) const {
-  if (leaf->parent == nullptr) {
-    return nullptr;  // Root has no siblings
+  if (leaf->parent == nullptr || leaf->data.empty()) {
+    return nullptr;  // Root has no siblings, or leaf is empty
   }
 
-  // Find this leaf in parent's children
   InternalNode* parent = leaf->parent;
   auto& children = parent->leaf_children;
 
-  for (auto it = children.begin(); it != children.end(); ++it) {
+  // Use lower_bound to efficiently find this leaf's position
+  const Key& leaf_min = leaf->data.begin()->first;
+  auto it = children.lower_bound(leaf_min);
+
+  // The entry pointing to this leaf should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == leaf) {
+    // Found at lower_bound position - check for right sibling
+    auto next_it = it;
+    ++next_it;
+    if (next_it == children.end()) {
+      return nullptr;  // This is the rightmost child
+    }
+    return next_it->second;
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
     if (it->second == leaf) {
-      // Found the leaf - check if there's a next sibling
+      // Found at previous position - check for right sibling
       auto next_it = it;
       ++next_it;
       if (next_it == children.end()) {
@@ -1031,17 +1062,46 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return nullptr;  // Root has no siblings
   }
 
-  // Find this node in parent's children
   InternalNode* parent = node->parent;
   auto& children = parent->internal_children;
 
-  for (auto it = children.begin(); it != children.end(); ++it) {
+  // Get this node's minimum key for efficient lookup
+  const Key* node_min = nullptr;
+  if (node->children_are_leaves) {
+    if (!node->leaf_children.empty()) {
+      node_min = &(node->leaf_children.begin()->first);
+    }
+  } else {
+    if (!node->internal_children.empty()) {
+      node_min = &(node->internal_children.begin()->first);
+    }
+  }
+
+  if (node_min == nullptr) {
+    return nullptr;  // Node has no children, can't find it
+  }
+
+  // Use lower_bound to efficiently find this node's position
+  auto it = children.lower_bound(*node_min);
+
+  // The entry pointing to this node should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == node) {
+    // Found at lower_bound position
+    if (it == children.begin()) {
+      return nullptr;  // This is the leftmost child
+    }
+    auto prev_it = it;
+    --prev_it;
+    return prev_it->second;
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
     if (it->second == node) {
-      // Found the node - check if there's a previous sibling
+      // Found at previous position
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
       }
-      // Get previous iterator
       auto prev_it = it;
       --prev_it;
       return prev_it->second;
@@ -1063,13 +1123,43 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return nullptr;  // Root has no siblings
   }
 
-  // Find this node in parent's children
   InternalNode* parent = node->parent;
   auto& children = parent->internal_children;
 
-  for (auto it = children.begin(); it != children.end(); ++it) {
+  // Get this node's minimum key for efficient lookup
+  const Key* node_min = nullptr;
+  if (node->children_are_leaves) {
+    if (!node->leaf_children.empty()) {
+      node_min = &(node->leaf_children.begin()->first);
+    }
+  } else {
+    if (!node->internal_children.empty()) {
+      node_min = &(node->internal_children.begin()->first);
+    }
+  }
+
+  if (node_min == nullptr) {
+    return nullptr;  // Node has no children, can't find it
+  }
+
+  // Use lower_bound to efficiently find this node's position
+  auto it = children.lower_bound(*node_min);
+
+  // The entry pointing to this node should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == node) {
+    // Found at lower_bound position - check for right sibling
+    auto next_it = it;
+    ++next_it;
+    if (next_it == children.end()) {
+      return nullptr;  // This is the rightmost child
+    }
+    return next_it->second;
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
     if (it->second == node) {
-      // Found the node - check if there's a next sibling
+      // Found at previous position - check for right sibling
       auto next_it = it;
       ++next_it;
       if (next_it == children.end()) {
