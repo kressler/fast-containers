@@ -911,14 +911,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Find the leaf containing the key
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Check if key exists in the leaf
-  auto it = leaf->data.find(key);
-  if (it == leaf->data.end()) {
+  // Remove from leaf (returns 0 if not found, 1 if removed)
+  size_type removed = leaf->data.remove(key);
+  if (removed == 0) {
     return 0;  // Key not found
   }
-
-  // Remove from leaf
-  leaf->data.remove(key);
   size_--;
 
   // Special case: tree is now empty
