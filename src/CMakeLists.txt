@@ -19,3 +19,5 @@ add_executable(ordered_array_search_benchmark
                benchmarks/ordered_array_search_benchmark.cpp)
 target_link_libraries(ordered_array_search_benchmark
                       PRIVATE benchmark::benchmark)
+
+add_subdirectory(binary)
