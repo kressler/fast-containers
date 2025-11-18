@@ -952,11 +952,16 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Check if leaf underflowed (but root can have any size)
   // Use hysteresis: only rebalance when size drops below min - hysteresis
-  bool is_root = (root_is_leaf_ && leaf == leaf_root_);
-  size_type underflow_threshold = min_leaf_size() > leaf_hysteresis()
-                                      ? min_leaf_size() - leaf_hysteresis()
-                                      : 0;
-  if (!is_root && leaf->data.size() < underflow_threshold) {
+  if (root_is_leaf_ && leaf == leaf_root_) {
+    // Root can have any size, no underflow handling needed
+    // But still check if minimum key changed (though root has no parent)
+    return 1;
+  }
+
+  const size_type underflow_threshold =
+      min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
+                                          : 0;
+  if (leaf->data.size() < underflow_threshold) {
     handle_leaf_underflow(leaf);
   } else if (!leaf->data.empty() && leaf->parent != nullptr) {
     // No underflow, but check if minimum key changed
@@ -1339,70 +1344,45 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
+  // Use templated lambda to handle borrow logic for both child types
+  auto borrow_children = [&]<typename ChildPtrType>(
+                             auto& children, auto& left_children) -> bool {
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = left_children.size() > min_internal_size()
+                               ? left_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
+      return false;
+    }
+
+    // Transfer suffix from left sibling to beginning of this node
+    // This does a bulk copy and shifts arrays only once
+    children.transfer_suffix_from(left_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from beginning)
+    auto it = children.begin();
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
+    }
+
+    // Update parent key for this node (minimum changed to first child's key)
+    const Key& new_min = children.begin()->first;
+    update_parent_key_recursive(node, new_min);
+
+    return true;
+  };
+
   if (node->children_are_leaves) {
-    auto& left_children = left_sibling->leaf_children;
-
-    // Try to borrow at least internal_hysteresis() children for efficiency
-    // But don't leave sibling below min_internal_size()
-    size_type target_borrow =
-        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
-    size_type can_borrow = left_children.size() > min_internal_size()
-                               ? left_children.size() - min_internal_size()
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
-
-    if (actual_borrow == 0) {
-      return false;
-    }
-
-    // Transfer suffix from left sibling to beginning of this node
-    // This does a bulk copy and shifts arrays only once
-    auto& children = node->leaf_children;
-    children.transfer_suffix_from(left_children, actual_borrow);
-
-    // Update parent pointers for all transferred children (from beginning)
-    auto it = children.begin();
-    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
-      it->second->parent = node;
-    }
-
-    // Update parent key for this node (minimum changed to first child's key)
-    const Key& new_min = children.begin()->first;
-    update_parent_key_recursive(node, new_min);
-
-    return true;
+    return borrow_children.template operator()<LeafNode*>(
+        node->leaf_children, left_sibling->leaf_children);
   } else {
-    auto& left_children = left_sibling->internal_children;
-
-    // Try to borrow at least internal_hysteresis() children for efficiency
-    // But don't leave sibling below min_internal_size()
-    size_type target_borrow =
-        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
-    size_type can_borrow = left_children.size() > min_internal_size()
-                               ? left_children.size() - min_internal_size()
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
-
-    if (actual_borrow == 0) {
-      return false;
-    }
-
-    // Transfer suffix from left sibling to beginning of this node
-    // This does a bulk copy and shifts arrays only once
-    auto& children = node->internal_children;
-    children.transfer_suffix_from(left_children, actual_borrow);
-
-    // Update parent pointers for all transferred children (from beginning)
-    auto it = children.begin();
-    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
-      it->second->parent = node;
-    }
-
-    // Update parent key for this node (minimum changed to first child's key)
-    const Key& new_min = children.begin()->first;
-    update_parent_key_recursive(node, new_min);
-
-    return true;
+    return borrow_children.template operator()<InternalNode*>(
+        node->internal_children, left_sibling->internal_children);
   }
 }
 
@@ -1418,76 +1398,48 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
+  // Use templated lambda to handle borrow logic for both child types
+  auto borrow_children = [&]<typename ChildPtrType>(
+                             auto& children, auto& right_children) -> bool {
+    // Try to borrow at least internal_hysteresis() children for efficiency
+    // But don't leave sibling below min_internal_size()
+    size_type target_borrow =
+        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
+    size_type can_borrow = right_children.size() > min_internal_size()
+                               ? right_children.size() - min_internal_size()
+                               : 0;
+    size_type actual_borrow = std::min(target_borrow, can_borrow);
+
+    if (actual_borrow == 0) {
+      return false;
+    }
+
+    // Transfer prefix from right sibling to end of this node
+    // This does a bulk copy and shifts arrays only once
+    size_type old_size = children.size();
+    children.transfer_prefix_from(right_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from old_size)
+    auto it = children.begin();
+    std::advance(it, old_size);
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
+    }
+
+    // Update parent key for right sibling (its minimum changed to first
+    // remaining child)
+    const Key& new_right_min = right_children.begin()->first;
+    update_parent_key_recursive(right_sibling, new_right_min);
+
+    return true;
+  };
+
   if (node->children_are_leaves) {
-    auto& right_children = right_sibling->leaf_children;
-
-    // Try to borrow at least internal_hysteresis() children for efficiency
-    // But don't leave sibling below min_internal_size()
-    size_type target_borrow =
-        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
-    size_type can_borrow = right_children.size() > min_internal_size()
-                               ? right_children.size() - min_internal_size()
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
-
-    if (actual_borrow == 0) {
-      return false;
-    }
-
-    // Transfer prefix from right sibling to end of this node
-    // This does a bulk copy and shifts arrays only once
-    auto& children = node->leaf_children;
-    size_type old_size = children.size();
-    children.transfer_prefix_from(right_children, actual_borrow);
-
-    // Update parent pointers for all transferred children (from old_size)
-    auto it = children.begin();
-    std::advance(it, old_size);
-    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
-      it->second->parent = node;
-    }
-
-    // Update parent key for right sibling (its minimum changed to first
-    // remaining child)
-    const Key& new_right_min = right_children.begin()->first;
-    update_parent_key_recursive(right_sibling, new_right_min);
-
-    return true;
+    return borrow_children.template operator()<LeafNode*>(
+        node->leaf_children, right_sibling->leaf_children);
   } else {
-    auto& right_children = right_sibling->internal_children;
-
-    // Try to borrow at least internal_hysteresis() children for efficiency
-    // But don't leave sibling below min_internal_size()
-    size_type target_borrow =
-        internal_hysteresis() > 0 ? internal_hysteresis() : 1;
-    size_type can_borrow = right_children.size() > min_internal_size()
-                               ? right_children.size() - min_internal_size()
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
-
-    if (actual_borrow == 0) {
-      return false;
-    }
-
-    // Transfer prefix from right sibling to end of this node
-    // This does a bulk copy and shifts arrays only once
-    auto& children = node->internal_children;
-    size_type old_size = children.size();
-    children.transfer_prefix_from(right_children, actual_borrow);
-
-    // Update parent pointers for all transferred children (from old_size)
-    auto it = children.begin();
-    std::advance(it, old_size);
-    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
-      it->second->parent = node;
-    }
-
-    // Update parent key for right sibling (its minimum changed to first
-    // remaining child)
-    const Key& new_right_min = right_children.begin()->first;
-    update_parent_key_recursive(right_sibling, new_right_min);
-
-    return true;
+    return borrow_children.template operator()<InternalNode*>(
+        node->internal_children, right_sibling->internal_children);
   }
 }
 
