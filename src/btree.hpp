@@ -374,9 +374,10 @@ class btree {
   /**
    * Split a full internal node.
    * Creates a new internal node and moves half the children to it.
-   * Returns the promoted key and pointer to the new node.
+   * Returns a reference to the promoted key and pointer to the new node.
+   * The key reference points to the first key in the new node's children.
    */
-  std::pair<Key, InternalNode*> split_internal(InternalNode* node);
+  std::pair<const Key&, InternalNode*> split_internal(InternalNode* node);
 
   /**
    * Update parent's key for a leaf to match the leaf's current minimum.
@@ -577,7 +578,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Get first key of new leaf for promotion
-  Key promoted_key = new_leaf->data.begin()->first;
+  const Key& promoted_key = new_leaf->data.begin()->first;
 
   // Insert the new key-value pair into appropriate leaf
   LeafNode* target_leaf = (key < promoted_key) ? leaf : new_leaf;
@@ -596,7 +597,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // If we inserted into the left half, update parent key if necessary
   // Note: Parent keys can be stale from previous non-split inserts
   if (target_leaf == leaf) {
-    Key new_left_min = leaf->data.begin()->first;
+    const Key& new_left_min = leaf->data.begin()->first;
     update_parent_key(leaf, new_left_min);
   }
 
@@ -627,7 +628,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   };
 
   // Helper lambda to get the left key for creating new root
-  auto get_left_key = [](NodeType* node) -> Key {
+  auto get_left_key = [](NodeType* node) -> const Key& {
     if constexpr (std::is_same_v<NodeType, LeafNode>) {
       return node->data.begin()->first;
     } else {
@@ -688,8 +689,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
-std::pair<Key, typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
-                              SearchModeT, MoveModeT>::InternalNode*>
+std::pair<const Key&, typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                                     SearchModeT, MoveModeT>::InternalNode*>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::split_internal(InternalNode* node) {
   // Create new internal node
@@ -698,13 +699,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Calculate split point
   size_type split_point = (InternalNodeSize + 1) / 2;
 
-  Key promoted_key;
-
   if (node->children_are_leaves) {
-    // Get split iterator and promoted key (first key of second half)
+    // Get split iterator
     auto split_it = node->leaf_children.begin();
     std::advance(split_it, split_point);
-    promoted_key = split_it->first;
 
     // Use split_at() to efficiently move second half to new node
     node->leaf_children.split_at(split_it, new_node->leaf_children);
@@ -714,11 +712,13 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
          it != new_node->leaf_children.end(); ++it) {
       it->second->parent = new_node;
     }
+
+    // Return reference to first key in new node (the promoted key)
+    return {new_node->leaf_children.begin()->first, new_node};
   } else {
-    // Get split iterator and promoted key (first key of second half)
+    // Get split iterator
     auto split_it = node->internal_children.begin();
     std::advance(split_it, split_point);
-    promoted_key = split_it->first;
 
     // Use split_at() to efficiently move second half to new node
     node->internal_children.split_at(split_it, new_node->internal_children);
@@ -728,9 +728,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
          it != new_node->internal_children.end(); ++it) {
       it->second->parent = new_node;
     }
-  }
 
-  return {promoted_key, new_node};
+    // Return reference to first key in new node (the promoted key)
+    return {new_node->internal_children.begin()->first, new_node};
+  }
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
@@ -752,8 +753,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   if (it != children.end() && it->second == leaf) {
     // Found it at lower_bound position
     if (it->first != new_min) {
-      Key old_key = it->first;
-      children.remove(old_key);
+      children.remove(it->first);
       auto [new_it, ins] = children.insert(new_min, leaf);
       assert(ins && "Re-inserting leaf with new minimum key should succeed");
     }
@@ -761,8 +761,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     // Check the previous entry
     --it;
     if (it->second == leaf && it->first != new_min) {
-      Key old_key = it->first;
-      children.remove(old_key);
+      children.remove(it->first);
       auto [new_it, ins] = children.insert(new_min, leaf);
       assert(ins && "Re-inserting leaf with new minimum key should succeed");
     }
