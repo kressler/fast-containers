@@ -245,6 +245,16 @@ class btree {
    */
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
 
+  /**
+   * Removes the element with the given key from the tree.
+   * Returns the number of elements removed (0 or 1).
+   *
+   * Handles node underflow by borrowing from siblings or merging nodes.
+   *
+   * Complexity: O(log n)
+   */
+  size_type erase(const Key& key);
+
  private:
   /**
    * Allocate a new leaf node.
@@ -386,6 +396,102 @@ class btree {
    */
   template <typename ChildNodeType>
   void update_parent_key_recursive(ChildNodeType* child, const Key& new_min);
+
+  /**
+   * Handle underflow in a leaf node after removal.
+   * Attempts to borrow from siblings or merge with them.
+   */
+  void handle_leaf_underflow(LeafNode* leaf);
+
+  /**
+   * Handle underflow in an internal node after removal/merge.
+   * Attempts to borrow from siblings or merge with them.
+   */
+  void handle_internal_underflow(InternalNode* node);
+
+  /**
+   * Try to borrow an element from the left sibling of a leaf.
+   * Returns true if successful.
+   */
+  bool borrow_from_left_leaf_sibling(LeafNode* leaf);
+
+  /**
+   * Try to borrow an element from the right sibling of a leaf.
+   * Returns true if successful.
+   */
+  bool borrow_from_right_leaf_sibling(LeafNode* leaf);
+
+  /**
+   * Merge a leaf with its left sibling.
+   * The left sibling absorbs all elements from 'leaf'.
+   */
+  void merge_with_left_leaf_sibling(LeafNode* leaf);
+
+  /**
+   * Merge a leaf with its right sibling.
+   * 'leaf' absorbs all elements from its right sibling.
+   */
+  void merge_with_right_leaf_sibling(LeafNode* leaf);
+
+  /**
+   * Try to borrow a child from the left sibling of an internal node.
+   * Returns true if successful.
+   */
+  bool borrow_from_left_internal_sibling(InternalNode* node);
+
+  /**
+   * Try to borrow a child from the right sibling of an internal node.
+   * Returns true if successful.
+   */
+  bool borrow_from_right_internal_sibling(InternalNode* node);
+
+  /**
+   * Merge an internal node with its left sibling.
+   * The left sibling absorbs all children from 'node'.
+   */
+  void merge_with_left_internal_sibling(InternalNode* node);
+
+  /**
+   * Merge an internal node with its right sibling.
+   * 'node' absorbs all children from its right sibling.
+   */
+  void merge_with_right_internal_sibling(InternalNode* node);
+
+  /**
+   * Find the left sibling of a leaf node.
+   * Returns nullptr if no left sibling exists.
+   */
+  LeafNode* find_left_leaf_sibling(LeafNode* leaf) const;
+
+  /**
+   * Find the right sibling of a leaf node.
+   * Returns nullptr if no right sibling exists.
+   */
+  LeafNode* find_right_leaf_sibling(LeafNode* leaf) const;
+
+  /**
+   * Find the left sibling of an internal node.
+   * Returns nullptr if no left sibling exists.
+   */
+  InternalNode* find_left_internal_sibling(InternalNode* node) const;
+
+  /**
+   * Find the right sibling of an internal node.
+   * Returns nullptr if no right sibling exists.
+   */
+  InternalNode* find_right_internal_sibling(InternalNode* node) const;
+
+  /**
+   * Minimum number of elements in a non-root leaf node.
+   */
+  static constexpr size_type min_leaf_size() { return (LeafNodeSize + 1) / 2; }
+
+  /**
+   * Minimum number of children in a non-root internal node.
+   */
+  static constexpr size_type min_internal_size() {
+    return (InternalNodeSize + 1) / 2;
+  }
 };
 
 // Implementation
@@ -789,6 +895,705 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // The parent's minimum key changed, so we need to update it too
   if (is_leftmost && parent->parent != nullptr) {
     update_parent_key_recursive(parent, new_min);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::size_type
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::erase(const Key& key) {
+  // Empty tree - nothing to remove
+  if (size_ == 0) {
+    return 0;
+  }
+
+  // Find the leaf containing the key
+  LeafNode* leaf = find_leaf_for_key(key);
+
+  // Try to remove from leaf
+  size_type removed = leaf->data.remove(key);
+  if (removed == 0) {
+    return 0;  // Key not found
+  }
+
+  size_--;
+
+  // Special case: tree is now empty
+  if (size_ == 0) {
+    // Tree had only one element in root leaf
+    assert(root_is_leaf_ && "Empty tree should have leaf root");
+    deallocate_leaf_node(leaf_root_);
+    leaf_root_ = nullptr;
+    leftmost_leaf_ = nullptr;
+    rightmost_leaf_ = nullptr;
+    return 1;
+  }
+
+  // Update leftmost_leaf_ if we removed from it and it's now empty
+  if (leftmost_leaf_ == leaf && leaf->data.empty()) {
+    leftmost_leaf_ = leaf->next_leaf;
+  }
+
+  // Update rightmost_leaf_ if we removed from it and it's now empty
+  if (rightmost_leaf_ == leaf && leaf->data.empty()) {
+    rightmost_leaf_ = leaf->prev_leaf;
+  }
+
+  // Check if leaf underflowed (but root can have any size)
+  bool is_root = (root_is_leaf_ && leaf == leaf_root_);
+  if (!is_root && leaf->data.size() < min_leaf_size()) {
+    handle_leaf_underflow(leaf);
+  } else if (!leaf->data.empty() && leaf->parent != nullptr) {
+    // No underflow, but check if minimum key changed
+    const Key& new_min = leaf->data.begin()->first;
+    // Only need to update parent if this leaf is still around
+    // (might have been merged away in underflow handling)
+    update_parent_key_recursive(leaf, new_min);
+  }
+
+  return 1;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::LeafNode*
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::find_left_leaf_sibling(LeafNode* leaf) const {
+  if (leaf->parent == nullptr) {
+    return nullptr;  // Root has no siblings
+  }
+
+  // Find this leaf in parent's children
+  InternalNode* parent = leaf->parent;
+  auto& children = parent->leaf_children;
+
+  for (auto it = children.begin(); it != children.end(); ++it) {
+    if (it->second == leaf) {
+      // Found the leaf - check if there's a previous sibling
+      if (it == children.begin()) {
+        return nullptr;  // This is the leftmost child
+      }
+      // Get previous iterator
+      auto prev_it = it;
+      --prev_it;
+      return prev_it->second;
+    }
+  }
+
+  assert(false && "Leaf not found in parent's children");
+  return nullptr;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::LeafNode*
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::find_right_leaf_sibling(LeafNode* leaf) const {
+  if (leaf->parent == nullptr) {
+    return nullptr;  // Root has no siblings
+  }
+
+  // Find this leaf in parent's children
+  InternalNode* parent = leaf->parent;
+  auto& children = parent->leaf_children;
+
+  for (auto it = children.begin(); it != children.end(); ++it) {
+    if (it->second == leaf) {
+      // Found the leaf - check if there's a next sibling
+      auto next_it = it;
+      ++next_it;
+      if (next_it == children.end()) {
+        return nullptr;  // This is the rightmost child
+      }
+      return next_it->second;
+    }
+  }
+
+  assert(false && "Leaf not found in parent's children");
+  return nullptr;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::InternalNode*
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::find_left_internal_sibling(InternalNode* node) const {
+  if (node->parent == nullptr) {
+    return nullptr;  // Root has no siblings
+  }
+
+  // Find this node in parent's children
+  InternalNode* parent = node->parent;
+  auto& children = parent->internal_children;
+
+  for (auto it = children.begin(); it != children.end(); ++it) {
+    if (it->second == node) {
+      // Found the node - check if there's a previous sibling
+      if (it == children.begin()) {
+        return nullptr;  // This is the leftmost child
+      }
+      // Get previous iterator
+      auto prev_it = it;
+      --prev_it;
+      return prev_it->second;
+    }
+  }
+
+  assert(false && "Internal node not found in parent's children");
+  return nullptr;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::InternalNode*
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::find_right_internal_sibling(InternalNode* node) const {
+  if (node->parent == nullptr) {
+    return nullptr;  // Root has no siblings
+  }
+
+  // Find this node in parent's children
+  InternalNode* parent = node->parent;
+  auto& children = parent->internal_children;
+
+  for (auto it = children.begin(); it != children.end(); ++it) {
+    if (it->second == node) {
+      // Found the node - check if there's a next sibling
+      auto next_it = it;
+      ++next_it;
+      if (next_it == children.end()) {
+        return nullptr;  // This is the rightmost child
+      }
+      return next_it->second;
+    }
+  }
+
+  assert(false && "Internal node not found in parent's children");
+  return nullptr;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::borrow_from_left_leaf_sibling(LeafNode* leaf) {
+  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+
+  // Can't borrow if no left sibling or sibling would underflow
+  if (left_sibling == nullptr || left_sibling->data.size() <= min_leaf_size()) {
+    return false;
+  }
+
+  // Move the rightmost element from left sibling to this leaf
+  auto last_it = left_sibling->data.end();
+  --last_it;  // Point to last element
+
+  Key borrowed_key = last_it->first;
+  Value borrowed_value = last_it->second;
+
+  // Remove from left sibling
+  left_sibling->data.remove(borrowed_key);
+
+  // Insert into this leaf (will go at the beginning since it's smaller)
+  auto [it, inserted] = leaf->data.insert(borrowed_key, borrowed_value);
+  assert(inserted && "Borrowing should always succeed");
+
+  // Update parent key for this leaf (minimum changed)
+  update_parent_key_recursive(leaf, borrowed_key);
+
+  return true;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::borrow_from_right_leaf_sibling(LeafNode* leaf) {
+  LeafNode* right_sibling = find_right_leaf_sibling(leaf);
+
+  // Can't borrow if no right sibling or sibling would underflow
+  if (right_sibling == nullptr ||
+      right_sibling->data.size() <= min_leaf_size()) {
+    return false;
+  }
+
+  // Move the leftmost element from right sibling to this leaf
+  auto first_it = right_sibling->data.begin();
+
+  Key borrowed_key = first_it->first;
+  Value borrowed_value = first_it->second;
+
+  // Remove from right sibling
+  right_sibling->data.remove(borrowed_key);
+
+  // Insert into this leaf (will go at the end since it's larger)
+  auto [it, inserted] = leaf->data.insert(borrowed_key, borrowed_value);
+  assert(inserted && "Borrowing should always succeed");
+
+  // Update parent key for right sibling (its minimum changed)
+  const Key& new_right_min = right_sibling->data.begin()->first;
+  update_parent_key_recursive(right_sibling, new_right_min);
+
+  return true;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::merge_with_left_leaf_sibling(LeafNode* leaf) {
+  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+  assert(left_sibling != nullptr &&
+         "merge_with_left_leaf_sibling requires left sibling");
+
+  // Move all elements from this leaf to left sibling
+  for (auto it = leaf->data.begin(); it != leaf->data.end(); ++it) {
+    auto [inserted_it, inserted] =
+        left_sibling->data.insert(it->first, it->second);
+    assert(inserted && "Merging should not have duplicates");
+  }
+
+  // Update leaf chain pointers
+  left_sibling->next_leaf = leaf->next_leaf;
+  if (leaf->next_leaf) {
+    leaf->next_leaf->prev_leaf = left_sibling;
+  }
+
+  // Update rightmost_leaf_ if necessary
+  if (rightmost_leaf_ == leaf) {
+    rightmost_leaf_ = left_sibling;
+  }
+
+  // Remove this leaf from parent
+  InternalNode* parent = leaf->parent;
+  assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+  // Find and remove the entry for this leaf in parent
+  auto& parent_children = parent->leaf_children;
+  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+    if (it->second == leaf) {
+      parent_children.remove(it->first);
+      break;
+    }
+  }
+
+  // Deallocate this leaf
+  deallocate_leaf_node(leaf);
+
+  // Check if parent underflowed
+  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+    handle_internal_underflow(parent);
+  } else if (parent_is_root && parent_children.size() == 1) {
+    // Root has only one child left - make that child the new root
+    LeafNode* new_root = parent_children.begin()->second;
+    new_root->parent = nullptr;
+    root_is_leaf_ = true;
+    leaf_root_ = new_root;
+    deallocate_internal_node(parent);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::merge_with_right_leaf_sibling(LeafNode* leaf) {
+  LeafNode* right_sibling = find_right_leaf_sibling(leaf);
+  assert(right_sibling != nullptr &&
+         "merge_with_right_leaf_sibling requires right sibling");
+
+  // Move all elements from right sibling to this leaf
+  for (auto it = right_sibling->data.begin(); it != right_sibling->data.end();
+       ++it) {
+    auto [inserted_it, inserted] = leaf->data.insert(it->first, it->second);
+    assert(inserted && "Merging should not have duplicates");
+  }
+
+  // Update leaf chain pointers
+  leaf->next_leaf = right_sibling->next_leaf;
+  if (right_sibling->next_leaf) {
+    right_sibling->next_leaf->prev_leaf = leaf;
+  }
+
+  // Update rightmost_leaf_ if necessary
+  if (rightmost_leaf_ == right_sibling) {
+    rightmost_leaf_ = leaf;
+  }
+
+  // Remove right sibling from parent
+  InternalNode* parent = leaf->parent;
+  assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+  // Find and remove the entry for right sibling in parent
+  auto& parent_children = parent->leaf_children;
+  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+    if (it->second == right_sibling) {
+      parent_children.remove(it->first);
+      break;
+    }
+  }
+
+  // Deallocate right sibling
+  deallocate_leaf_node(right_sibling);
+
+  // Check if parent underflowed
+  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+    handle_internal_underflow(parent);
+  } else if (parent_is_root && parent_children.size() == 1) {
+    // Root has only one child left - make that child the new root
+    LeafNode* new_root = parent_children.begin()->second;
+    new_root->parent = nullptr;
+    root_is_leaf_ = true;
+    leaf_root_ = new_root;
+    deallocate_internal_node(parent);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::handle_leaf_underflow(LeafNode* leaf) {
+  assert(leaf->data.size() < min_leaf_size() &&
+         "handle_leaf_underflow called on non-underflowed leaf");
+  assert(leaf->parent != nullptr && "Root leaf cannot underflow");
+
+  // Try to borrow from left sibling first
+  if (borrow_from_left_leaf_sibling(leaf)) {
+    return;
+  }
+
+  // Try to borrow from right sibling
+  if (borrow_from_right_leaf_sibling(leaf)) {
+    return;
+  }
+
+  // Can't borrow - must merge
+  // Prefer merging with left sibling if it exists
+  LeafNode* left_sibling = find_left_leaf_sibling(leaf);
+  if (left_sibling != nullptr) {
+    merge_with_left_leaf_sibling(leaf);
+  } else {
+    // No left sibling - merge with right
+    merge_with_right_leaf_sibling(leaf);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::borrow_from_left_internal_sibling(InternalNode* node) {
+  InternalNode* left_sibling = find_left_internal_sibling(node);
+
+  // Can't borrow if no left sibling or sibling would underflow
+  if (left_sibling == nullptr) {
+    return false;
+  }
+
+  if (node->children_are_leaves) {
+    auto& left_children = left_sibling->leaf_children;
+    if (left_children.size() <= min_internal_size()) {
+      return false;
+    }
+
+    // Move the rightmost child from left sibling to this node
+    auto last_it = left_children.end();
+    --last_it;
+
+    Key borrowed_key = last_it->first;
+    LeafNode* borrowed_child = last_it->second;
+
+    // Remove from left sibling
+    left_children.remove(borrowed_key);
+
+    // Insert into this node
+    auto& children = node->leaf_children;
+    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
+    assert(inserted && "Borrowing should always succeed");
+
+    // Update parent pointer
+    borrowed_child->parent = node;
+
+    // Update parent key for this node (minimum changed)
+    const Key& new_min = children.begin()->first;
+    update_parent_key_recursive(node, new_min);
+
+    return true;
+  } else {
+    auto& left_children = left_sibling->internal_children;
+    if (left_children.size() <= min_internal_size()) {
+      return false;
+    }
+
+    // Move the rightmost child from left sibling to this node
+    auto last_it = left_children.end();
+    --last_it;
+
+    Key borrowed_key = last_it->first;
+    InternalNode* borrowed_child = last_it->second;
+
+    // Remove from left sibling
+    left_children.remove(borrowed_key);
+
+    // Insert into this node
+    auto& children = node->internal_children;
+    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
+    assert(inserted && "Borrowing should always succeed");
+
+    // Update parent pointer
+    borrowed_child->parent = node;
+
+    // Update parent key for this node (minimum changed)
+    const Key& new_min = children.begin()->first;
+    update_parent_key_recursive(node, new_min);
+
+    return true;
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::borrow_from_right_internal_sibling(InternalNode* node) {
+  InternalNode* right_sibling = find_right_internal_sibling(node);
+
+  // Can't borrow if no right sibling or sibling would underflow
+  if (right_sibling == nullptr) {
+    return false;
+  }
+
+  if (node->children_are_leaves) {
+    auto& right_children = right_sibling->leaf_children;
+    if (right_children.size() <= min_internal_size()) {
+      return false;
+    }
+
+    // Move the leftmost child from right sibling to this node
+    auto first_it = right_children.begin();
+
+    Key borrowed_key = first_it->first;
+    LeafNode* borrowed_child = first_it->second;
+
+    // Remove from right sibling
+    right_children.remove(borrowed_key);
+
+    // Insert into this node
+    auto& children = node->leaf_children;
+    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
+    assert(inserted && "Borrowing should always succeed");
+
+    // Update parent pointer
+    borrowed_child->parent = node;
+
+    // Update parent key for right sibling (its minimum changed)
+    const Key& new_right_min = right_children.begin()->first;
+    update_parent_key_recursive(right_sibling, new_right_min);
+
+    return true;
+  } else {
+    auto& right_children = right_sibling->internal_children;
+    if (right_children.size() <= min_internal_size()) {
+      return false;
+    }
+
+    // Move the leftmost child from right sibling to this node
+    auto first_it = right_children.begin();
+
+    Key borrowed_key = first_it->first;
+    InternalNode* borrowed_child = first_it->second;
+
+    // Remove from right sibling
+    right_children.remove(borrowed_key);
+
+    // Insert into this node
+    auto& children = node->internal_children;
+    auto [it, inserted] = children.insert(borrowed_key, borrowed_child);
+    assert(inserted && "Borrowing should always succeed");
+
+    // Update parent pointer
+    borrowed_child->parent = node;
+
+    // Update parent key for right sibling (its minimum changed)
+    const Key& new_right_min = right_children.begin()->first;
+    update_parent_key_recursive(right_sibling, new_right_min);
+
+    return true;
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::merge_with_left_internal_sibling(InternalNode* node) {
+  InternalNode* left_sibling = find_left_internal_sibling(node);
+  assert(left_sibling != nullptr &&
+         "merge_with_left_internal_sibling requires left sibling");
+
+  if (node->children_are_leaves) {
+    // Move all children from this node to left sibling
+    auto& children = node->leaf_children;
+    auto& left_children = left_sibling->leaf_children;
+
+    for (auto it = children.begin(); it != children.end(); ++it) {
+      auto [inserted_it, inserted] =
+          left_children.insert(it->first, it->second);
+      assert(inserted && "Merging should not have duplicates");
+      // Update parent pointer
+      it->second->parent = left_sibling;
+    }
+  } else {
+    // Move all children from this node to left sibling
+    auto& children = node->internal_children;
+    auto& left_children = left_sibling->internal_children;
+
+    for (auto it = children.begin(); it != children.end(); ++it) {
+      auto [inserted_it, inserted] =
+          left_children.insert(it->first, it->second);
+      assert(inserted && "Merging should not have duplicates");
+      // Update parent pointer
+      it->second->parent = left_sibling;
+    }
+  }
+
+  // Remove this node from parent
+  InternalNode* parent = node->parent;
+  assert(parent != nullptr && "Merging non-root node should have parent");
+
+  // Find and remove the entry for this node in parent
+  auto& parent_children = parent->internal_children;
+  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+    if (it->second == node) {
+      parent_children.remove(it->first);
+      break;
+    }
+  }
+
+  // Deallocate this node
+  deallocate_internal_node(node);
+
+  // Check if parent underflowed
+  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+    handle_internal_underflow(parent);
+  } else if (parent_is_root && parent_children.size() == 1) {
+    // Root has only one child left - make that child the new root
+    InternalNode* new_root = parent_children.begin()->second;
+    new_root->parent = nullptr;
+    internal_root_ = new_root;
+    deallocate_internal_node(parent);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::merge_with_right_internal_sibling(InternalNode* node) {
+  InternalNode* right_sibling = find_right_internal_sibling(node);
+  assert(right_sibling != nullptr &&
+         "merge_with_right_internal_sibling requires right sibling");
+
+  if (node->children_are_leaves) {
+    // Move all children from right sibling to this node
+    auto& children = node->leaf_children;
+    auto& right_children = right_sibling->leaf_children;
+
+    for (auto it = right_children.begin(); it != right_children.end(); ++it) {
+      auto [inserted_it, inserted] = children.insert(it->first, it->second);
+      assert(inserted && "Merging should not have duplicates");
+      // Update parent pointer
+      it->second->parent = node;
+    }
+  } else {
+    // Move all children from right sibling to this node
+    auto& children = node->internal_children;
+    auto& right_children = right_sibling->internal_children;
+
+    for (auto it = right_children.begin(); it != right_children.end(); ++it) {
+      auto [inserted_it, inserted] = children.insert(it->first, it->second);
+      assert(inserted && "Merging should not have duplicates");
+      // Update parent pointer
+      it->second->parent = node;
+    }
+  }
+
+  // Remove right sibling from parent
+  InternalNode* parent = node->parent;
+  assert(parent != nullptr && "Merging non-root node should have parent");
+
+  // Find and remove the entry for right sibling in parent
+  auto& parent_children = parent->internal_children;
+  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+    if (it->second == right_sibling) {
+      parent_children.remove(it->first);
+      break;
+    }
+  }
+
+  // Deallocate right sibling
+  deallocate_internal_node(right_sibling);
+
+  // Check if parent underflowed
+  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+  if (!parent_is_root && parent_children.size() < min_internal_size()) {
+    handle_internal_underflow(parent);
+  } else if (parent_is_root && parent_children.size() == 1) {
+    // Root has only one child left - make that child the new root
+    InternalNode* new_root = parent_children.begin()->second;
+    new_root->parent = nullptr;
+    internal_root_ = new_root;
+    deallocate_internal_node(parent);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::handle_internal_underflow(InternalNode* node) {
+  // Get size based on children type
+  size_type node_size = node->children_are_leaves
+                            ? node->leaf_children.size()
+                            : node->internal_children.size();
+
+  assert(node_size < min_internal_size() &&
+         "handle_internal_underflow called on non-underflowed node");
+  assert(node->parent != nullptr && "Root internal node cannot underflow");
+
+  // Try to borrow from left sibling first
+  if (borrow_from_left_internal_sibling(node)) {
+    return;
+  }
+
+  // Try to borrow from right sibling
+  if (borrow_from_right_internal_sibling(node)) {
+    return;
+  }
+
+  // Can't borrow - must merge
+  // Prefer merging with left sibling if it exists
+  InternalNode* left_sibling = find_left_internal_sibling(node);
+  if (left_sibling != nullptr) {
+    merge_with_left_internal_sibling(node);
+  } else {
+    // No left sibling - merge with right
+    merge_with_right_internal_sibling(node);
   }
 }
 
