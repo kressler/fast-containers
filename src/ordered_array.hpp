@@ -237,6 +237,32 @@ class ordered_array {
   }
 
   /**
+   * Find the first element not less than the given key.
+   *
+   * @param key The key to search for
+   * @return Iterator to the first element >= key, or end() if all elements <
+   * key
+   */
+  iterator lower_bound(const Key& key) {
+    auto pos = lower_bound_key(key);
+    size_type idx = pos - keys_.begin();
+    return iterator(this, idx);
+  }
+
+  /**
+   * Find the first element not less than the given key (const version).
+   *
+   * @param key The key to search for
+   * @return Const iterator to the first element >= key, or end() if all
+   * elements < key
+   */
+  const_iterator lower_bound(const Key& key) const {
+    auto pos = lower_bound_key(key);
+    size_type idx = pos - keys_.begin();
+    return const_iterator(this, idx);
+  }
+
+  /**
    * Remove an element by key.
    * If the element does not exist, does nothing.
    *

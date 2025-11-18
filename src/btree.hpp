@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "ordered_array.hpp"
 
@@ -238,9 +239,7 @@ class btree {
    * indicating whether insertion took place (true) or the key already existed
    * (false).
    *
-   * Phase 3 limitation: Does not handle node splitting. If a leaf is full,
-   * the insertion will fail with an assertion. Node splitting will be
-   * implemented in Phase 4.
+   * Handles node splitting when nodes are full, growing the tree as needed.
    *
    * Complexity: O(log n)
    */
@@ -352,6 +351,41 @@ class btree {
 
     return it->second;
   }
+
+  /**
+   * Split a full leaf node and insert a key-value pair.
+   * Creates a new leaf and moves half the elements to it.
+   * Returns iterator to the inserted element and true.
+   */
+  std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
+                                       const Value& value);
+
+  /**
+   * Insert a promoted key and child pointer into a parent node.
+   * If parent is full, splits it recursively.
+   * If node has no parent, creates a new root.
+   *
+   * Templated to handle both LeafNode and InternalNode children.
+   */
+  template <typename NodeType>
+  void insert_into_parent(NodeType* left_child, const Key& key,
+                          NodeType* right_child);
+
+  /**
+   * Split a full internal node.
+   * Creates a new internal node and moves half the children to it.
+   * Returns a reference to the promoted key and pointer to the new node.
+   * The key reference points to the first key in the new node's children.
+   */
+  std::pair<const Key&, InternalNode*> split_internal(InternalNode* node);
+
+  /**
+   * Update parent's key for a child node to match its current minimum.
+   * Recursively updates ancestors if the child is leftmost at each level.
+   * Template supports both LeafNode and InternalNode children.
+   */
+  template <typename ChildNodeType>
+  void update_parent_key_recursive(ChildNodeType* child, const Key& new_min);
 };
 
 // Implementation
@@ -484,17 +518,278 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Check if leaf has space (Phase 3 limitation: no splitting)
-  assert(leaf->data.size() < LeafNodeSize &&
-         "Leaf is full - node splitting not implemented in Phase 3");
+  // If leaf is full, split it
+  if (leaf->data.size() >= LeafNodeSize) {
+    return split_leaf(leaf, key, value);
+  }
 
-  // Insert into the leaf - this handles duplicate detection
+  // Leaf has space - insert normally
+  // Track if this will become the new minimum
+  bool will_be_new_min = leaf->data.empty() || key < leaf->data.begin()->first;
+
   auto [leaf_it, inserted] = leaf->data.insert(key, value);
   if (inserted) {
     size_++;
+
+    // If we inserted a new minimum and leaf has a parent, update parent key
+    if (will_be_new_min && leaf->parent != nullptr) {
+      update_parent_key_recursive(leaf, key);
+    }
+
+    // Update leftmost_leaf_ if necessary
+    if (leftmost_leaf_ == nullptr ||
+        key < leftmost_leaf_->data.begin()->first) {
+      leftmost_leaf_ = leaf;
+    }
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::split_leaf(LeafNode* leaf, const Key& key,
+                             const Value& value) {
+  // Create new leaf for right half
+  LeafNode* new_leaf = allocate_leaf_node();
+
+  // Calculate split point (ceil(LeafNodeSize / 2))
+  size_type split_point = (LeafNodeSize + 1) / 2;
+
+  // Use split_at() to efficiently move second half to new leaf
+  auto split_it = leaf->data.begin();
+  std::advance(split_it, split_point);
+  leaf->data.split_at(split_it, new_leaf->data);
+
+  // Update leaf chain pointers
+  new_leaf->next_leaf = leaf->next_leaf;
+  new_leaf->prev_leaf = leaf;
+  if (leaf->next_leaf) {
+    leaf->next_leaf->prev_leaf = new_leaf;
+  }
+  leaf->next_leaf = new_leaf;
+
+  // Update rightmost_leaf if necessary
+  if (rightmost_leaf_ == leaf) {
+    rightmost_leaf_ = new_leaf;
+  }
+
+  // Get first key of new leaf for promotion
+  const Key& promoted_key = new_leaf->data.begin()->first;
+
+  // Insert the new key-value pair into appropriate leaf
+  LeafNode* target_leaf = (key < promoted_key) ? leaf : new_leaf;
+  auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
+
+  // Handle duplicate key case
+  if (!inserted) {
+    return {iterator(target_leaf, leaf_it), false};
+  }
+
+  size_++;
+
+  // Insert promoted key into parent
+  insert_into_parent(leaf, promoted_key, new_leaf);
+
+  // If we inserted into the left half, update parent key if necessary
+  // Note: Parent keys can be stale from previous non-split inserts
+  if (target_leaf == leaf) {
+    const Key& new_left_min = leaf->data.begin()->first;
+    update_parent_key_recursive(leaf, new_left_min);
+  }
+
+  // Update leftmost_leaf_ if the leaf became the new leftmost
+  if (target_leaf == leaf &&
+      (leftmost_leaf_ == nullptr ||
+       leaf->data.begin()->first < leftmost_leaf_->data.begin()->first)) {
+    leftmost_leaf_ = leaf;
+  }
+
+  return {iterator(target_leaf, leaf_it), true};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename NodeType>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::insert_into_parent(NodeType* left_child, const Key& key,
+                                          NodeType* right_child) {
+  // Helper lambda to get appropriate children array reference
+  auto get_children = [](InternalNode* node) -> auto& {
+    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+      return node->leaf_children;
+    } else {
+      return node->internal_children;
+    }
+  };
+
+  // Helper lambda to get the left key for creating new root
+  auto get_left_key = [](NodeType* node) -> const Key& {
+    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+      return node->data.begin()->first;
+    } else {
+      if (node->children_are_leaves) {
+        return node->leaf_children.begin()->first;
+      } else {
+        return node->internal_children.begin()->first;
+      }
+    }
+  };
+
+  // Case 1: left_child is root - create new root
+  if (left_child->parent == nullptr) {
+    constexpr bool children_are_leaves = std::is_same_v<NodeType, LeafNode>;
+    InternalNode* new_root = allocate_internal_node(children_are_leaves);
+
+    auto& children = get_children(new_root);
+    auto [it, inserted] = children.insert(get_left_key(left_child), left_child);
+    assert(inserted);
+    auto [it2, inserted2] = children.insert(key, right_child);
+    assert(inserted2);
+
+    left_child->parent = new_root;
+    right_child->parent = new_root;
+
+    root_is_leaf_ = false;
+    internal_root_ = new_root;
+    return;
+  }
+
+  // Case 2: Parent exists - insert into it
+  InternalNode* parent = left_child->parent;
+  auto& parent_children = get_children(parent);
+
+  // Check if parent is full
+  if (parent_children.size() >= InternalNodeSize) {
+    // Need to split parent
+    auto [promoted_key, new_parent] = split_internal(parent);
+
+    // Determine which parent to insert into
+    InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
+    right_child->parent = target_parent;
+
+    auto& target_children = get_children(target_parent);
+    auto [it, inserted] = target_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+
+    // Recursively insert promoted key into grandparent
+    insert_into_parent(parent, promoted_key, new_parent);
+  } else {
+    // Parent has space - insert normally
+    right_child->parent = parent;
+    auto [it, inserted] = parent_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<const Key&, typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                                     SearchModeT, MoveModeT>::InternalNode*>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::split_internal(InternalNode* node) {
+  // Create new internal node
+  InternalNode* new_node = allocate_internal_node(node->children_are_leaves);
+
+  // Calculate split point
+  size_type split_point = (InternalNodeSize + 1) / 2;
+
+  if (node->children_are_leaves) {
+    // Get split iterator
+    auto split_it = node->leaf_children.begin();
+    std::advance(split_it, split_point);
+
+    // Use split_at() to efficiently move second half to new node
+    node->leaf_children.split_at(split_it, new_node->leaf_children);
+
+    // Update parent pointers for moved children
+    for (auto it = new_node->leaf_children.begin();
+         it != new_node->leaf_children.end(); ++it) {
+      it->second->parent = new_node;
+    }
+
+    // Return reference to first key in new node (the promoted key)
+    return {new_node->leaf_children.begin()->first, new_node};
+  } else {
+    // Get split iterator
+    auto split_it = node->internal_children.begin();
+    std::advance(split_it, split_point);
+
+    // Use split_at() to efficiently move second half to new node
+    node->internal_children.split_at(split_it, new_node->internal_children);
+
+    // Update parent pointers for moved children
+    for (auto it = new_node->internal_children.begin();
+         it != new_node->internal_children.end(); ++it) {
+      it->second->parent = new_node;
+    }
+
+    // Return reference to first key in new node (the promoted key)
+    return {new_node->internal_children.begin()->first, new_node};
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename ChildNodeType>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::update_parent_key_recursive(ChildNodeType* child,
+                                                   const Key& new_min) {
+  if (child->parent == nullptr) {
+    return;
+  }
+
+  InternalNode* parent = child->parent;
+
+  // Get reference to appropriate children array based on child type
+  auto& children = [&]() -> auto& {
+    if constexpr (std::is_same_v<ChildNodeType, LeafNode>) {
+      return parent->leaf_children;
+    } else {
+      return parent->internal_children;
+    }
+  }();
+
+  // Use lower_bound to efficiently find the entry (O(log n))
+  auto it = children.lower_bound(new_min);
+
+  // Track if we're at position 0 (leftmost child)
+  bool is_leftmost = false;
+
+  // The entry pointing to this child should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == child) {
+    // Found it at lower_bound position
+    is_leftmost = (it == children.begin());
+    if (it->first != new_min) {
+      children.remove(it->first);
+      auto [new_it, ins] = children.insert(new_min, child);
+      assert(ins && "Re-inserting child with new minimum key should succeed");
+    }
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
+    if (it->second == child && it->first != new_min) {
+      is_leftmost = (it == children.begin());
+      children.remove(it->first);
+      auto [new_it, ins] = children.insert(new_min, child);
+      assert(ins && "Re-inserting child with new minimum key should succeed");
+    }
+  }
+
+  // If this child is leftmost in parent, recursively update grandparent
+  // The parent's minimum key changed, so we need to update it too
+  if (is_leftmost && parent->parent != nullptr) {
+    update_parent_key_recursive(parent, new_min);
+  }
 }
 
 }  // namespace fast_containers
