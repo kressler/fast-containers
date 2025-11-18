@@ -219,30 +219,6 @@ TEMPLATE_TEST_CASE("btree single-leaf tree operations",
   }
 }
 
-// NOTE: Multi-level tree tests are commented out for Phase 3 because they
-// require manual tree construction which is no longer possible with private
-// members. These tests will be re-enabled in Phase 4 when node splitting
-// is implemented, allowing creation of multi-level trees via insert().
-//
-// TEMPLATE_TEST_CASE("btree multi-level tree operations",
-//                    "[btree][find][iterator][multilevel]", BinarySearchMode,
-//                    LinearSearchMode, SIMDSearchMode) {
-//   constexpr SearchMode Mode = TestType::value;
-//   using BTree = btree<int, int, 64, 64, Mode>;
-//
-//   SECTION("Two-level tree find operations") {
-//     // Will be re-enabled in Phase 4 with node splitting
-//   }
-//
-//   SECTION("Two-level tree iteration") {
-//     // Will be re-enabled in Phase 4 with node splitting
-//   }
-//
-//   SECTION("Two-level tree with single-element leaves") {
-//     // Will be re-enabled in Phase 4 with node splitting
-//   }
-// }
-
 TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
@@ -416,5 +392,154 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
     REQUIRE(it->second == "two");
 
     REQUIRE(tree.size() == 3);
+  }
+}
+
+TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("Split leaf node when full") {
+    // Create tree with small leaf size to force splitting
+    btree<int, int, 4, 8, Mode> tree;
+
+    // Insert 5 elements (leaf size is 4, so should split)
+    for (int i = 1; i <= 5; ++i) {
+      auto [it, inserted] = tree.insert(i, i * 10);
+      REQUIRE(inserted == true);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 5);
+
+    // Verify all elements can be found
+    for (int i = 1; i <= 5; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    // Verify sorted iteration
+    std::vector<int> keys;
+    for (auto pair : tree) {
+      keys.push_back(pair.first);
+    }
+    REQUIRE(keys == std::vector<int>{1, 2, 3, 4, 5});
+  }
+
+  SECTION("Multiple leaf splits") {
+    // Create tree with small node size
+    btree<int, int, 4, 8, Mode> tree;
+
+    // Insert 20 elements (will cause multiple splits)
+    for (int i = 1; i <= 20; ++i) {
+      auto [it, inserted] = tree.insert(i, i * 10);
+      REQUIRE(inserted == true);
+    }
+
+    REQUIRE(tree.size() == 20);
+
+    // Verify all elements
+    for (int i = 1; i <= 20; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+
+    // Verify sorted iteration
+    std::vector<int> keys;
+    for (auto pair : tree) {
+      keys.push_back(pair.first);
+    }
+    REQUIRE(keys.size() == 20);
+    for (size_t i = 0; i < 20; ++i) {
+      REQUIRE(keys[i] == static_cast<int>(i + 1));
+    }
+  }
+
+  SECTION("Split with descending insertion") {
+    btree<int, int, 4, 8, Mode> tree;
+
+    // Insert in descending order (harder test case for splitting)
+    for (int i = 10; i >= 1; --i) {
+      auto [it, inserted] = tree.insert(i, i * 10);
+      REQUIRE(inserted == true);
+    }
+
+    REQUIRE(tree.size() == 10);
+
+    // Verify sorted iteration (should be ascending despite descending insert)
+    std::vector<int> keys;
+    for (auto pair : tree) {
+      keys.push_back(pair.first);
+    }
+    REQUIRE(keys == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+  }
+
+  SECTION("Split with random insertion") {
+    btree<int, int, 4, 8, Mode> tree;
+
+    std::vector<int> insert_order = {5, 2, 8, 1, 9, 3, 7, 4, 6, 10};
+    for (int key : insert_order) {
+      auto [it, inserted] = tree.insert(key, key * 10);
+      REQUIRE(inserted == true);
+    }
+
+    REQUIRE(tree.size() == 10);
+
+    // Verify sorted iteration
+    std::vector<int> keys;
+    for (auto pair : tree) {
+      keys.push_back(pair.first);
+    }
+    REQUIRE(keys == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+  }
+
+  SECTION("Internal node splitting") {
+    // Small internal node size to force internal node splits
+    btree<int, int, 3, 3, Mode> tree;
+
+    // Insert many elements to force multiple levels and internal splits
+    for (int i = 1; i <= 30; ++i) {
+      auto [it, inserted] = tree.insert(i, i * 10);
+      REQUIRE(inserted == true);
+    }
+
+    REQUIRE(tree.size() == 30);
+
+    // Verify all elements
+    for (int i = 1; i <= 30; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+
+    // Verify sorted iteration
+    std::vector<int> keys;
+    for (auto pair : tree) {
+      keys.push_back(pair.first);
+    }
+    REQUIRE(keys.size() == 30);
+    for (size_t i = 0; i < 30; ++i) {
+      REQUIRE(keys[i] == static_cast<int>(i + 1));
+    }
+  }
+
+  SECTION("Duplicate during split") {
+    btree<int, int, 4, 8, Mode> tree;
+
+    // Fill tree
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Try to insert duplicate (should return false even after splits)
+    auto [it, inserted] = tree.insert(5, 999);
+    REQUIRE(inserted == false);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);  // Original value unchanged
+    REQUIRE(tree.size() == 10);
   }
 }

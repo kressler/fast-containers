@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "ordered_array.hpp"
 
@@ -238,9 +239,7 @@ class btree {
    * indicating whether insertion took place (true) or the key already existed
    * (false).
    *
-   * Phase 3 limitation: Does not handle node splitting. If a leaf is full,
-   * the insertion will fail with an assertion. Node splitting will be
-   * implemented in Phase 4.
+   * Handles node splitting when nodes are full, growing the tree as needed.
    *
    * Complexity: O(log n)
    */
@@ -352,6 +351,31 @@ class btree {
 
     return it->second;
   }
+
+  /**
+   * Split a full leaf node and insert a key-value pair.
+   * Creates a new leaf and moves half the elements to it.
+   * Returns iterator to the inserted element and true.
+   */
+  std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
+                                       const Value& value);
+
+  /**
+   * Insert a promoted key and child pointer into a parent node.
+   * If parent is full, splits it recursively.
+   * If node has no parent, creates a new root.
+   */
+  void insert_into_parent(LeafNode* left_child, const Key& key,
+                          LeafNode* right_child);
+  void insert_into_parent(InternalNode* left_child, const Key& key,
+                          InternalNode* right_child);
+
+  /**
+   * Split a full internal node.
+   * Creates a new internal node and moves half the children to it.
+   * Returns the promoted key and pointer to the new node.
+   */
+  std::pair<Key, InternalNode*> split_internal(InternalNode* node);
 };
 
 // Implementation
@@ -484,17 +508,291 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Check if leaf has space (Phase 3 limitation: no splitting)
-  assert(leaf->data.size() < LeafNodeSize &&
-         "Leaf is full - node splitting not implemented in Phase 3");
+  // If leaf is full, split it
+  if (leaf->data.size() >= LeafNodeSize) {
+    return split_leaf(leaf, key, value);
+  }
 
-  // Insert into the leaf - this handles duplicate detection
+  // Leaf has space - insert normally
   auto [leaf_it, inserted] = leaf->data.insert(key, value);
   if (inserted) {
     size_++;
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::split_leaf(LeafNode* leaf, const Key& key,
+                             const Value& value) {
+  // Create new leaf for right half
+  LeafNode* new_leaf = allocate_leaf_node();
+
+  // Calculate split point (ceil(LeafNodeSize / 2))
+  size_type split_point = (LeafNodeSize + 1) / 2;
+
+  // Collect elements to move (second half)
+  std::vector<std::pair<Key, Value>> elements_to_move;
+  auto it = leaf->data.begin();
+  std::advance(it, split_point);
+  while (it != leaf->data.end()) {
+    elements_to_move.push_back({it->first, it->second});
+    ++it;
+  }
+
+  // Remove elements from old leaf
+  for (const auto& [k, v] : elements_to_move) {
+    leaf->data.remove(k);
+  }
+
+  // Insert elements into new leaf
+  for (const auto& [k, v] : elements_to_move) {
+    auto [new_it, inserted] = new_leaf->data.insert(k, v);
+    assert(inserted && "Moving element to new leaf should always succeed");
+  }
+
+  // Update leaf chain pointers
+  new_leaf->next_leaf = leaf->next_leaf;
+  new_leaf->prev_leaf = leaf;
+  if (leaf->next_leaf) {
+    leaf->next_leaf->prev_leaf = new_leaf;
+  }
+  leaf->next_leaf = new_leaf;
+
+  // Update rightmost_leaf if necessary
+  if (rightmost_leaf_ == leaf) {
+    rightmost_leaf_ = new_leaf;
+  }
+
+  // Get first key of new leaf for promotion
+  Key promoted_key = new_leaf->data.begin()->first;
+
+  // Insert the new key-value pair into appropriate leaf
+  LeafNode* target_leaf = (key < promoted_key) ? leaf : new_leaf;
+  auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
+
+  // Handle duplicate key case
+  if (!inserted) {
+    return {iterator(target_leaf, leaf_it), false};
+  }
+
+  size_++;
+
+  // If we inserted into the left half and it became the new minimum,
+  // we need to update the parent's key for the left child
+  Key left_min_key = leaf->data.begin()->first;
+
+  // Insert promoted key into parent
+  insert_into_parent(leaf, promoted_key, new_leaf);
+
+  // After inserting into parent, if the left child's minimum key changed,
+  // we need to update its entry in the parent
+  if (target_leaf == leaf && leaf->parent != nullptr && key < promoted_key) {
+    // The left child's minimum might have changed
+    // We need to update the parent's key for this child
+    // This is done by removing and re-inserting with the new key
+    bool found_and_updated = false;
+    auto& children = leaf->parent->leaf_children;
+
+    // Find the entry for this leaf
+    for (auto it = children.begin(); it != children.end(); ++it) {
+      if (it->second == leaf && it->first != left_min_key) {
+        // Found it with wrong key - need to update
+        Key old_key = it->first;
+        children.remove(old_key);
+        auto [new_it, ins] = children.insert(left_min_key, leaf);
+        assert(ins && "Re-inserting leaf with new minimum key should succeed");
+        found_and_updated = true;
+        break;
+      }
+    }
+  }
+
+  return {iterator(target_leaf, leaf_it), true};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::insert_into_parent(LeafNode* left_child, const Key& key,
+                                          LeafNode* right_child) {
+  // Case 1: left_child is root - create new root
+  if (left_child->parent == nullptr) {
+    InternalNode* new_root =
+        allocate_internal_node(true);  // Children are leaves
+    auto [it, inserted] = new_root->leaf_children.insert(
+        left_child->data.begin()->first, left_child);
+    assert(inserted);
+    auto [it2, inserted2] = new_root->leaf_children.insert(key, right_child);
+    assert(inserted2);
+
+    left_child->parent = new_root;
+    right_child->parent = new_root;
+
+    root_is_leaf_ = false;
+    internal_root_ = new_root;
+    return;
+  }
+
+  // Case 2: Parent exists - insert into it
+  InternalNode* parent = left_child->parent;
+
+  // Check if parent is full
+  if (parent->leaf_children.size() >= InternalNodeSize) {
+    // Need to split parent
+    auto [promoted_key, new_parent] = split_internal(parent);
+
+    // Determine which parent to insert into
+    InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
+    right_child->parent = target_parent;
+    auto [it, inserted] = target_parent->leaf_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+
+    // Recursively insert promoted key into grandparent
+    insert_into_parent(parent, promoted_key, new_parent);
+  } else {
+    // Parent has space - insert normally
+    right_child->parent = parent;
+    auto [it, inserted] = parent->leaf_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::insert_into_parent(InternalNode* left_child,
+                                          const Key& key,
+                                          InternalNode* right_child) {
+  // Case 1: left_child is root - create new root
+  if (left_child->parent == nullptr) {
+    InternalNode* new_root =
+        allocate_internal_node(false);  // Children are internal
+
+    // Get first key from left child
+    Key left_key;
+    if (left_child->children_are_leaves) {
+      left_key = left_child->leaf_children.begin()->first;
+    } else {
+      left_key = left_child->internal_children.begin()->first;
+    }
+
+    auto [it, inserted] =
+        new_root->internal_children.insert(left_key, left_child);
+    assert(inserted);
+    auto [it2, inserted2] =
+        new_root->internal_children.insert(key, right_child);
+    assert(inserted2);
+
+    left_child->parent = new_root;
+    right_child->parent = new_root;
+
+    root_is_leaf_ = false;
+    internal_root_ = new_root;
+    return;
+  }
+
+  // Case 2: Parent exists - insert into it
+  InternalNode* parent = left_child->parent;
+
+  // Check if parent is full
+  if (parent->internal_children.size() >= InternalNodeSize) {
+    // Need to split parent
+    auto [promoted_key, new_parent] = split_internal(parent);
+
+    // Determine which parent to insert into
+    InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
+    right_child->parent = target_parent;
+    auto [it, inserted] =
+        target_parent->internal_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+
+    // Recursively insert promoted key into grandparent
+    insert_into_parent(parent, promoted_key, new_parent);
+  } else {
+    // Parent has space - insert normally
+    right_child->parent = parent;
+    auto [it, inserted] = parent->internal_children.insert(key, right_child);
+    assert(inserted && "Insert into non-full parent should succeed");
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<Key, typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                              SearchModeT, MoveModeT>::InternalNode*>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::split_internal(InternalNode* node) {
+  // Create new internal node
+  InternalNode* new_node = allocate_internal_node(node->children_are_leaves);
+
+  // Calculate split point
+  size_type split_point = (InternalNodeSize + 1) / 2;
+
+  Key promoted_key;
+
+  if (node->children_are_leaves) {
+    // Collect children to move (second half)
+    std::vector<std::pair<Key, LeafNode*>> children_to_move;
+    auto it = node->leaf_children.begin();
+    std::advance(it, split_point);
+    while (it != node->leaf_children.end()) {
+      children_to_move.push_back({it->first, it->second});
+      ++it;
+    }
+
+    // First key of second half becomes the promoted key
+    assert(!children_to_move.empty());
+    promoted_key = children_to_move[0].first;
+
+    // Remove children from old node
+    for (const auto& [k, child] : children_to_move) {
+      node->leaf_children.remove(k);
+    }
+
+    // Insert children into new node and update parent pointers
+    for (const auto& [k, child] : children_to_move) {
+      auto [new_it, inserted] = new_node->leaf_children.insert(k, child);
+      assert(inserted);
+      child->parent = new_node;
+    }
+  } else {
+    // Collect children to move (second half)
+    std::vector<std::pair<Key, InternalNode*>> children_to_move;
+    auto it = node->internal_children.begin();
+    std::advance(it, split_point);
+    while (it != node->internal_children.end()) {
+      children_to_move.push_back({it->first, it->second});
+      ++it;
+    }
+
+    // First key of second half becomes the promoted key
+    assert(!children_to_move.empty());
+    promoted_key = children_to_move[0].first;
+
+    // Remove children from old node
+    for (const auto& [k, child] : children_to_move) {
+      node->internal_children.remove(k);
+    }
+
+    // Insert children into new node and update parent pointers
+    for (const auto& [k, child] : children_to_move) {
+      auto [new_it, inserted] = new_node->internal_children.insert(k, child);
+      assert(inserted);
+      child->parent = new_node;
+    }
+  }
+
+  return {promoted_key, new_node};
 }
 
 }  // namespace fast_containers
