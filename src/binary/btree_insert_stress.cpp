@@ -1,4 +1,5 @@
 #include <absl/container/btree_map.h>
+#include <benchmark/benchmark.h>
 
 #include <chrono>
 #include <iostream>
@@ -11,11 +12,11 @@
 int main(int argc, char** argv) {
   uint64_t seed = std::chrono::system_clock::now().time_since_epoch().count();
   std::uniform_int_distribution<size_t> num_key_dist(100000, 2000000);
-  uint64_t btree_time = 0;
-  uint64_t absl_time = 0;
-  uint64_t map_time = 0;
-  uint dummy = 0;
   for (size_t iter = 0; iter < 1000; ++iter) {
+    uint64_t btree_time = 0;
+    uint64_t absl_time = 0;
+    uint64_t map_time = 0;
+    uint dummy = 0;
     std::mt19937 rng(iter + seed);
     std::uniform_int_distribution<int> dist(std::numeric_limits<int>::min(),
                                             std::numeric_limits<int>::max());
@@ -55,7 +56,33 @@ int main(int argc, char** argv) {
         static_cast<double>(btree_time) / static_cast<double>(map_time);
     double absl_ratio =
         static_cast<double>(btree_time) / static_cast<double>(absl_time);
-    std::cout << "Ordered map time: " << map_time
+    std::cout << "INSERT TIMES: Ordered map time: " << map_time
+              << ", absl time: " << absl_time << ", btree time: " << btree_time
+              << ", ratio(btree/map): " << ratio
+              << ", ratio(btree/absl): " << absl_ratio << std::endl;
+
+    map_time = 0;
+    absl_time = 0;
+    btree_time = 0;
+
+    for (const auto& key : seen) {
+      uint64_t start = __rdtscp(&dummy);
+      benchmark::DoNotOptimize(ordered_map.find(key));
+      uint64_t mid1 = __rdtscp(&dummy);
+      benchmark::DoNotOptimize(absl_btree.find(key));
+      uint64_t mid2 = __rdtscp(&dummy);
+      benchmark::DoNotOptimize(btree.find(key));
+      uint64_t end = __rdtscp(&dummy);
+
+      map_time += mid1 - start;
+      absl_time += mid2 - mid1;
+      btree_time += end - mid2;
+    }
+
+    ratio = static_cast<double>(btree_time) / static_cast<double>(map_time);
+    absl_ratio =
+        static_cast<double>(btree_time) / static_cast<double>(absl_time);
+    std::cout << "FIND TIMES: Ordered map time: " << map_time
               << ", absl time: " << absl_time << ", btree time: " << btree_time
               << ", ratio(btree/map): " << ratio
               << ", ratio(btree/absl): " << absl_ratio << std::endl;
