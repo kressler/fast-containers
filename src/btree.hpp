@@ -1228,12 +1228,9 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   assert(left_sibling != nullptr &&
          "merge_with_left_leaf_sibling requires left sibling");
 
-  // Move all elements from this leaf to left sibling
-  for (auto it = leaf->data.begin(); it != leaf->data.end(); ++it) {
-    auto [inserted_it, inserted] =
-        left_sibling->data.insert(it->first, it->second);
-    assert(inserted && "Merging should not have duplicates");
-  }
+  // Move all elements from this leaf to left sibling using bulk transfer
+  size_type count = leaf->data.size();
+  left_sibling->data.transfer_prefix_from(leaf->data, count);
 
   // Update leaf chain pointers
   left_sibling->next_leaf = leaf->next_leaf;
@@ -1289,12 +1286,9 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   assert(right_sibling != nullptr &&
          "merge_with_right_leaf_sibling requires right sibling");
 
-  // Move all elements from right sibling to this leaf
-  for (auto it = right_sibling->data.begin(); it != right_sibling->data.end();
-       ++it) {
-    auto [inserted_it, inserted] = leaf->data.insert(it->first, it->second);
-    assert(inserted && "Merging should not have duplicates");
-  }
+  // Move all elements from right sibling to this leaf using bulk transfer
+  size_type count = right_sibling->data.size();
+  leaf->data.transfer_prefix_from(right_sibling->data, count);
 
   // Update leaf chain pointers
   leaf->next_leaf = right_sibling->next_leaf;
@@ -1547,30 +1541,28 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   assert(left_sibling != nullptr &&
          "merge_with_left_internal_sibling requires left sibling");
 
+  // Use templated lambda to handle both leaf and internal children
+  auto merge_children = [&]<typename ChildType>(auto& children,
+                                                auto& left_children) {
+    // Move all children from this node to left sibling using bulk transfer
+    size_type count = children.size();
+    size_type old_size = left_children.size();
+    left_children.transfer_prefix_from(children, count);
+
+    // Update parent pointers for all transferred children
+    auto it = left_children.begin();
+    std::advance(it, old_size);
+    for (size_type i = 0; i < count; ++i, ++it) {
+      it->second->parent = left_sibling;
+    }
+  };
+
   if (node->children_are_leaves) {
-    // Move all children from this node to left sibling
-    auto& children = node->leaf_children;
-    auto& left_children = left_sibling->leaf_children;
-
-    for (auto it = children.begin(); it != children.end(); ++it) {
-      auto [inserted_it, inserted] =
-          left_children.insert(it->first, it->second);
-      assert(inserted && "Merging should not have duplicates");
-      // Update parent pointer
-      it->second->parent = left_sibling;
-    }
+    merge_children.template operator()<LeafNode*>(node->leaf_children,
+                                                  left_sibling->leaf_children);
   } else {
-    // Move all children from this node to left sibling
-    auto& children = node->internal_children;
-    auto& left_children = left_sibling->internal_children;
-
-    for (auto it = children.begin(); it != children.end(); ++it) {
-      auto [inserted_it, inserted] =
-          left_children.insert(it->first, it->second);
-      assert(inserted && "Merging should not have duplicates");
-      // Update parent pointer
-      it->second->parent = left_sibling;
-    }
+    merge_children.template operator()<InternalNode*>(
+        node->internal_children, left_sibling->internal_children);
   }
 
   // Remove this node from parent
@@ -1615,28 +1607,28 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   assert(right_sibling != nullptr &&
          "merge_with_right_internal_sibling requires right sibling");
 
+  // Use templated lambda to handle both leaf and internal children
+  auto merge_children = [&]<typename ChildType>(auto& children,
+                                                auto& right_children) {
+    // Move all children from right sibling to this node using bulk transfer
+    size_type count = right_children.size();
+    size_type old_size = children.size();
+    children.transfer_prefix_from(right_children, count);
+
+    // Update parent pointers for all transferred children
+    auto it = children.begin();
+    std::advance(it, old_size);
+    for (size_type i = 0; i < count; ++i, ++it) {
+      it->second->parent = node;
+    }
+  };
+
   if (node->children_are_leaves) {
-    // Move all children from right sibling to this node
-    auto& children = node->leaf_children;
-    auto& right_children = right_sibling->leaf_children;
-
-    for (auto it = right_children.begin(); it != right_children.end(); ++it) {
-      auto [inserted_it, inserted] = children.insert(it->first, it->second);
-      assert(inserted && "Merging should not have duplicates");
-      // Update parent pointer
-      it->second->parent = node;
-    }
+    merge_children.template operator()<LeafNode*>(node->leaf_children,
+                                                  right_sibling->leaf_children);
   } else {
-    // Move all children from right sibling to this node
-    auto& children = node->internal_children;
-    auto& right_children = right_sibling->internal_children;
-
-    for (auto it = right_children.begin(); it != right_children.end(); ++it) {
-      auto [inserted_it, inserted] = children.insert(it->first, it->second);
-      assert(inserted && "Merging should not have duplicates");
-      // Update parent pointer
-      it->second->parent = node;
-    }
+    merge_children.template operator()<InternalNode*>(
+        node->internal_children, right_sibling->internal_children);
   }
 
   // Remove right sibling from parent
