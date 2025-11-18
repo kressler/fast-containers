@@ -574,27 +574,30 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   insert_into_parent(leaf, promoted_key, new_leaf);
 
   // If we inserted into the left half and it has a parent, update the parent's
-  // key for this leaf to match the new minimum
+  // key for this leaf to match the new minimum.
+  //
+  // Note: We must do this AFTER the insert because parent keys can become stale
+  // from previous non-split inserts. For example, if a leaf has {5,6} with
+  // parent key 6 (stale from earlier), and we split+insert 4, the parent still
+  // has key 6, not 5. So we can't use leaf->data.begin()->first to find the old
+  // entry. Instead, we scan for the entry that points to this leaf pointer.
   if (target_leaf == leaf && leaf->parent != nullptr) {
     Key new_left_min = leaf->data.begin()->first;
     auto& children = leaf->parent->leaf_children;
 
     // Find the entry that points to this leaf
-    Key old_key;
-    bool found = false;
     for (auto it = children.begin(); it != children.end(); ++it) {
       if (it->second == leaf) {
-        old_key = it->first;
-        found = true;
+        // Found the entry - check if key needs updating
+        if (it->first != new_left_min) {
+          Key old_key = it->first;
+          children.remove(old_key);
+          auto [new_it, ins] = children.insert(new_left_min, leaf);
+          assert(ins &&
+                 "Re-inserting leaf with new minimum key should succeed");
+        }
         break;
       }
-    }
-
-    // If found and the key doesn't match the current minimum, update it
-    if (found && old_key != new_left_min) {
-      children.remove(old_key);
-      auto [new_it, ins] = children.insert(new_left_min, leaf);
-      assert(ins && "Re-inserting leaf with new minimum key should succeed");
     }
   }
 
