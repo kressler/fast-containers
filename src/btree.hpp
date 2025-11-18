@@ -422,16 +422,20 @@ class btree {
   bool borrow_from_right_leaf_sibling(LeafNode* leaf);
 
   /**
-   * Merge a leaf with its left sibling.
-   * The left sibling absorbs all elements from 'leaf'.
+   * Merge a node with its left sibling.
+   * The left sibling absorbs all elements/children from 'node'.
+   * Works for both LeafNode and InternalNode.
    */
-  void merge_with_left_leaf_sibling(LeafNode* leaf);
+  template <typename NodeType>
+  void merge_with_left_sibling(NodeType* node);
 
   /**
-   * Merge a leaf with its right sibling.
-   * 'leaf' absorbs all elements from its right sibling.
+   * Merge a node with its right sibling.
+   * 'node' absorbs all elements/children from its right sibling.
+   * Works for both LeafNode and InternalNode.
    */
-  void merge_with_right_leaf_sibling(LeafNode* leaf);
+  template <typename NodeType>
+  void merge_with_right_sibling(NodeType* node);
 
   /**
    * Try to borrow a child from the left sibling of an internal node.
@@ -444,18 +448,6 @@ class btree {
    * Returns true if successful.
    */
   bool borrow_from_right_internal_sibling(InternalNode* node);
-
-  /**
-   * Merge an internal node with its left sibling.
-   * The left sibling absorbs all children from 'node'.
-   */
-  void merge_with_left_internal_sibling(InternalNode* node);
-
-  /**
-   * Merge an internal node with its right sibling.
-   * 'node' absorbs all children from its right sibling.
-   */
-  void merge_with_right_internal_sibling(InternalNode* node);
 
   /**
    * Template helper to find the left sibling of a node.
@@ -1186,116 +1178,238 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
+template <typename NodeType>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_left_leaf_sibling(LeafNode* leaf) {
-  LeafNode* left_sibling = find_left_sibling(leaf);
+           MoveModeT>::merge_with_left_sibling(NodeType* node) {
+  NodeType* left_sibling = find_left_sibling(node);
   assert(left_sibling != nullptr &&
-         "merge_with_left_leaf_sibling requires left sibling");
+         "merge_with_left_sibling requires left sibling");
 
-  // Move all elements from this leaf to left sibling using bulk transfer
-  size_type count = leaf->data.size();
-  left_sibling->data.transfer_prefix_from(leaf->data, count);
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    // Merge leaf data
+    size_type count = node->data.size();
+    left_sibling->data.transfer_prefix_from(node->data, count);
 
-  // Update leaf chain pointers
-  left_sibling->next_leaf = leaf->next_leaf;
-  if (leaf->next_leaf) {
-    leaf->next_leaf->prev_leaf = left_sibling;
-  }
-
-  // Update rightmost_leaf_ if necessary
-  if (rightmost_leaf_ == leaf) {
-    rightmost_leaf_ = left_sibling;
-  }
-
-  // Remove this leaf from parent
-  InternalNode* parent = leaf->parent;
-  assert(parent != nullptr && "Merging non-root leaf should have parent");
-
-  // Find and remove the entry for this leaf in parent
-  auto& parent_children = parent->leaf_children;
-  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-    if (it->second == leaf) {
-      parent_children.remove(it->first);
-      break;
+    // Update leaf chain pointers
+    left_sibling->next_leaf = node->next_leaf;
+    if (node->next_leaf) {
+      node->next_leaf->prev_leaf = left_sibling;
     }
-  }
 
-  // Deallocate this leaf
-  deallocate_leaf_node(leaf);
+    // Update rightmost_leaf_ if necessary
+    if (rightmost_leaf_ == node) {
+      rightmost_leaf_ = left_sibling;
+    }
 
-  // Check if parent underflowed (use hysteresis threshold)
-  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  size_type parent_underflow_threshold =
-      min_internal_size() > internal_hysteresis()
-          ? min_internal_size() - internal_hysteresis()
-          : 0;
-  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
-    handle_internal_underflow(parent);
-  } else if (parent_is_root && parent_children.size() == 1) {
-    // Root has only one child left - make that child the new root
-    LeafNode* new_root = parent_children.begin()->second;
-    new_root->parent = nullptr;
-    root_is_leaf_ = true;
-    leaf_root_ = new_root;
-    deallocate_internal_node(parent);
+    // Remove this leaf from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+    // Find and remove the entry for this leaf in parent
+    auto& parent_children = parent->leaf_children;
+    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+      if (it->second == node) {
+        parent_children.remove(it->first);
+        break;
+      }
+    }
+
+    // Deallocate this leaf
+    deallocate_leaf_node(node);
+
+    // Check if parent underflowed (use hysteresis threshold)
+    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    size_type parent_underflow_threshold =
+        min_internal_size() > internal_hysteresis()
+            ? min_internal_size() - internal_hysteresis()
+            : 0;
+    if (!parent_is_root &&
+        parent_children.size() < parent_underflow_threshold) {
+      handle_internal_underflow(parent);
+    } else if (parent_is_root && parent_children.size() == 1) {
+      // Root has only one child left - make that child the new root
+      LeafNode* new_root = parent_children.begin()->second;
+      new_root->parent = nullptr;
+      root_is_leaf_ = true;
+      leaf_root_ = new_root;
+      deallocate_internal_node(parent);
+    }
+  } else {
+    // Merge internal node children using templated lambda
+    auto merge_children = [&]<typename ChildPtrType>(auto& children,
+                                                     auto& left_children) {
+      // Move all children from this node to left sibling using bulk transfer
+      size_type count = children.size();
+      size_type old_size = left_children.size();
+      left_children.transfer_prefix_from(children, count);
+
+      // Update parent pointers for all transferred children
+      auto it = left_children.begin();
+      std::advance(it, old_size);
+      for (size_type i = 0; i < count; ++i, ++it) {
+        it->second->parent = left_sibling;
+      }
+    };
+
+    if (node->children_are_leaves) {
+      merge_children.template operator()<LeafNode*>(
+          node->leaf_children, left_sibling->leaf_children);
+    } else {
+      merge_children.template operator()<InternalNode*>(
+          node->internal_children, left_sibling->internal_children);
+    }
+
+    // Remove this node from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root node should have parent");
+
+    // Find and remove the entry for this node in parent
+    auto& parent_children = parent->internal_children;
+    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+      if (it->second == node) {
+        parent_children.remove(it->first);
+        break;
+      }
+    }
+
+    // Deallocate this node
+    deallocate_internal_node(node);
+
+    // Check if parent underflowed (use hysteresis threshold)
+    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    size_type parent_underflow_threshold =
+        min_internal_size() > internal_hysteresis()
+            ? min_internal_size() - internal_hysteresis()
+            : 0;
+    if (!parent_is_root &&
+        parent_children.size() < parent_underflow_threshold) {
+      handle_internal_underflow(parent);
+    } else if (parent_is_root && parent_children.size() == 1) {
+      // Root has only one child left - make that child the new root
+      InternalNode* new_root = parent_children.begin()->second;
+      new_root->parent = nullptr;
+      internal_root_ = new_root;
+      deallocate_internal_node(parent);
+    }
   }
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
+template <typename NodeType>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_right_leaf_sibling(LeafNode* leaf) {
-  LeafNode* right_sibling = find_right_sibling(leaf);
+           MoveModeT>::merge_with_right_sibling(NodeType* node) {
+  NodeType* right_sibling = find_right_sibling(node);
   assert(right_sibling != nullptr &&
-         "merge_with_right_leaf_sibling requires right sibling");
+         "merge_with_right_sibling requires right sibling");
 
-  // Move all elements from right sibling to this leaf using bulk transfer
-  size_type count = right_sibling->data.size();
-  leaf->data.transfer_prefix_from(right_sibling->data, count);
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    // Merge leaf data
+    size_type count = right_sibling->data.size();
+    node->data.transfer_prefix_from(right_sibling->data, count);
 
-  // Update leaf chain pointers
-  leaf->next_leaf = right_sibling->next_leaf;
-  if (right_sibling->next_leaf) {
-    right_sibling->next_leaf->prev_leaf = leaf;
-  }
-
-  // Update rightmost_leaf_ if necessary
-  if (rightmost_leaf_ == right_sibling) {
-    rightmost_leaf_ = leaf;
-  }
-
-  // Remove right sibling from parent
-  InternalNode* parent = leaf->parent;
-  assert(parent != nullptr && "Merging non-root leaf should have parent");
-
-  // Find and remove the entry for right sibling in parent
-  auto& parent_children = parent->leaf_children;
-  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-    if (it->second == right_sibling) {
-      parent_children.remove(it->first);
-      break;
+    // Update leaf chain pointers
+    node->next_leaf = right_sibling->next_leaf;
+    if (right_sibling->next_leaf) {
+      right_sibling->next_leaf->prev_leaf = node;
     }
-  }
 
-  // Deallocate right sibling
-  deallocate_leaf_node(right_sibling);
+    // Update rightmost_leaf_ if necessary
+    if (rightmost_leaf_ == right_sibling) {
+      rightmost_leaf_ = node;
+    }
 
-  // Check if parent underflowed (use hysteresis threshold)
-  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  size_type parent_underflow_threshold =
-      min_internal_size() > internal_hysteresis()
-          ? min_internal_size() - internal_hysteresis()
-          : 0;
-  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
-    handle_internal_underflow(parent);
-  } else if (parent_is_root && parent_children.size() == 1) {
-    // Root has only one child left - make that child the new root
-    LeafNode* new_root = parent_children.begin()->second;
-    new_root->parent = nullptr;
-    root_is_leaf_ = true;
-    leaf_root_ = new_root;
-    deallocate_internal_node(parent);
+    // Remove right sibling from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+    // Find and remove the entry for right sibling in parent
+    auto& parent_children = parent->leaf_children;
+    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+      if (it->second == right_sibling) {
+        parent_children.remove(it->first);
+        break;
+      }
+    }
+
+    // Deallocate right sibling
+    deallocate_leaf_node(right_sibling);
+
+    // Check if parent underflowed (use hysteresis threshold)
+    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    size_type parent_underflow_threshold =
+        min_internal_size() > internal_hysteresis()
+            ? min_internal_size() - internal_hysteresis()
+            : 0;
+    if (!parent_is_root &&
+        parent_children.size() < parent_underflow_threshold) {
+      handle_internal_underflow(parent);
+    } else if (parent_is_root && parent_children.size() == 1) {
+      // Root has only one child left - make that child the new root
+      LeafNode* new_root = parent_children.begin()->second;
+      new_root->parent = nullptr;
+      root_is_leaf_ = true;
+      leaf_root_ = new_root;
+      deallocate_internal_node(parent);
+    }
+  } else {
+    // Merge internal node children using templated lambda
+    auto merge_children = [&]<typename ChildPtrType>(auto& children,
+                                                     auto& right_children) {
+      // Move all children from right sibling to this node using bulk transfer
+      size_type count = right_children.size();
+      size_type old_size = children.size();
+      children.transfer_prefix_from(right_children, count);
+
+      // Update parent pointers for all transferred children
+      auto it = children.begin();
+      std::advance(it, old_size);
+      for (size_type i = 0; i < count; ++i, ++it) {
+        it->second->parent = node;
+      }
+    };
+
+    if (node->children_are_leaves) {
+      merge_children.template operator()<LeafNode*>(
+          node->leaf_children, right_sibling->leaf_children);
+    } else {
+      merge_children.template operator()<InternalNode*>(
+          node->internal_children, right_sibling->internal_children);
+    }
+
+    // Remove right sibling from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root node should have parent");
+
+    // Find and remove the entry for right sibling in parent
+    auto& parent_children = parent->internal_children;
+    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
+      if (it->second == right_sibling) {
+        parent_children.remove(it->first);
+        break;
+      }
+    }
+
+    // Deallocate right sibling
+    deallocate_internal_node(right_sibling);
+
+    // Check if parent underflowed (use hysteresis threshold)
+    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    size_type parent_underflow_threshold =
+        min_internal_size() > internal_hysteresis()
+            ? min_internal_size() - internal_hysteresis()
+            : 0;
+    if (!parent_is_root &&
+        parent_children.size() < parent_underflow_threshold) {
+      handle_internal_underflow(parent);
+    } else if (parent_is_root && parent_children.size() == 1) {
+      // Root has only one child left - make that child the new root
+      InternalNode* new_root = parent_children.begin()->second;
+      new_root->parent = nullptr;
+      internal_root_ = new_root;
+      deallocate_internal_node(parent);
+    }
   }
 }
 
@@ -1325,10 +1439,10 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Prefer merging with left sibling if it exists
   LeafNode* left_sibling = find_left_sibling(leaf);
   if (left_sibling != nullptr) {
-    merge_with_left_leaf_sibling(leaf);
+    merge_with_left_sibling(leaf);
   } else {
     // No left sibling - merge with right
-    merge_with_right_leaf_sibling(leaf);
+    merge_with_right_sibling(leaf);
   }
 }
 
@@ -1447,138 +1561,6 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_left_internal_sibling(InternalNode* node) {
-  InternalNode* left_sibling = find_left_sibling(node);
-  assert(left_sibling != nullptr &&
-         "merge_with_left_internal_sibling requires left sibling");
-
-  // Use templated lambda to handle both leaf and internal children
-  auto merge_children = [&]<typename ChildType>(auto& children,
-                                                auto& left_children) {
-    // Move all children from this node to left sibling using bulk transfer
-    size_type count = children.size();
-    size_type old_size = left_children.size();
-    left_children.transfer_prefix_from(children, count);
-
-    // Update parent pointers for all transferred children
-    auto it = left_children.begin();
-    std::advance(it, old_size);
-    for (size_type i = 0; i < count; ++i, ++it) {
-      it->second->parent = left_sibling;
-    }
-  };
-
-  if (node->children_are_leaves) {
-    merge_children.template operator()<LeafNode*>(node->leaf_children,
-                                                  left_sibling->leaf_children);
-  } else {
-    merge_children.template operator()<InternalNode*>(
-        node->internal_children, left_sibling->internal_children);
-  }
-
-  // Remove this node from parent
-  InternalNode* parent = node->parent;
-  assert(parent != nullptr && "Merging non-root node should have parent");
-
-  // Find and remove the entry for this node in parent
-  auto& parent_children = parent->internal_children;
-  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-    if (it->second == node) {
-      parent_children.remove(it->first);
-      break;
-    }
-  }
-
-  // Deallocate this node
-  deallocate_internal_node(node);
-
-  // Check if parent underflowed (use hysteresis threshold)
-  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  size_type parent_underflow_threshold =
-      min_internal_size() > internal_hysteresis()
-          ? min_internal_size() - internal_hysteresis()
-          : 0;
-  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
-    handle_internal_underflow(parent);
-  } else if (parent_is_root && parent_children.size() == 1) {
-    // Root has only one child left - make that child the new root
-    InternalNode* new_root = parent_children.begin()->second;
-    new_root->parent = nullptr;
-    internal_root_ = new_root;
-    deallocate_internal_node(parent);
-  }
-}
-
-template <Comparable Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
-          MoveMode MoveModeT>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_right_internal_sibling(InternalNode* node) {
-  InternalNode* right_sibling = find_right_sibling(node);
-  assert(right_sibling != nullptr &&
-         "merge_with_right_internal_sibling requires right sibling");
-
-  // Use templated lambda to handle both leaf and internal children
-  auto merge_children = [&]<typename ChildType>(auto& children,
-                                                auto& right_children) {
-    // Move all children from right sibling to this node using bulk transfer
-    size_type count = right_children.size();
-    size_type old_size = children.size();
-    children.transfer_prefix_from(right_children, count);
-
-    // Update parent pointers for all transferred children
-    auto it = children.begin();
-    std::advance(it, old_size);
-    for (size_type i = 0; i < count; ++i, ++it) {
-      it->second->parent = node;
-    }
-  };
-
-  if (node->children_are_leaves) {
-    merge_children.template operator()<LeafNode*>(node->leaf_children,
-                                                  right_sibling->leaf_children);
-  } else {
-    merge_children.template operator()<InternalNode*>(
-        node->internal_children, right_sibling->internal_children);
-  }
-
-  // Remove right sibling from parent
-  InternalNode* parent = node->parent;
-  assert(parent != nullptr && "Merging non-root node should have parent");
-
-  // Find and remove the entry for right sibling in parent
-  auto& parent_children = parent->internal_children;
-  for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-    if (it->second == right_sibling) {
-      parent_children.remove(it->first);
-      break;
-    }
-  }
-
-  // Deallocate right sibling
-  deallocate_internal_node(right_sibling);
-
-  // Check if parent underflowed (use hysteresis threshold)
-  bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-  size_type parent_underflow_threshold =
-      min_internal_size() > internal_hysteresis()
-          ? min_internal_size() - internal_hysteresis()
-          : 0;
-  if (!parent_is_root && parent_children.size() < parent_underflow_threshold) {
-    handle_internal_underflow(parent);
-  } else if (parent_is_root && parent_children.size() == 1) {
-    // Root has only one child left - make that child the new root
-    InternalNode* new_root = parent_children.begin()->second;
-    new_root->parent = nullptr;
-    internal_root_ = new_root;
-    deallocate_internal_node(parent);
-  }
-}
-
-template <Comparable Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
-          MoveMode MoveModeT>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::handle_internal_underflow(InternalNode* node) {
   // Get size based on children type
   size_type node_size = node->children_are_leaves
@@ -1607,10 +1589,10 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Prefer merging with left sibling if it exists
   InternalNode* left_sibling = find_left_sibling(node);
   if (left_sibling != nullptr) {
-    merge_with_left_internal_sibling(node);
+    merge_with_left_sibling(node);
   } else {
     // No left sibling - merge with right
-    merge_with_right_internal_sibling(node);
+    merge_with_right_sibling(node);
   }
 }
 
