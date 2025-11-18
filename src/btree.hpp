@@ -380,10 +380,12 @@ class btree {
   std::pair<const Key&, InternalNode*> split_internal(InternalNode* node);
 
   /**
-   * Update parent's key for a leaf to match the leaf's current minimum.
-   * Used when inserting a new minimum into a leaf.
+   * Update parent's key for a child node to match its current minimum.
+   * Recursively updates ancestors if the child is leftmost at each level.
+   * Template supports both LeafNode and InternalNode children.
    */
-  void update_parent_key(LeafNode* leaf, const Key& new_min);
+  template <typename ChildNodeType>
+  void update_parent_key_recursive(ChildNodeType* child, const Key& new_min);
 };
 
 // Implementation
@@ -531,7 +533,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
     // If we inserted a new minimum and leaf has a parent, update parent key
     if (will_be_new_min && leaf->parent != nullptr) {
-      update_parent_key(leaf, key);
+      update_parent_key_recursive(leaf, key);
     }
 
     // Update leftmost_leaf_ if necessary
@@ -598,7 +600,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Note: Parent keys can be stale from previous non-split inserts
   if (target_leaf == leaf) {
     const Key& new_left_min = leaf->data.begin()->first;
-    update_parent_key(leaf, new_left_min);
+    update_parent_key_recursive(leaf, new_left_min);
   }
 
   // Update leftmost_leaf_ if the leaf became the new leftmost
@@ -737,34 +739,56 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
+template <typename ChildNodeType>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::update_parent_key(LeafNode* leaf, const Key& new_min) {
-  if (leaf->parent == nullptr) {
+           MoveModeT>::update_parent_key_recursive(ChildNodeType* child,
+                                                   const Key& new_min) {
+  if (child->parent == nullptr) {
     return;
   }
 
-  auto& children = leaf->parent->leaf_children;
+  InternalNode* parent = child->parent;
+
+  // Get reference to appropriate children array based on child type
+  auto& children = [&]() -> auto& {
+    if constexpr (std::is_same_v<ChildNodeType, LeafNode>) {
+      return parent->leaf_children;
+    } else {
+      return parent->internal_children;
+    }
+  }();
 
   // Use lower_bound to efficiently find the entry (O(log n))
   auto it = children.lower_bound(new_min);
 
-  // The entry pointing to this leaf should be at 'it' or one position before
+  // Track if we're at position 0 (leftmost child)
+  bool is_leftmost = false;
+
+  // The entry pointing to this child should be at 'it' or one position before
   // Check 'it' first
-  if (it != children.end() && it->second == leaf) {
+  if (it != children.end() && it->second == child) {
     // Found it at lower_bound position
+    is_leftmost = (it == children.begin());
     if (it->first != new_min) {
       children.remove(it->first);
-      auto [new_it, ins] = children.insert(new_min, leaf);
-      assert(ins && "Re-inserting leaf with new minimum key should succeed");
+      auto [new_it, ins] = children.insert(new_min, child);
+      assert(ins && "Re-inserting child with new minimum key should succeed");
     }
   } else if (it != children.begin()) {
     // Check the previous entry
     --it;
-    if (it->second == leaf && it->first != new_min) {
+    if (it->second == child && it->first != new_min) {
+      is_leftmost = (it == children.begin());
       children.remove(it->first);
-      auto [new_it, ins] = children.insert(new_min, leaf);
-      assert(ins && "Re-inserting leaf with new minimum key should succeed");
+      auto [new_it, ins] = children.insert(new_min, child);
+      assert(ins && "Re-inserting child with new minimum key should succeed");
     }
+  }
+
+  // If this child is leftmost in parent, recursively update grandparent
+  // The parent's minimum key changed, so we need to update it too
+  if (is_leftmost && parent->parent != nullptr) {
+    update_parent_key_recursive(parent, new_min);
   }
 }
 
