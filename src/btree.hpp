@@ -196,15 +196,13 @@ class btree {
 
   /**
    * Returns an iterator to the first element.
-   * Complexity: O(1)
+   * Complexity: O(1) - uses cached leftmost leaf pointer
    */
   iterator begin() {
     if (size_ == 0) {
       return end();
     }
-    // Find the leftmost leaf
-    LeafNode* leftmost = find_leftmost_leaf();
-    return iterator(leftmost, leftmost->data.begin());
+    return iterator(leftmost_leaf_, leftmost_leaf_->data.begin());
   }
 
   /**
@@ -276,6 +274,11 @@ class btree {
   };
   size_type size_;
 
+  // Cached pointers to first and last leaf for O(1) begin()/rbegin()
+  // @warning Will be private in Phase 3
+  LeafNode* leftmost_leaf_;
+  LeafNode* rightmost_leaf_;
+
  private:
   /**
    * Recursively deallocate all nodes in the tree.
@@ -301,27 +304,6 @@ class btree {
   LeafNode* get_leaf_root() const {
     assert(root_is_leaf_ && "Root is not a leaf node");
     return leaf_root_;
-  }
-
-  /**
-   * Finds the leftmost (first) leaf in the tree.
-   * Assumes tree is non-empty.
-   */
-  LeafNode* find_leftmost_leaf() const {
-    if (root_is_leaf_) {
-      return leaf_root_;
-    }
-
-    // Traverse down always taking the first child
-    InternalNode* node = internal_root_;
-    while (!node->children_are_leaves) {
-      auto it = node->internal_children.begin();
-      node = it->second;
-    }
-
-    // Now node has leaf children - return the first one
-    auto it = node->leaf_children.begin();
-    return it->second;
   }
 
   /**
@@ -379,7 +361,11 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::btree()
-    : root_is_leaf_(true), leaf_root_(nullptr), size_(0) {}
+    : root_is_leaf_(true),
+      leaf_root_(nullptr),
+      size_(0),
+      leftmost_leaf_(nullptr),
+      rightmost_leaf_(nullptr) {}
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
@@ -446,6 +432,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   root_is_leaf_ = true;
   leaf_root_ = nullptr;
   size_ = 0;
+  leftmost_leaf_ = nullptr;
+  rightmost_leaf_ = nullptr;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,

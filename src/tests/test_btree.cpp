@@ -149,6 +149,8 @@ class BTreeTestHelper {
     tree.root_is_leaf_ = true;
     tree.leaf_root_ = leaf;
     tree.size_ = data.size();
+    tree.leftmost_leaf_ = leaf;
+    tree.rightmost_leaf_ = leaf;
   }
 
   // Create a two-level tree with given structure
@@ -195,6 +197,10 @@ class BTreeTestHelper {
       total_size += leaf_data.size();
     }
     tree.size_ = total_size;
+
+    // Set cached leftmost and rightmost leaf pointers
+    tree.leftmost_leaf_ = leaves.front();
+    tree.rightmost_leaf_ = leaves.back();
   }
 };
 
