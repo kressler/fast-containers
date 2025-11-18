@@ -90,6 +90,10 @@ if(ENABLE_ASAN)
 endif()
 add_subdirectory(third_party/benchmark)
 
+# Add Abseil library
+set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Use C++23 for Abseil" FORCE)
+add_subdirectory(third_party/abseil-cpp)
+
 # Enable testing
 enable_testing()
 
