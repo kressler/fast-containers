@@ -364,11 +364,12 @@ class btree {
    * Insert a promoted key and child pointer into a parent node.
    * If parent is full, splits it recursively.
    * If node has no parent, creates a new root.
+   *
+   * Templated to handle both LeafNode and InternalNode children.
    */
-  void insert_into_parent(LeafNode* left_child, const Key& key,
-                          LeafNode* right_child);
-  void insert_into_parent(InternalNode* left_child, const Key& key,
-                          InternalNode* right_child);
+  template <typename NodeType>
+  void insert_into_parent(NodeType* left_child, const Key& key,
+                          NodeType* right_child);
 
   /**
    * Split a full internal node.
@@ -537,25 +538,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Calculate split point (ceil(LeafNodeSize / 2))
   size_type split_point = (LeafNodeSize + 1) / 2;
 
-  // Collect elements to move (second half)
-  std::vector<std::pair<Key, Value>> elements_to_move;
-  auto it = leaf->data.begin();
-  std::advance(it, split_point);
-  while (it != leaf->data.end()) {
-    elements_to_move.push_back({it->first, it->second});
-    ++it;
-  }
-
-  // Remove elements from old leaf
-  for (const auto& [k, v] : elements_to_move) {
-    leaf->data.remove(k);
-  }
-
-  // Insert elements into new leaf
-  for (const auto& [k, v] : elements_to_move) {
-    auto [new_it, inserted] = new_leaf->data.insert(k, v);
-    assert(inserted && "Moving element to new leaf should always succeed");
-  }
+  // Use split_at() to efficiently move second half to new leaf
+  auto split_it = leaf->data.begin();
+  std::advance(split_it, split_point);
+  leaf->data.split_at(split_it, new_leaf->data);
 
   // Update leaf chain pointers
   new_leaf->next_leaf = leaf->next_leaf;
@@ -584,34 +570,39 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   size_++;
 
-  // If we inserted into the left half and it became the new minimum,
-  // we need to update the parent's key for the left child
-  Key left_min_key = leaf->data.begin()->first;
-
   // Insert promoted key into parent
   insert_into_parent(leaf, promoted_key, new_leaf);
 
-  // After inserting into parent, if the left child's minimum key changed,
-  // we need to update its entry in the parent
-  if (target_leaf == leaf && leaf->parent != nullptr && key < promoted_key) {
-    // The left child's minimum might have changed
-    // We need to update the parent's key for this child
-    // This is done by removing and re-inserting with the new key
-    bool found_and_updated = false;
+  // If we inserted into the left half and it has a parent, update the parent's
+  // key for this leaf to match the new minimum
+  if (target_leaf == leaf && leaf->parent != nullptr) {
+    Key new_left_min = leaf->data.begin()->first;
     auto& children = leaf->parent->leaf_children;
 
-    // Find the entry for this leaf
+    // Find the entry that points to this leaf
+    Key old_key;
+    bool found = false;
     for (auto it = children.begin(); it != children.end(); ++it) {
-      if (it->second == leaf && it->first != left_min_key) {
-        // Found it with wrong key - need to update
-        Key old_key = it->first;
-        children.remove(old_key);
-        auto [new_it, ins] = children.insert(left_min_key, leaf);
-        assert(ins && "Re-inserting leaf with new minimum key should succeed");
-        found_and_updated = true;
+      if (it->second == leaf) {
+        old_key = it->first;
+        found = true;
         break;
       }
     }
+
+    // If found and the key doesn't match the current minimum, update it
+    if (found && old_key != new_left_min) {
+      children.remove(old_key);
+      auto [new_it, ins] = children.insert(new_left_min, leaf);
+      assert(ins && "Re-inserting leaf with new minimum key should succeed");
+    }
+  }
+
+  // Update leftmost_leaf_ if the leaf became the new leftmost
+  if (target_leaf == leaf &&
+      (leftmost_leaf_ == nullptr ||
+       leaf->data.begin()->first < leftmost_leaf_->data.begin()->first)) {
+    leftmost_leaf_ = leaf;
   }
 
   return {iterator(target_leaf, leaf_it), true};
@@ -620,76 +611,41 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
+template <typename NodeType>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::insert_into_parent(LeafNode* left_child, const Key& key,
-                                          LeafNode* right_child) {
-  // Case 1: left_child is root - create new root
-  if (left_child->parent == nullptr) {
-    InternalNode* new_root =
-        allocate_internal_node(true);  // Children are leaves
-    auto [it, inserted] = new_root->leaf_children.insert(
-        left_child->data.begin()->first, left_child);
-    assert(inserted);
-    auto [it2, inserted2] = new_root->leaf_children.insert(key, right_child);
-    assert(inserted2);
-
-    left_child->parent = new_root;
-    right_child->parent = new_root;
-
-    root_is_leaf_ = false;
-    internal_root_ = new_root;
-    return;
-  }
-
-  // Case 2: Parent exists - insert into it
-  InternalNode* parent = left_child->parent;
-
-  // Check if parent is full
-  if (parent->leaf_children.size() >= InternalNodeSize) {
-    // Need to split parent
-    auto [promoted_key, new_parent] = split_internal(parent);
-
-    // Determine which parent to insert into
-    InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
-    right_child->parent = target_parent;
-    auto [it, inserted] = target_parent->leaf_children.insert(key, right_child);
-    assert(inserted && "Insert into non-full parent should succeed");
-
-    // Recursively insert promoted key into grandparent
-    insert_into_parent(parent, promoted_key, new_parent);
-  } else {
-    // Parent has space - insert normally
-    right_child->parent = parent;
-    auto [it, inserted] = parent->leaf_children.insert(key, right_child);
-    assert(inserted && "Insert into non-full parent should succeed");
-  }
-}
-
-template <Comparable Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
-          MoveMode MoveModeT>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::insert_into_parent(InternalNode* left_child,
-                                          const Key& key,
-                                          InternalNode* right_child) {
-  // Case 1: left_child is root - create new root
-  if (left_child->parent == nullptr) {
-    InternalNode* new_root =
-        allocate_internal_node(false);  // Children are internal
-
-    // Get first key from left child
-    Key left_key;
-    if (left_child->children_are_leaves) {
-      left_key = left_child->leaf_children.begin()->first;
+           MoveModeT>::insert_into_parent(NodeType* left_child, const Key& key,
+                                          NodeType* right_child) {
+  // Helper lambda to get appropriate children array reference
+  auto get_children = [](InternalNode* node) -> auto& {
+    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+      return node->leaf_children;
     } else {
-      left_key = left_child->internal_children.begin()->first;
+      return node->internal_children;
     }
+  };
 
-    auto [it, inserted] =
-        new_root->internal_children.insert(left_key, left_child);
+  // Helper lambda to get the left key for creating new root
+  auto get_left_key = [](NodeType* node) -> Key {
+    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+      return node->data.begin()->first;
+    } else {
+      if (node->children_are_leaves) {
+        return node->leaf_children.begin()->first;
+      } else {
+        return node->internal_children.begin()->first;
+      }
+    }
+  };
+
+  // Case 1: left_child is root - create new root
+  if (left_child->parent == nullptr) {
+    constexpr bool children_are_leaves = std::is_same_v<NodeType, LeafNode>;
+    InternalNode* new_root = allocate_internal_node(children_are_leaves);
+
+    auto& children = get_children(new_root);
+    auto [it, inserted] = children.insert(get_left_key(left_child), left_child);
     assert(inserted);
-    auto [it2, inserted2] =
-        new_root->internal_children.insert(key, right_child);
+    auto [it2, inserted2] = children.insert(key, right_child);
     assert(inserted2);
 
     left_child->parent = new_root;
@@ -702,17 +658,19 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Case 2: Parent exists - insert into it
   InternalNode* parent = left_child->parent;
+  auto& parent_children = get_children(parent);
 
   // Check if parent is full
-  if (parent->internal_children.size() >= InternalNodeSize) {
+  if (parent_children.size() >= InternalNodeSize) {
     // Need to split parent
     auto [promoted_key, new_parent] = split_internal(parent);
 
     // Determine which parent to insert into
     InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
     right_child->parent = target_parent;
-    auto [it, inserted] =
-        target_parent->internal_children.insert(key, right_child);
+
+    auto& target_children = get_children(target_parent);
+    auto [it, inserted] = target_children.insert(key, right_child);
     assert(inserted && "Insert into non-full parent should succeed");
 
     // Recursively insert promoted key into grandparent
@@ -720,7 +678,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   } else {
     // Parent has space - insert normally
     right_child->parent = parent;
-    auto [it, inserted] = parent->internal_children.insert(key, right_child);
+    auto [it, inserted] = parent_children.insert(key, right_child);
     assert(inserted && "Insert into non-full parent should succeed");
   }
 }
@@ -741,54 +699,32 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   Key promoted_key;
 
   if (node->children_are_leaves) {
-    // Collect children to move (second half)
-    std::vector<std::pair<Key, LeafNode*>> children_to_move;
-    auto it = node->leaf_children.begin();
-    std::advance(it, split_point);
-    while (it != node->leaf_children.end()) {
-      children_to_move.push_back({it->first, it->second});
-      ++it;
-    }
+    // Get split iterator and promoted key (first key of second half)
+    auto split_it = node->leaf_children.begin();
+    std::advance(split_it, split_point);
+    promoted_key = split_it->first;
 
-    // First key of second half becomes the promoted key
-    assert(!children_to_move.empty());
-    promoted_key = children_to_move[0].first;
+    // Use split_at() to efficiently move second half to new node
+    node->leaf_children.split_at(split_it, new_node->leaf_children);
 
-    // Remove children from old node
-    for (const auto& [k, child] : children_to_move) {
-      node->leaf_children.remove(k);
-    }
-
-    // Insert children into new node and update parent pointers
-    for (const auto& [k, child] : children_to_move) {
-      auto [new_it, inserted] = new_node->leaf_children.insert(k, child);
-      assert(inserted);
-      child->parent = new_node;
+    // Update parent pointers for moved children
+    for (auto it = new_node->leaf_children.begin();
+         it != new_node->leaf_children.end(); ++it) {
+      it->second->parent = new_node;
     }
   } else {
-    // Collect children to move (second half)
-    std::vector<std::pair<Key, InternalNode*>> children_to_move;
-    auto it = node->internal_children.begin();
-    std::advance(it, split_point);
-    while (it != node->internal_children.end()) {
-      children_to_move.push_back({it->first, it->second});
-      ++it;
-    }
+    // Get split iterator and promoted key (first key of second half)
+    auto split_it = node->internal_children.begin();
+    std::advance(split_it, split_point);
+    promoted_key = split_it->first;
 
-    // First key of second half becomes the promoted key
-    assert(!children_to_move.empty());
-    promoted_key = children_to_move[0].first;
+    // Use split_at() to efficiently move second half to new node
+    node->internal_children.split_at(split_it, new_node->internal_children);
 
-    // Remove children from old node
-    for (const auto& [k, child] : children_to_move) {
-      node->internal_children.remove(k);
-    }
-
-    // Insert children into new node and update parent pointers
-    for (const auto& [k, child] : children_to_move) {
-      auto [new_it, inserted] = new_node->internal_children.insert(k, child);
-      assert(inserted);
-      child->parent = new_node;
+    // Update parent pointers for moved children
+    for (auto it = new_node->internal_children.begin();
+         it != new_node->internal_children.end(); ++it) {
+      it->second->parent = new_node;
     }
   }
 
