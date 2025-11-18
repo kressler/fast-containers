@@ -377,6 +377,12 @@ class btree {
    * Returns the promoted key and pointer to the new node.
    */
   std::pair<Key, InternalNode*> split_internal(InternalNode* node);
+
+  /**
+   * Update parent's key for a leaf to match the leaf's current minimum.
+   * Used when inserting a new minimum into a leaf.
+   */
+  void update_parent_key(LeafNode* leaf, const Key& new_min);
 };
 
 // Implementation
@@ -515,9 +521,23 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Leaf has space - insert normally
+  // Track if this will become the new minimum
+  bool will_be_new_min = leaf->data.empty() || key < leaf->data.begin()->first;
+
   auto [leaf_it, inserted] = leaf->data.insert(key, value);
   if (inserted) {
     size_++;
+
+    // If we inserted a new minimum and leaf has a parent, update parent key
+    if (will_be_new_min && leaf->parent != nullptr) {
+      update_parent_key(leaf, key);
+    }
+
+    // Update leftmost_leaf_ if necessary
+    if (leftmost_leaf_ == nullptr ||
+        key < leftmost_leaf_->data.begin()->first) {
+      leftmost_leaf_ = leaf;
+    }
   }
 
   return {iterator(leaf, leaf_it), inserted};
@@ -573,42 +593,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Insert promoted key into parent
   insert_into_parent(leaf, promoted_key, new_leaf);
 
-  // If we inserted into the left half and it has a parent, update the parent's
-  // key for this leaf to match the new minimum.
-  //
-  // Note: We must do this AFTER the insert because parent keys can become stale
-  // from previous non-split inserts. For example, if a leaf has {5,6} with
-  // parent key 6 (stale from earlier), and we split+insert 4, the parent still
-  // has key 6, not 5. We use lower_bound(new_min) to efficiently find the entry
-  // that should contain this leaf (even with stale keys), then verify by
-  // checking the pointer.
-  if (target_leaf == leaf && leaf->parent != nullptr) {
+  // If we inserted into the left half, update parent key if necessary
+  // Note: Parent keys can be stale from previous non-split inserts
+  if (target_leaf == leaf) {
     Key new_left_min = leaf->data.begin()->first;
-    auto& children = leaf->parent->leaf_children;
-
-    // Use lower_bound to find the entry at or after new_min (O(log n))
-    auto it = children.lower_bound(new_left_min);
-
-    // The entry pointing to this leaf should be at 'it' or one position before
-    // Check 'it' first
-    if (it != children.end() && it->second == leaf) {
-      // Found it at lower_bound position
-      if (it->first != new_left_min) {
-        Key old_key = it->first;
-        children.remove(old_key);
-        auto [new_it, ins] = children.insert(new_left_min, leaf);
-        assert(ins && "Re-inserting leaf with new minimum key should succeed");
-      }
-    } else if (it != children.begin()) {
-      // Check the previous entry
-      --it;
-      if (it->second == leaf && it->first != new_left_min) {
-        Key old_key = it->first;
-        children.remove(old_key);
-        auto [new_it, ins] = children.insert(new_left_min, leaf);
-        assert(ins && "Re-inserting leaf with new minimum key should succeed");
-      }
-    }
+    update_parent_key(leaf, new_left_min);
   }
 
   // Update leftmost_leaf_ if the leaf became the new leftmost
@@ -742,6 +731,42 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   return {promoted_key, new_node};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::update_parent_key(LeafNode* leaf, const Key& new_min) {
+  if (leaf->parent == nullptr) {
+    return;
+  }
+
+  auto& children = leaf->parent->leaf_children;
+
+  // Use lower_bound to efficiently find the entry (O(log n))
+  auto it = children.lower_bound(new_min);
+
+  // The entry pointing to this leaf should be at 'it' or one position before
+  // Check 'it' first
+  if (it != children.end() && it->second == leaf) {
+    // Found it at lower_bound position
+    if (it->first != new_min) {
+      Key old_key = it->first;
+      children.remove(old_key);
+      auto [new_it, ins] = children.insert(new_min, leaf);
+      assert(ins && "Re-inserting leaf with new minimum key should succeed");
+    }
+  } else if (it != children.begin()) {
+    // Check the previous entry
+    --it;
+    if (it->second == leaf && it->first != new_min) {
+      Key old_key = it->first;
+      children.remove(old_key);
+      auto [new_it, ins] = children.insert(new_min, leaf);
+      assert(ins && "Re-inserting leaf with new minimum key should succeed");
+    }
+  }
 }
 
 }  // namespace fast_containers
