@@ -1172,28 +1172,12 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
-  // Move elements from right side of left sibling to this leaf
-  // Collect keys to borrow (from right to left)
-  std::vector<std::pair<Key, Value>> borrowed_elements;
-  auto it = left_sibling->data.end();
-  for (size_type i = 0; i < actual_borrow; ++i) {
-    --it;
-    borrowed_elements.push_back({it->first, it->second});
-  }
+  // Transfer suffix from left sibling to beginning of this leaf
+  // This does a bulk copy and shifts arrays only once
+  leaf->data.transfer_suffix_from(left_sibling->data, actual_borrow);
 
-  // Remove from left sibling (in reverse order to avoid iterator invalidation)
-  for (const auto& [key, value] : borrowed_elements) {
-    left_sibling->data.remove(key);
-  }
-
-  // Insert into this leaf (elements will be sorted at the beginning)
-  for (const auto& [key, value] : borrowed_elements) {
-    auto [insert_it, inserted] = leaf->data.insert(key, value);
-    assert(inserted && "Borrowing should always succeed");
-  }
-
-  // Update parent key for this leaf (minimum changed to smallest borrowed key)
-  const Key& new_min = borrowed_elements.back().first;
+  // Update parent key for this leaf (minimum changed to first element)
+  const Key& new_min = leaf->data.begin()->first;
   update_parent_key_recursive(leaf, new_min);
 
   return true;
@@ -1224,25 +1208,9 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return false;
   }
 
-  // Move elements from left side of right sibling to this leaf
-  // Collect keys to borrow (from left to right)
-  std::vector<std::pair<Key, Value>> borrowed_elements;
-  auto it = right_sibling->data.begin();
-  for (size_type i = 0; i < actual_borrow; ++i) {
-    borrowed_elements.push_back({it->first, it->second});
-    ++it;
-  }
-
-  // Remove from right sibling
-  for (const auto& [key, value] : borrowed_elements) {
-    right_sibling->data.remove(key);
-  }
-
-  // Insert into this leaf (elements will be sorted at the end)
-  for (const auto& [key, value] : borrowed_elements) {
-    auto [insert_it, inserted] = leaf->data.insert(key, value);
-    assert(inserted && "Borrowing should always succeed");
-  }
+  // Transfer prefix from right sibling to end of this leaf
+  // This does a bulk copy and shifts arrays only once
+  leaf->data.transfer_prefix_from(right_sibling->data, actual_borrow);
 
   // Update parent key for right sibling (its minimum changed)
   const Key& new_right_min = right_sibling->data.begin()->first;
@@ -1434,33 +1402,19 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       return false;
     }
 
-    // Move children from right side of left sibling to this node
-    // Collect children to borrow (from right to left)
-    std::vector<std::pair<Key, LeafNode*>> borrowed_children;
-    auto it = left_children.end();
-    for (size_type i = 0; i < actual_borrow; ++i) {
-      --it;
-      borrowed_children.push_back({it->first, it->second});
-    }
-
-    // Remove from left sibling (in reverse order to avoid iterator
-    // invalidation)
-    for (const auto& [key, child] : borrowed_children) {
-      left_children.remove(key);
-    }
-
-    // Insert into this node (children will be sorted at the beginning)
+    // Transfer suffix from left sibling to beginning of this node
+    // This does a bulk copy and shifts arrays only once
     auto& children = node->leaf_children;
-    for (const auto& [key, child] : borrowed_children) {
-      auto [insert_it, inserted] = children.insert(key, child);
-      assert(inserted && "Borrowing should always succeed");
-      // Update parent pointer
-      child->parent = node;
+    children.transfer_suffix_from(left_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from beginning)
+    auto it = children.begin();
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
     }
 
-    // Update parent key for this node (minimum changed to smallest borrowed
-    // child's key)
-    const Key& new_min = borrowed_children.back().first;
+    // Update parent key for this node (minimum changed to first child's key)
+    const Key& new_min = children.begin()->first;
     update_parent_key_recursive(node, new_min);
 
     return true;
@@ -1480,33 +1434,19 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       return false;
     }
 
-    // Move children from right side of left sibling to this node
-    // Collect children to borrow (from right to left)
-    std::vector<std::pair<Key, InternalNode*>> borrowed_children;
-    auto it = left_children.end();
-    for (size_type i = 0; i < actual_borrow; ++i) {
-      --it;
-      borrowed_children.push_back({it->first, it->second});
-    }
-
-    // Remove from left sibling (in reverse order to avoid iterator
-    // invalidation)
-    for (const auto& [key, child] : borrowed_children) {
-      left_children.remove(key);
-    }
-
-    // Insert into this node (children will be sorted at the beginning)
+    // Transfer suffix from left sibling to beginning of this node
+    // This does a bulk copy and shifts arrays only once
     auto& children = node->internal_children;
-    for (const auto& [key, child] : borrowed_children) {
-      auto [insert_it, inserted] = children.insert(key, child);
-      assert(inserted && "Borrowing should always succeed");
-      // Update parent pointer
-      child->parent = node;
+    children.transfer_suffix_from(left_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from beginning)
+    auto it = children.begin();
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
     }
 
-    // Update parent key for this node (minimum changed to smallest borrowed
-    // child's key)
-    const Key& new_min = borrowed_children.back().first;
+    // Update parent key for this node (minimum changed to first child's key)
+    const Key& new_min = children.begin()->first;
     update_parent_key_recursive(node, new_min);
 
     return true;
@@ -1541,27 +1481,17 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       return false;
     }
 
-    // Move children from left side of right sibling to this node
-    // Collect children to borrow (from left to right)
-    std::vector<std::pair<Key, LeafNode*>> borrowed_children;
-    auto it = right_children.begin();
-    for (size_type i = 0; i < actual_borrow; ++i) {
-      borrowed_children.push_back({it->first, it->second});
-      ++it;
-    }
-
-    // Remove from right sibling
-    for (const auto& [key, child] : borrowed_children) {
-      right_children.remove(key);
-    }
-
-    // Insert into this node (children will be sorted at the end)
+    // Transfer prefix from right sibling to end of this node
+    // This does a bulk copy and shifts arrays only once
     auto& children = node->leaf_children;
-    for (const auto& [key, child] : borrowed_children) {
-      auto [insert_it, inserted] = children.insert(key, child);
-      assert(inserted && "Borrowing should always succeed");
-      // Update parent pointer
-      child->parent = node;
+    size_type old_size = children.size();
+    children.transfer_prefix_from(right_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from old_size)
+    auto it = children.begin();
+    std::advance(it, old_size);
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
     }
 
     // Update parent key for right sibling (its minimum changed to first
@@ -1586,27 +1516,17 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       return false;
     }
 
-    // Move children from left side of right sibling to this node
-    // Collect children to borrow (from left to right)
-    std::vector<std::pair<Key, InternalNode*>> borrowed_children;
-    auto it = right_children.begin();
-    for (size_type i = 0; i < actual_borrow; ++i) {
-      borrowed_children.push_back({it->first, it->second});
-      ++it;
-    }
-
-    // Remove from right sibling
-    for (const auto& [key, child] : borrowed_children) {
-      right_children.remove(key);
-    }
-
-    // Insert into this node (children will be sorted at the end)
+    // Transfer prefix from right sibling to end of this node
+    // This does a bulk copy and shifts arrays only once
     auto& children = node->internal_children;
-    for (const auto& [key, child] : borrowed_children) {
-      auto [insert_it, inserted] = children.insert(key, child);
-      assert(inserted && "Borrowing should always succeed");
-      // Update parent pointer
-      child->parent = node;
+    size_type old_size = children.size();
+    children.transfer_prefix_from(right_children, actual_borrow);
+
+    // Update parent pointers for all transferred children (from old_size)
+    auto it = children.begin();
+    std::advance(it, old_size);
+    for (size_type i = 0; i < actual_borrow; ++i, ++it) {
+      it->second->parent = node;
     }
 
     // Update parent key for right sibling (its minimum changed to first
