@@ -75,9 +75,17 @@ TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
     REQUIRE_THROWS_AS(arr.insert(6, "six"), std::runtime_error);
   }
 
-  SECTION("Insert throws when key already exists") {
-    arr.insert(3, "three");
-    REQUIRE_THROWS_AS(arr.insert(3, "tres"), std::runtime_error);
+  SECTION("Insert returns false when key already exists") {
+    auto [it1, inserted1] = arr.insert(3, "three");
+    REQUIRE(inserted1 == true);
+    REQUIRE(it1->first == 3);
+    REQUIRE(it1->second == "three");
+
+    auto [it2, inserted2] = arr.insert(3, "tres");
+    REQUIRE(inserted2 == false);
+    REQUIRE(it2->first == 3);
+    REQUIRE(it2->second == "three");  // Value should be unchanged
+    REQUIRE(it1 == it2);              // Both iterators point to same element
   }
 }
 

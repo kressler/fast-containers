@@ -169,10 +169,13 @@ class ordered_array {
    *
    * @param key The key to insert
    * @param value The value to insert
+   * @return A pair consisting of an iterator to the inserted element (or to the
+   *         element that prevented insertion) and a bool indicating whether
+   *         insertion took place (true if inserted, false if key already
+   * exists)
    * @throws std::runtime_error if the array is full
-   * @throws std::runtime_error if the key already exists
    */
-  void insert(const Key& key, const Value& value) {
+  std::pair<iterator, bool> insert(const Key& key, const Value& value) {
     // Check if array is full
     if (size_ >= Length) {
       throw std::runtime_error("Cannot insert: array is full");
@@ -186,7 +189,7 @@ class ordered_array {
 
     // Check if key already exists
     if (idx < size_ && keys_[idx] == key) {
-      throw std::runtime_error("Cannot insert: key already exists");
+      return {iterator(this, idx), false};
     }
 
     // Shift elements to the right to make space in both arrays
@@ -197,6 +200,8 @@ class ordered_array {
     keys_[idx] = key;
     values_[idx] = value;
     ++size_;
+
+    return {iterator(this, idx), true};
   }
 
   /**
