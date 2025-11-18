@@ -1,3 +1,5 @@
+#include <absl/container/btree_map.h>
+
 #include <chrono>
 #include <iostream>
 #include <map>
@@ -10,6 +12,7 @@ int main(int argc, char** argv) {
   uint64_t seed = std::chrono::system_clock::now().time_since_epoch().count();
   std::uniform_int_distribution<size_t> num_key_dist(100000, 2000000);
   uint64_t btree_time = 0;
+  uint64_t absl_time = 0;
   uint64_t map_time = 0;
   uint dummy = 0;
   for (size_t iter = 0; iter < 1000; ++iter) {
@@ -21,8 +24,10 @@ int main(int argc, char** argv) {
     std::cout << "Iteration " << iter << " using " << num_keys << " keys, seed "
               << iter + seed << std::endl;
 
-    std::map<int, int> ordered_map;
-    fast_containers::btree<int, int, 32, 64, fast_containers::SearchMode::SIMD>
+    std::map<int, std::array<char, 256>> ordered_map;
+    absl::btree_map<int, std::array<char, 256>> absl_btree;
+    fast_containers::btree<int, std::array<char, 256>, 4, 64,
+                           fast_containers::SearchMode::SIMD>
         btree;
     std::unordered_set<int> seen;
 
@@ -31,13 +36,16 @@ int main(int argc, char** argv) {
       int val = dist(rng);
       if (seen.find(key) == seen.end()) {
         uint64_t start = __rdtscp(&dummy);
-        ordered_map.insert({key, val});
-        uint64_t mid = __rdtscp(&dummy);
-        btree.insert(key, val);
+        ordered_map.insert({key, {}});
+        uint64_t mid1 = __rdtscp(&dummy);
+        absl_btree.insert({key, {}});
+        uint64_t mid2 = __rdtscp(&dummy);
+        btree.insert(key, {});
         uint64_t end = __rdtscp(&dummy);
 
-        map_time += mid - start;
-        btree_time += end - mid;
+        map_time += mid1 - start;
+        absl_time += mid2 - mid1;
+        btree_time += end - mid2;
 
         seen.insert(key);
       }
@@ -45,18 +53,20 @@ int main(int argc, char** argv) {
 
     double ratio =
         static_cast<double>(btree_time) / static_cast<double>(map_time);
+    double absl_ratio =
+        static_cast<double>(btree_time) / static_cast<double>(absl_time);
     std::cout << "Ordered map time: " << map_time
-              << ", btree time: " << btree_time << ", ratio: " << ratio
-              << std::endl;
+              << ", absl time: " << absl_time << ", btree time: " << btree_time
+              << ", ratio(btree/map): " << ratio
+              << ", ratio(btree/absl): " << absl_ratio << std::endl;
 
     auto it = ordered_map.begin();
     auto btree_it = btree.begin();
 
     while (it != ordered_map.end() && btree_it != btree.end()) {
-      if (it->first != btree_it->first && it->second != btree_it->second) {
-        std::cout << "Mismatch at key " << it->first << " != " << it->second
-                  << " or val " << it->second << " != " << btree_it->second
-                  << std::endl;
+      if (it->first != btree_it->first) {
+        std::cout << "Mismatch at key " << it->first
+                  << " != " << btree_it->first << std::endl;
         return 1;
       }
       it++;

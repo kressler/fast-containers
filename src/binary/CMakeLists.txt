@@ -1,1 +1,2 @@
 add_executable(btree_insert_stress btree_insert_stress.cpp)
+target_link_libraries(btree_insert_stress PRIVATE absl::base)
