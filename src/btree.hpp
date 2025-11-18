@@ -80,7 +80,6 @@ class btree {
    * InternalNode* (all children at the same level have the same type).
    */
   struct InternalNode {
-    bool children_are_leaves;
     union {
       ordered_array<Key, LeafNode*, InternalNodeSize, SearchModeT, MoveModeT>
           leaf_children;
@@ -88,6 +87,7 @@ class btree {
                     MoveModeT>
           internal_children;
     };
+    bool children_are_leaves;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
 
     // Constructor for leaf children
