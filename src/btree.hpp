@@ -469,7 +469,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 1: Empty tree - create first leaf
   if (size_ == 0) {
     LeafNode* leaf = allocate_leaf_node();
-    leaf->data.insert(key, value);
+    auto [leaf_it, inserted] = leaf->data.insert(key, value);
+    assert(inserted && "First insert into empty leaf should always succeed");
 
     root_is_leaf_ = true;
     leaf_root_ = leaf;
@@ -477,33 +478,23 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     rightmost_leaf_ = leaf;
     size_ = 1;
 
-    return {iterator(leaf, leaf->data.begin()), true};
+    return {iterator(leaf, leaf_it), true};
   }
 
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Check if key already exists
-  auto existing = leaf->data.find(key);
-  if (existing != leaf->data.end()) {
-    // Key exists - return iterator to existing element
-    return {iterator(leaf, existing), false};
-  }
-
   // Check if leaf has space (Phase 3 limitation: no splitting)
   assert(leaf->data.size() < LeafNodeSize &&
          "Leaf is full - node splitting not implemented in Phase 3");
 
-  // Insert into the leaf (ordered_array::insert returns void)
-  leaf->data.insert(key, value);
-  size_++;
+  // Insert into the leaf - this handles duplicate detection
+  auto [leaf_it, inserted] = leaf->data.insert(key, value);
+  if (inserted) {
+    size_++;
+  }
 
-  // Find the newly inserted element and return iterator to it
-  auto inserted_it = leaf->data.find(key);
-  assert(inserted_it != leaf->data.end() &&
-         "Just-inserted key should be found");
-
-  return {iterator(leaf, inserted_it), true};
+  return {iterator(leaf, leaf_it), inserted};
 }
 
 }  // namespace fast_containers
