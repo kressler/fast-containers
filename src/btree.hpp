@@ -232,16 +232,23 @@ class btree {
     return end();
   }
 
+  /**
+   * Inserts a key-value pair into the tree.
+   * Returns a pair with an iterator to the inserted/existing element and a bool
+   * indicating whether insertion took place (true) or the key already existed
+   * (false).
+   *
+   * Phase 3 limitation: Does not handle node splitting. If a leaf is full,
+   * the insertion will fail with an assertion. Node splitting will be
+   * implemented in Phase 4.
+   *
+   * Complexity: O(log n)
+   */
+  std::pair<iterator, bool> insert(const Key& key, const Value& value);
+
  private:
-  //
-  // TEST-ONLY PUBLIC MEMBERS
-  // These members are exposed for testing.
-  // They will be made private once insert() is implemented in Phase 3.
-  //
- public:
   /**
    * Allocate a new leaf node.
-   * @warning For testing only - will be private in Phase 3
    */
   LeafNode* allocate_leaf_node();
 
@@ -249,24 +256,20 @@ class btree {
    * Allocate a new internal node.
    * @param leaf_children If true, children are LeafNode*, otherwise
    * InternalNode*
-   * @warning For testing only - will be private in Phase 3
    */
   InternalNode* allocate_internal_node(bool leaf_children);
 
   /**
    * Deallocate a leaf node.
-   * @warning For testing only - will be private in Phase 3
    */
   void deallocate_leaf_node(LeafNode* node);
 
   /**
    * Deallocate an internal node.
-   * @warning For testing only - will be private in Phase 3
    */
   void deallocate_internal_node(InternalNode* node);
 
-  // Root and size members - exposed for testing
-  // @warning Will be private in Phase 3
+  // Root and size members
   bool root_is_leaf_;
   union {
     LeafNode* leaf_root_;
@@ -275,11 +278,8 @@ class btree {
   size_type size_;
 
   // Cached pointers to first and last leaf for O(1) begin()/rbegin()
-  // @warning Will be private in Phase 3
   LeafNode* leftmost_leaf_;
   LeafNode* rightmost_leaf_;
-
- private:
   /**
    * Recursively deallocate all nodes in the tree.
    */
@@ -456,6 +456,54 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
   // Deallocate this internal node
   deallocate_internal_node(node);
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::insert(const Key& key, const Value& value) {
+  // Case 1: Empty tree - create first leaf
+  if (size_ == 0) {
+    LeafNode* leaf = allocate_leaf_node();
+    leaf->data.insert(key, value);
+
+    root_is_leaf_ = true;
+    leaf_root_ = leaf;
+    leftmost_leaf_ = leaf;
+    rightmost_leaf_ = leaf;
+    size_ = 1;
+
+    return {iterator(leaf, leaf->data.begin()), true};
+  }
+
+  // Case 2: Tree has elements - find appropriate leaf
+  LeafNode* leaf = find_leaf_for_key(key);
+
+  // Check if key already exists
+  auto existing = leaf->data.find(key);
+  if (existing != leaf->data.end()) {
+    // Key exists - return iterator to existing element
+    return {iterator(leaf, existing), false};
+  }
+
+  // Check if leaf has space (Phase 3 limitation: no splitting)
+  assert(leaf->data.size() < LeafNodeSize &&
+         "Leaf is full - node splitting not implemented in Phase 3");
+
+  // Insert into the leaf (ordered_array::insert returns void)
+  leaf->data.insert(key, value);
+  size_++;
+
+  // Find the newly inserted element and return iterator to it
+  auto inserted_it = leaf->data.find(key);
+  assert(inserted_it != leaf->data.end() &&
+         "Just-inserted key should be found");
+
+  return {iterator(leaf, inserted_it), true};
 }
 
 }  // namespace fast_containers
