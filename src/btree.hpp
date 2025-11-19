@@ -37,6 +37,7 @@ class btree {
   using mapped_type = Value;
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
+  using allocator_type = std::allocator<value_type>;
 
   /**
    * Leaf node - stores actual key-value pairs in an ordered_array.
@@ -141,6 +142,14 @@ class btree {
    * Complexity: O(1)
    */
   bool empty() const { return size_ == 0; }
+
+  /**
+   * Returns the allocator associated with the container.
+   * Note: The current implementation uses raw new/delete for node allocation.
+   * This method provides API compatibility with std::map.
+   * Complexity: O(1)
+   */
+  allocator_type get_allocator() const { return allocator_type(); }
 
   /**
    * Forward iterator for btree.
