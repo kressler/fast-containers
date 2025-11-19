@@ -383,6 +383,17 @@ class btree {
   }
 
   /**
+   * Returns a pair of iterators representing the range of elements with the
+   * given key. For a B+ tree with unique keys, this range will contain at most
+   * one element. Returns {lower_bound(key), upper_bound(key)}.
+   *
+   * Complexity: O(log n)
+   */
+  std::pair<iterator, iterator> equal_range(const Key& key) {
+    return {lower_bound(key), upper_bound(key)};
+  }
+
+  /**
    * Inserts a key-value pair into the tree.
    * Returns a pair with an iterator to the inserted/existing element and a bool
    * indicating whether insertion took place (true) or the key already existed
@@ -393,6 +404,28 @@ class btree {
    * Complexity: O(log n)
    */
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
+
+  /**
+   * Constructs an element in-place in the tree.
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns a pair with an iterator to the inserted/existing element
+   * and a bool indicating whether insertion took place.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  std::pair<iterator, bool> emplace(Args&&... args);
+
+  /**
+   * Constructs an element in-place with a position hint.
+   * The hint iterator is currently ignored (for std::map compatibility).
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns an iterator to the inserted/existing element.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  iterator emplace_hint(const_iterator hint, Args&&... args);
 
   /**
    * Accesses or inserts an element with the specified key.
@@ -452,6 +485,15 @@ class btree {
    * Complexity: O(log n)
    */
   size_type count(const Key& key) const { return find(key) != end() ? 1 : 0; }
+
+  /**
+   * Swaps the contents of this tree with another tree.
+   * All iterators and references remain valid but now refer to elements in the
+   * other container.
+   *
+   * Complexity: O(1)
+   */
+  void swap(btree& other) noexcept;
 
  private:
   /**
@@ -705,6 +747,36 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::swap(btree& other) noexcept {
+  // Swap root pointer (handle union carefully)
+  if (root_is_leaf_ && other.root_is_leaf_) {
+    std::swap(leaf_root_, other.leaf_root_);
+  } else if (!root_is_leaf_ && !other.root_is_leaf_) {
+    std::swap(internal_root_, other.internal_root_);
+  } else {
+    // One is leaf, one is internal - need to swap carefully
+    if (root_is_leaf_) {
+      LeafNode* temp_leaf = leaf_root_;
+      internal_root_ = other.internal_root_;
+      other.leaf_root_ = temp_leaf;
+    } else {
+      InternalNode* temp_internal = internal_root_;
+      leaf_root_ = other.leaf_root_;
+      other.internal_root_ = temp_internal;
+    }
+  }
+
+  // Swap other members
+  std::swap(root_is_leaf_, other.root_is_leaf_);
+  std::swap(size_, other.size_);
+  std::swap(leftmost_leaf_, other.leftmost_leaf_);
+  std::swap(rightmost_leaf_, other.rightmost_leaf_);
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::btree(const btree& other)
     : root_is_leaf_(true),
@@ -935,6 +1007,35 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace(Args&&... args) {
+  // Construct the pair from the arguments
+  value_type pair(std::forward<Args>(args)...);
+  // Extract key and value, then insert
+  return insert(pair.first, pair.second);
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::iterator
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace_hint(const_iterator hint, Args&&... args) {
+  // For now, ignore the hint and just call emplace
+  // In the future, we could use the hint to optimize the search
+  (void)hint;  // Suppress unused parameter warning
+  return emplace(std::forward<Args>(args)...).first;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
