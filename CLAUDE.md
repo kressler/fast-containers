@@ -396,7 +396,7 @@ int main(int argc, char** argv) {
 
 **Use cases**: Custom benchmark harnesses, performance testing tools, data structure profiling
 
-**Reference**: See `src/lyra_example.cpp` for a complete example
+**Reference**: See `src/binary/lyra_example.cpp` for a complete example
 
 ## GitHub Workflow
 
