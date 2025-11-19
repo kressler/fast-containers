@@ -2233,6 +2233,410 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 }
 
+TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("emplace - insert new element") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace with separate key and value
+    auto [it, inserted] = tree.emplace(5, 50);
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace - existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Try to emplace duplicate
+    auto [it, inserted] = tree.emplace(5, 999);
+
+    REQUIRE(!inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->second == 50);  // Original value unchanged
+  }
+
+  SECTION("emplace - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace(1, 10);
+    auto [it2, ins2] = tree.emplace(2, 20);
+    auto [it3, ins3] = tree.emplace(3, 30);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("emplace - with std::pair") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace using std::pair
+    auto [it, inserted] = tree.emplace(std::make_pair(5, 50));
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace("apple", 1);
+    auto [it2, ins2] = tree.emplace("banana", 2);
+    auto [it3, ins3] = tree.emplace("cherry", 3);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find("apple")->second == 1);
+    REQUIRE(tree.find("banana")->second == 2);
+    REQUIRE(tree.find("cherry")->second == 3);
+  }
+
+  SECTION("emplace - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.emplace(i, i * 10);
+      REQUIRE(inserted);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("emplace - return value on duplicate") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace(5, 50);
+    REQUIRE(ins1);
+    REQUIRE(it1->second == 50);
+
+    auto [it2, ins2] = tree.emplace(5, 999);
+    REQUIRE(!ins2);
+    REQUIRE(it2->second == 50);  // Returns iterator to existing element
+  }
+}
+
+TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("emplace_hint - insert new element") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace with hint (hint is ignored for now)
+    auto it = tree.emplace_hint(tree.end(), 5, 50);
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace_hint - existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Try to emplace duplicate with hint
+    auto it = tree.emplace_hint(tree.begin(), 5, 999);
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->second == 50);  // Original value unchanged
+  }
+
+  SECTION("emplace_hint - multiple elements with hints") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), 1, 10);
+    auto it2 = tree.emplace_hint(it1, 2, 20);
+    auto it3 = tree.emplace_hint(it2, 3, 30);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("emplace_hint - with std::pair") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace using std::pair with hint
+    auto it = tree.emplace_hint(tree.end(), std::make_pair(5, 50));
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace_hint - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), "apple", 1);
+    auto it2 = tree.emplace_hint(tree.end(), "banana", 2);
+    auto it3 = tree.emplace_hint(tree.end(), "cherry", 3);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find("apple")->second == 1);
+    REQUIRE(tree.find("banana")->second == 2);
+    REQUIRE(tree.find("cherry")->second == 3);
+  }
+
+  SECTION("emplace_hint - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto hint = tree.end();
+    for (int i = 1; i <= 100; ++i) {
+      hint = tree.emplace_hint(hint, i, i * 10);
+      REQUIRE(hint->first == i);
+      REQUIRE(hint->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("emplace_hint - return value on duplicate") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), 5, 50);
+    REQUIRE(it1->second == 50);
+
+    auto it2 = tree.emplace_hint(it1, 5, 999);
+    REQUIRE(it2->second == 50);  // Returns iterator to existing element
+  }
+
+  SECTION("emplace_hint - wrong hint doesn't break correctness") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert some elements
+    tree.insert(1, 10);
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+
+    // Emplace with "wrong" hint (doesn't matter since we ignore it)
+    auto it = tree.emplace_hint(tree.begin(), 7, 70);
+
+    REQUIRE(tree.size() == 4);
+    REQUIRE(it->first == 7);
+    REQUIRE(it->second == 70);
+    REQUIRE(tree.find(7) != tree.end());
+  }
+}
+TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("operator[] - insert new element with default value") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Access non-existent key creates it with default value (0 for int)
+    int& value = tree[5];
+    REQUIRE(value == 0);
+    REQUIRE(tree.size() == 1);
+
+    // Verify the element exists
+    auto it = tree.find(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->second == 0);
+  }
+
+  SECTION("operator[] - access existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Access existing key returns its value
+    int& value = tree[5];
+    REQUIRE(value == 50);
+    REQUIRE(tree.size() == 1);  // Size unchanged
+  }
+
+  SECTION("operator[] - modify value through reference") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Modify value through operator[]
+    tree[5] = 100;
+
+    REQUIRE(tree[5] == 100);
+    auto it = tree.find(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("operator[] - insert and modify in one operation") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert and immediately modify
+    tree[10] = 999;
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(tree[10] == 999);
+  }
+
+  SECTION("operator[] - multiple inserts and accesses") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert multiple elements
+    tree[1] = 10;
+    tree[2] = 20;
+    tree[3] = 30;
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree[1] == 10);
+    REQUIRE(tree[2] == 20);
+    REQUIRE(tree[3] == 30);
+
+    // Modify existing
+    tree[2] = 200;
+    REQUIRE(tree[2] == 200);
+    REQUIRE(tree.size() == 3);  // Size unchanged
+  }
+
+  SECTION("operator[] - mixed insert and access") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Pre-populate some elements
+    for (int i = 1; i <= 10; i += 2) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 5);  // 1, 3, 5, 7, 9
+
+    // Access existing (odd numbers)
+    REQUIRE(tree[1] == 10);
+    REQUIRE(tree[5] == 50);
+    REQUIRE(tree.size() == 5);
+
+    // Insert new (even numbers)
+    tree[2] = 20;
+    tree[4] = 40;
+    REQUIRE(tree.size() == 7);
+
+    // Verify all elements
+    for (int i = 1; i <= 5; ++i) {
+      REQUIRE(tree[i] == i * 10);
+    }
+  }
+
+  SECTION("operator[] - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert many elements
+    for (int i = 1; i <= 100; ++i) {
+      tree[i] = i * 10;
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      REQUIRE(tree[i] == i * 10);
+    }
+
+    // Modify some elements
+    for (int i = 1; i <= 100; i += 10) {
+      tree[i] = 999;
+    }
+
+    // Verify modifications
+    for (int i = 1; i <= 100; i += 10) {
+      REQUIRE(tree[i] == 999);
+    }
+
+    REQUIRE(tree.size() == 100);  // Size unchanged
+  }
+
+  SECTION("operator[] - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    // Insert with operator[]
+    tree["apple"] = 1;
+    tree["banana"] = 2;
+    tree["cherry"] = 3;
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree["apple"] == 1);
+    REQUIRE(tree["banana"] == 2);
+    REQUIRE(tree["cherry"] == 3);
+
+    // Modify existing
+    tree["banana"] = 20;
+    REQUIRE(tree["banana"] == 20);
+    REQUIRE(tree.size() == 3);
+
+    // Insert new
+    tree["date"] = 4;
+    REQUIRE(tree.size() == 4);
+    REQUIRE(tree["date"] == 4);
+  }
+
+  SECTION("operator[] - default value for custom types") {
+    btree<int, std::string, 4, 4, Mode> tree;
+
+    // Access non-existent key creates it with default value (empty string)
+    std::string& value = tree[5];
+    REQUIRE(value.empty());
+    REQUIRE(tree.size() == 1);
+
+    // Modify the value
+    tree[5] = "hello";
+    REQUIRE(tree[5] == "hello");
+  }
+
+  SECTION("operator[] - increment pattern") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Common pattern: increment counter
+    for (int i = 0; i < 10; ++i) {
+      tree[5]++;  // Increment value at key 5
+    }
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(tree[5] == 10);
+  }
+
+  SECTION("operator[] - overwrite pattern") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert initial value
+    tree.insert(5, 50);
+    REQUIRE(tree[5] == 50);
+
+    // Overwrite with operator[]
+    tree[5] = 100;
+    REQUIRE(tree[5] == 100);
+    REQUIRE(tree.size() == 1);
+  }
+}
 TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;

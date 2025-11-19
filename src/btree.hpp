@@ -369,6 +369,38 @@ class btree {
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
 
   /**
+   * Constructs an element in-place in the tree.
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns a pair with an iterator to the inserted/existing element
+   * and a bool indicating whether insertion took place.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  std::pair<iterator, bool> emplace(Args&&... args);
+
+  /**
+   * Constructs an element in-place with a position hint.
+   * The hint iterator is currently ignored (for std::map compatibility).
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns an iterator to the inserted/existing element.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  iterator emplace_hint(const_iterator hint, Args&&... args);
+
+  /**
+   * Accesses or inserts an element with the specified key.
+   * If the key exists, returns a reference to the associated value.
+   * If the key does not exist, inserts a new element with default-constructed
+   * value and returns a reference to it.
+   *
+   * Complexity: O(log n)
+   */
+  Value& operator[](const Key& key);
+
+  /**
    * Removes the element with the given key from the tree.
    * Returns the number of elements removed (0 or 1).
    *
@@ -903,16 +935,25 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
+  // Use lower_bound to find position - single search for both existence check
+  // and insertion point
+  auto pos = leaf->data.lower_bound(key);
+
+  // Check if key already exists at the position found by lower_bound
+  if (pos != leaf->data.end() && pos->first == key) {
+    return {iterator(leaf, pos), false};
+  }
+
   // If leaf is full, split it
   if (leaf->data.size() >= LeafNodeSize) {
     return split_leaf(leaf, key, value);
   }
 
-  // Leaf has space - insert normally
+  // Leaf has space - insert using hint to avoid re-searching
   // Track if this will become the new minimum
   bool will_be_new_min = leaf->data.empty() || key < leaf->data.begin()->first;
 
-  auto [leaf_it, inserted] = leaf->data.insert(key, value);
+  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, value);
   if (inserted) {
     size_++;
 
@@ -929,6 +970,46 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace(Args&&... args) {
+  // Construct the pair from the arguments
+  value_type pair(std::forward<Args>(args)...);
+  // Extract key and value, then insert
+  return insert(pair.first, pair.second);
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::iterator
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace_hint(const_iterator hint, Args&&... args) {
+  // For now, ignore the hint and just call emplace
+  // In the future, we could use the hint to optimize the search
+  (void)hint;  // Suppress unused parameter warning
+  return emplace(std::forward<Args>(args)...).first;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+             MoveModeT>::operator[](const Key& key) {
+  // Try to insert with default-constructed value
+  // If key exists, insert returns the existing element
+  auto [it, inserted] = insert(key, Value{});
+  return it->second;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
