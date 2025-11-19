@@ -460,6 +460,15 @@ class btree {
    */
   size_type count(const Key& key) const { return find(key) != end() ? 1 : 0; }
 
+  /**
+   * Swaps the contents of this tree with another tree.
+   * All iterators and references remain valid but now refer to elements in the
+   * other container.
+   *
+   * Complexity: O(1)
+   */
+  void swap(btree& other) noexcept;
+
  private:
   /**
    * Allocate a new leaf node.
@@ -707,6 +716,36 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::~btree() {
   deallocate_tree();
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::swap(btree& other) noexcept {
+  // Swap root pointer (handle union carefully)
+  if (root_is_leaf_ && other.root_is_leaf_) {
+    std::swap(leaf_root_, other.leaf_root_);
+  } else if (!root_is_leaf_ && !other.root_is_leaf_) {
+    std::swap(internal_root_, other.internal_root_);
+  } else {
+    // One is leaf, one is internal - need to swap carefully
+    if (root_is_leaf_) {
+      LeafNode* temp_leaf = leaf_root_;
+      internal_root_ = other.internal_root_;
+      other.leaf_root_ = temp_leaf;
+    } else {
+      InternalNode* temp_internal = internal_root_;
+      leaf_root_ = other.leaf_root_;
+      other.internal_root_ = temp_internal;
+    }
+  }
+
+  // Swap other members
+  std::swap(root_is_leaf_, other.root_is_leaf_);
+  std::swap(size_, other.size_);
+  std::swap(leftmost_leaf_, other.leftmost_leaf_);
+  std::swap(rightmost_leaf_, other.rightmost_leaf_);
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
