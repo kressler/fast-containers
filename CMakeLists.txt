@@ -94,6 +94,10 @@ add_subdirectory(third_party/benchmark)
 set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Use C++23 for Abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp)
 
+# Add Lyra commandline parser (header-only)
+add_library(lyra INTERFACE)
+target_include_directories(lyra INTERFACE third_party/lyra/include)
+
 # Enable testing
 enable_testing()
 

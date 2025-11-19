@@ -20,4 +20,8 @@ add_executable(ordered_array_search_benchmark
 target_link_libraries(ordered_array_search_benchmark
                       PRIVATE benchmark::benchmark)
 
+# Example: Lyra command line parser
+add_executable(lyra_example lyra_example.cpp)
+target_link_libraries(lyra_example PRIVATE lyra)
+
 add_subdirectory(binary)

@@ -1,13 +1,13 @@
 # Fast Containers - C++ SIMD Containers
 
 ## Stack
-- C++23, CMake 3.30+, Catch2 v3.11.0, Google Benchmark v1.9.4
+- C++23, CMake 3.30+, Catch2 v3.11.0, Google Benchmark v1.9.4, Lyra 1.6.1
 - Style: Google C++ (clang-format), 80 chars, 2 spaces, `int* ptr`
 
 ## Structure
 ```
 src/{ordered_array.hpp, tests/, benchmarks/}
-third_party/{catch2/, benchmark/}  # submodules
+third_party/{catch2/, benchmark/, lyra/}  # submodules
 hooks/, install-hooks.sh
 ```
 
@@ -365,6 +365,38 @@ perf stat -e cycles,instructions,cache-references,cache-misses,branches \\
 # IPC = instructions / cycles
 # Cache miss rate = cache-misses / cache-references * 100
 ```
+
+## Command-Line Parsing with Lyra
+
+**Integration**: Lyra is available as a header-only library via `target_link_libraries(your_target PRIVATE lyra)`
+
+**Example usage**:
+```cpp
+#include <lyra/lyra.hpp>
+
+int main(int argc, char** argv) {
+  bool show_help = false;
+  int size = 64;
+  std::string mode = "binary";
+
+  auto cli = lyra::cli()
+    | lyra::help(show_help)
+    | lyra::opt(size, "size")["-s"]["--size"]("Array size")
+    | lyra::opt(mode, "mode")["-m"]["--mode"]("Search mode: binary|linear|simd");
+
+  auto result = cli.parse({argc, argv});
+  if (!result || show_help) {
+    std::cout << cli << std::endl;
+    return show_help ? 0 : 1;
+  }
+
+  // Use parsed parameters...
+}
+```
+
+**Use cases**: Custom benchmark harnesses, performance testing tools, data structure profiling
+
+**Reference**: See `src/lyra_example.cpp` for a complete example
 
 ## GitHub Workflow
 
