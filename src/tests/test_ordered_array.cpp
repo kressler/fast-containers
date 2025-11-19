@@ -179,6 +179,23 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
     arr.remove(25);
     REQUIRE(arr.size() == 5);
   }
+
+  SECTION("Remove returns number of elements removed") {
+    // Removing existing element returns 1
+    auto removed = arr.remove(30);
+    REQUIRE(removed == 1);
+    REQUIRE(arr.size() == 4);
+
+    // Removing non-existing element returns 0
+    removed = arr.remove(100);
+    REQUIRE(removed == 0);
+    REQUIRE(arr.size() == 4);
+
+    // Removing already removed element returns 0
+    removed = arr.remove(30);
+    REQUIRE(removed == 0);
+    REQUIRE(arr.size() == 4);
+  }
 }
 
 TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",

@@ -267,8 +267,9 @@ class ordered_array {
    * If the element does not exist, does nothing.
    *
    * @param key The key to remove
+   * @return The number of elements removed (0 or 1)
    */
-  void remove(const Key& key) {
+  size_type remove(const Key& key) {
     auto it = find(key);
     if (it != end()) {
       size_type idx = it.index();
@@ -276,7 +277,9 @@ class ordered_array {
       simd_move_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
       simd_move_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
       --size_;
+      return 1;
     }
+    return 0;
   }
 
   /**
