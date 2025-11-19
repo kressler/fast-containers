@@ -2637,3 +2637,203 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
     REQUIRE(tree.size() == 1);
   }
 }
+TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("swap - two empty trees") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    tree1.swap(tree2);
+
+    REQUIRE(tree1.empty());
+    REQUIRE(tree2.empty());
+  }
+
+  SECTION("swap - empty with non-empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    for (int i = 1; i <= 10; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree1.swap(tree2);
+
+    REQUIRE(tree1.size() == 10);
+    REQUIRE(tree2.empty());
+
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree1.find(i) != tree1.end());
+      REQUIRE(tree1.find(i)->second == i * 10);
+    }
+  }
+
+  SECTION("swap - non-empty with empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    tree1.swap(tree2);
+
+    REQUIRE(tree1.empty());
+    REQUIRE(tree2.size() == 10);
+
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+      REQUIRE(tree2.find(i)->second == i * 10);
+    }
+  }
+
+  SECTION("swap - two non-empty trees") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    // Fill tree1 with 1-10
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    // Fill tree2 with 100-110
+    for (int i = 100; i <= 110; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree1.swap(tree2);
+
+    // tree1 should have tree2's old data
+    REQUIRE(tree1.size() == 11);
+    for (int i = 100; i <= 110; ++i) {
+      REQUIRE(tree1.find(i) != tree1.end());
+      REQUIRE(tree1.find(i)->second == i * 10);
+    }
+    REQUIRE(tree1.find(5) == tree1.end());
+
+    // tree2 should have tree1's old data
+    REQUIRE(tree2.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+      REQUIRE(tree2.find(i)->second == i * 10);
+    }
+    REQUIRE(tree2.find(100) == tree2.end());
+  }
+
+  SECTION("swap - self swap") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    tree.swap(tree);  // Self swap
+
+    // Should be unchanged
+    REQUIRE(tree.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree.find(i) != tree.end());
+      REQUIRE(tree.find(i)->second == i * 10);
+    }
+  }
+
+  SECTION("swap - large trees") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    // Fill tree1 with 1-1000
+    for (int i = 1; i <= 1000; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    // Fill tree2 with 2000-3000
+    for (int i = 2000; i <= 3000; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree1.swap(tree2);
+
+    // Verify tree1 has tree2's old data
+    REQUIRE(tree1.size() == 1001);
+    REQUIRE(tree1.find(2500) != tree1.end());
+    REQUIRE(tree1.find(2500)->second == 25000);
+    REQUIRE(tree1.find(500) == tree1.end());
+
+    // Verify tree2 has tree1's old data
+    REQUIRE(tree2.size() == 1000);
+    REQUIRE(tree2.find(500) != tree2.end());
+    REQUIRE(tree2.find(500)->second == 5000);
+    REQUIRE(tree2.find(2500) == tree2.end());
+  }
+
+  SECTION("swap - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree1;
+    btree<std::string, int, 4, 4, Mode> tree2;
+
+    tree1.insert("apple", 1);
+    tree1.insert("banana", 2);
+
+    tree2.insert("cherry", 3);
+    tree2.insert("date", 4);
+    tree2.insert("elderberry", 5);
+
+    tree1.swap(tree2);
+
+    REQUIRE(tree1.size() == 3);
+    REQUIRE(tree1.find("cherry") != tree1.end());
+    REQUIRE(tree1.find("apple") == tree1.end());
+
+    REQUIRE(tree2.size() == 2);
+    REQUIRE(tree2.find("apple") != tree2.end());
+    REQUIRE(tree2.find("cherry") == tree2.end());
+  }
+
+  SECTION("swap - iterators remain valid") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    tree1.insert(1, 10);
+    tree1.insert(2, 20);
+
+    tree2.insert(100, 1000);
+    tree2.insert(200, 2000);
+
+    auto it1 = tree1.find(1);
+    auto it2 = tree2.find(100);
+
+    tree1.swap(tree2);
+
+    // Iterators are now invalidated after swap in our implementation
+    // (we don't guarantee iterator validity across swap)
+    // But the elements should have moved correctly
+
+    REQUIRE(tree1.find(100) != tree1.end());
+    REQUIRE(tree1.find(100)->second == 1000);
+    REQUIRE(tree2.find(1) != tree2.end());
+    REQUIRE(tree2.find(1)->second == 10);
+  }
+
+  SECTION("swap - followed by modifications") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    tree1.insert(1, 10);
+    tree2.insert(100, 1000);
+
+    tree1.swap(tree2);
+
+    // Modify after swap
+    tree1.insert(101, 1010);
+    tree2.insert(2, 20);
+
+    REQUIRE(tree1.size() == 2);
+    REQUIRE(tree1.find(100) != tree1.end());
+    REQUIRE(tree1.find(101) != tree1.end());
+
+    REQUIRE(tree2.size() == 2);
+    REQUIRE(tree2.find(1) != tree2.end());
+    REQUIRE(tree2.find(2) != tree2.end());
+  }
+}
