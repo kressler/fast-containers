@@ -331,6 +331,18 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   return {iterator(leaf, leaf_it), inserted};
 }
 
+// insert(value_type)
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::insert(const value_type& value) {
+  return insert(value.first, value.second);
+}
+
 // emplace
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,

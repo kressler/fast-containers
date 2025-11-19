@@ -343,6 +343,18 @@ class btree {
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
 
   /**
+   * Inserts a key-value pair into the tree.
+   * Equivalent to insert(value.first, value.second).
+   *
+   * Returns a pair with an iterator to the inserted/existing element and a bool
+   * indicating whether insertion took place (true) or the key already existed
+   * (false).
+   *
+   * Complexity: O(log n)
+   */
+  std::pair<iterator, bool> insert(const value_type& value);
+
+  /**
    * Constructs an element in-place in the tree.
    * The arguments are forwarded to construct a value_type (std::pair<Key,
    * Value>). Returns a pair with an iterator to the inserted/existing element

@@ -312,6 +312,35 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
     REQUIRE(tree.size() == 1);   // Size unchanged
   }
 
+  SECTION("Insert with std::pair (STL compatibility)") {
+    BTree tree;
+
+    // Insert using pair - matches std::map API
+    auto [it1, inserted1] = tree.insert({5, 50});
+    REQUIRE(inserted1 == true);
+    REQUIRE(it1->first == 5);
+    REQUIRE(it1->second == 50);
+    REQUIRE(tree.size() == 1);
+
+    // Insert multiple using pairs
+    tree.insert({1, 10});
+    tree.insert({3, 30});
+    tree.insert({7, 70});
+    REQUIRE(tree.size() == 4);
+
+    // Verify all elements
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(3)->second == 30);
+    REQUIRE(tree.find(5)->second == 50);
+    REQUIRE(tree.find(7)->second == 70);
+
+    // Duplicate insert with pair returns false
+    auto [it2, inserted2] = tree.insert({5, 99});
+    REQUIRE(inserted2 == false);
+    REQUIRE(it2->second == 50);  // Value unchanged
+    REQUIRE(tree.size() == 4);   // Size unchanged
+  }
+
   SECTION("Insert and find interleaved") {
     BTree tree;
 
