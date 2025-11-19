@@ -37,6 +37,18 @@ class btree {
   using mapped_type = Value;
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
+  using key_compare = std::less<Key>;
+
+  /**
+   * Compares value_type (pairs) by their keys.
+   * Used by value_comp() to provide pair comparison.
+   */
+  class value_compare {
+   public:
+    bool operator()(const value_type& lhs, const value_type& rhs) const {
+      return key_compare()(lhs.first, rhs.first);
+    }
+  };
 
   /**
    * Leaf node - stores actual key-value pairs in an ordered_array.
@@ -141,6 +153,20 @@ class btree {
    * Complexity: O(1)
    */
   bool empty() const { return size_ == 0; }
+
+  /**
+   * Returns the key comparison object.
+   * Uses std::less<Key> for key comparisons.
+   * Complexity: O(1)
+   */
+  key_compare key_comp() const { return key_compare(); }
+
+  /**
+   * Returns the value comparison object.
+   * Compares value_type (pairs) by their keys using key_compare.
+   * Complexity: O(1)
+   */
+  value_compare value_comp() const { return value_compare(); }
 
   /**
    * Forward iterator for btree.

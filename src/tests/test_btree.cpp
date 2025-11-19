@@ -2133,6 +2133,195 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 }
 
+TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("key_comp - basic functionality") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto comp = tree.key_comp();
+
+    // Test basic comparisons
+    REQUIRE(comp(1, 2) == true);
+    REQUIRE(comp(2, 1) == false);
+    REQUIRE(comp(5, 5) == false);
+    REQUIRE(comp(10, 20) == true);
+  }
+
+  SECTION("key_comp - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+    auto comp = tree.key_comp();
+
+    REQUIRE(comp("apple", "banana") == true);
+    REQUIRE(comp("banana", "apple") == false);
+    REQUIRE(comp("hello", "hello") == false);
+    REQUIRE(comp("zebra", "aardvark") == false);
+  }
+
+  SECTION("key_comp - ordering verification") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto comp = tree.key_comp();
+
+    // Insert elements
+    for (int i = 10; i >= 1; --i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Verify tree maintains sorted order using key_comp
+    auto it = tree.begin();
+    auto next = it;
+    ++next;
+
+    while (next != tree.end()) {
+      // Current key should be less than next key
+      REQUIRE(comp(it->first, next->first) == true);
+      // Next key should not be less than current
+      REQUIRE(comp(next->first, it->first) == false);
+
+      ++it;
+      ++next;
+    }
+  }
+
+  SECTION("value_comp - basic functionality") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto comp = tree.value_comp();
+
+    // value_comp compares pairs by their keys
+    std::pair<int, int> p1{1, 100};
+    std::pair<int, int> p2{2, 200};
+    std::pair<int, int> p3{1, 999};  // Same key as p1, different value
+
+    REQUIRE(comp(p1, p2) == true);
+    REQUIRE(comp(p2, p1) == false);
+    REQUIRE(comp(p1, p3) == false);  // Same key
+    REQUIRE(comp(p3, p1) == false);  // Same key
+  }
+
+  SECTION("value_comp - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+    auto comp = tree.value_comp();
+
+    std::pair<std::string, int> p1{"apple", 1};
+    std::pair<std::string, int> p2{"banana", 2};
+    std::pair<std::string, int> p3{"apple", 999};
+
+    REQUIRE(comp(p1, p2) == true);
+    REQUIRE(comp(p2, p1) == false);
+    REQUIRE(comp(p1, p3) == false);  // Same key
+  }
+
+  SECTION("value_comp - ordering verification") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto comp = tree.value_comp();
+
+    // Insert elements
+    for (int i = 10; i >= 1; --i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Verify tree maintains sorted order using value_comp
+    auto it = tree.begin();
+    auto next = it;
+    ++next;
+
+    while (next != tree.end()) {
+      // Current pair should be less than next pair (by key)
+      std::pair<int, int> current{it->first, it->second};
+      std::pair<int, int> next_pair{next->first, next->second};
+
+      REQUIRE(comp(current, next_pair) == true);
+      REQUIRE(comp(next_pair, current) == false);
+
+      ++it;
+      ++next;
+    }
+  }
+
+  SECTION("key_comp and value_comp - consistency") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto key_cmp = tree.key_comp();
+    auto val_cmp = tree.value_comp();
+
+    // Insert some elements
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+    tree.insert(15, 150);
+
+    // For any two elements, key_comp and value_comp should agree
+    auto it1 = tree.find(5);
+    auto it2 = tree.find(10);
+    auto it3 = tree.find(15);
+
+    std::pair<int, int> p1{it1->first, it1->second};
+    std::pair<int, int> p2{it2->first, it2->second};
+    std::pair<int, int> p3{it3->first, it3->second};
+
+    // key_comp(k1, k2) == value_comp(p1, p2)
+    REQUIRE(key_cmp(it1->first, it2->first) == val_cmp(p1, p2));
+    REQUIRE(key_cmp(it2->first, it3->first) == val_cmp(p2, p3));
+    REQUIRE(key_cmp(it1->first, it3->first) == val_cmp(p1, p3));
+
+    // Reverse comparisons
+    REQUIRE(key_cmp(it2->first, it1->first) == val_cmp(p2, p1));
+    REQUIRE(key_cmp(it3->first, it2->first) == val_cmp(p3, p2));
+    REQUIRE(key_cmp(it3->first, it1->first) == val_cmp(p3, p1));
+  }
+
+  SECTION("comparators - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Should be able to get comparators even from empty tree
+    auto key_cmp = tree.key_comp();
+    auto val_cmp = tree.value_comp();
+
+    REQUIRE(key_cmp(1, 2) == true);
+    REQUIRE(val_cmp(std::pair{1, 10}, std::pair{2, 20}) == true);
+  }
+
+  SECTION("comparators - const tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+
+    const auto& const_tree = tree;
+
+    // Should work with const tree
+    auto key_cmp = const_tree.key_comp();
+    auto val_cmp = const_tree.value_comp();
+
+    REQUIRE(key_cmp(5, 10) == true);
+    REQUIRE(val_cmp(std::pair{5, 50}, std::pair{10, 100}) == true);
+  }
+
+  SECTION("comparators - sorting with std algorithms") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto key_cmp = tree.key_comp();
+
+    // Use key_comp with std::sort
+    std::vector<int> keys{5, 2, 8, 1, 9, 3};
+    std::sort(keys.begin(), keys.end(), key_cmp);
+
+    REQUIRE(keys == std::vector<int>{1, 2, 3, 5, 8, 9});
+  }
+
+  SECTION("comparators - value pairs with std algorithms") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto val_cmp = tree.value_comp();
+
+    // Use value_comp with std::sort
+    std::vector<std::pair<int, int>> pairs{
+        {5, 50}, {2, 20}, {8, 80}, {1, 10}, {9, 90}};
+    std::sort(pairs.begin(), pairs.end(), val_cmp);
+
+    REQUIRE(pairs[0].first == 1);
+    REQUIRE(pairs[1].first == 2);
+    REQUIRE(pairs[2].first == 5);
+    REQUIRE(pairs[3].first == 8);
+    REQUIRE(pairs[4].first == 9);
+  }
+}
+
 TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
