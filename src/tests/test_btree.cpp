@@ -1649,6 +1649,253 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
     REQUIRE(ub_1000 == tree.end());
   }
 }
+
+TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("equal_range - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto [first, last] = tree.equal_range(5);
+    REQUIRE(first == tree.end());
+    REQUIRE(last == tree.end());
+  }
+
+  SECTION("equal_range - exact match") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+    tree.insert(15, 150);
+
+    auto [first, last] = tree.equal_range(10);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 10);
+    REQUIRE(first->second == 100);
+
+    // For unique keys, range should contain exactly one element
+    REQUIRE(last != tree.end());
+    REQUIRE(last->first == 15);  // Points to next element
+  }
+
+  SECTION("equal_range - key not found (between elements)") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    tree.insert(15, 150);
+
+    auto [first, last] = tree.equal_range(10);
+    // Both should point to the next greater element
+    REQUIRE(first == last);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 15);
+  }
+
+  SECTION("equal_range - key at beginning") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+    tree.insert(15, 150);
+
+    auto [first, last] = tree.equal_range(5);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 5);
+    REQUIRE(last != tree.end());
+    REQUIRE(last->first == 10);
+  }
+
+  SECTION("equal_range - key at end") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+    tree.insert(15, 150);
+
+    auto [first, last] = tree.equal_range(15);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 15);
+    REQUIRE(last == tree.end());  // No element after
+  }
+
+  SECTION("equal_range - key before all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(10, 100);
+    tree.insert(20, 200);
+
+    auto [first, last] = tree.equal_range(5);
+    REQUIRE(first == last);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 10);
+  }
+
+  SECTION("equal_range - key after all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(10, 100);
+    tree.insert(20, 200);
+
+    auto [first, last] = tree.equal_range(30);
+    REQUIRE(first == last);
+    REQUIRE(first == tree.end());
+    REQUIRE(last == tree.end());
+  }
+
+  SECTION("equal_range - single element tree (found)") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(10, 100);
+
+    auto [first, last] = tree.equal_range(10);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 10);
+    REQUIRE(last == tree.end());
+  }
+
+  SECTION("equal_range - single element tree (not found, before)") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(10, 100);
+
+    auto [first, last] = tree.equal_range(5);
+    REQUIRE(first == last);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 10);
+  }
+
+  SECTION("equal_range - single element tree (not found, after)") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(10, 100);
+
+    auto [first, last] = tree.equal_range(15);
+    REQUIRE(first == last);
+    REQUIRE(first == tree.end());
+  }
+
+  SECTION("equal_range - across leaf boundaries") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert enough elements to span multiple leaves
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test key in middle of tree
+    auto [first, last] = tree.equal_range(10);
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 10);
+    REQUIRE(first->second == 100);
+    REQUIRE(last != tree.end());
+    REQUIRE(last->first == 11);
+
+    // Verify we can iterate from first to last
+    int count = 0;
+    for (auto it = first; it != last; ++it) {
+      ++count;
+    }
+    REQUIRE(count == 1);  // Unique keys, so exactly one element
+  }
+
+  SECTION("equal_range - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+    tree.insert("date", 4);
+
+    // Found
+    auto [first1, last1] = tree.equal_range("banana");
+    REQUIRE(first1 != tree.end());
+    REQUIRE(first1->first == "banana");
+    REQUIRE(first1->second == 2);
+    REQUIRE(last1 != tree.end());
+    REQUIRE(last1->first == "cherry");
+
+    // Not found (between)
+    auto [first2, last2] = tree.equal_range("blueberry");
+    REQUIRE(first2 == last2);
+    REQUIRE(first2 != tree.end());
+    REQUIRE(first2->first == "cherry");
+
+    // Not found (before)
+    auto [first3, last3] = tree.equal_range("aardvark");
+    REQUIRE(first3 == last3);
+    REQUIRE(first3 != tree.end());
+    REQUIRE(first3->first == "apple");
+
+    // Not found (after)
+    auto [first4, last4] = tree.equal_range("zebra");
+    REQUIRE(first4 == last4);
+    REQUIRE(first4 == tree.end());
+  }
+
+  SECTION("equal_range - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert 1000 elements
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test various positions
+    auto [first1, last1] = tree.equal_range(100);
+    REQUIRE(first1 != tree.end());
+    REQUIRE(first1->first == 100);
+    REQUIRE(last1 != tree.end());
+    REQUIRE(last1->first == 101);
+
+    auto [first2, last2] = tree.equal_range(500);
+    REQUIRE(first2 != tree.end());
+    REQUIRE(first2->first == 500);
+    REQUIRE(last2 != tree.end());
+    REQUIRE(last2->first == 501);
+
+    auto [first3, last3] = tree.equal_range(1000);
+    REQUIRE(first3 != tree.end());
+    REQUIRE(first3->first == 1000);
+    REQUIRE(last3 == tree.end());
+
+    // Not found (gaps)
+    auto [first4, last4] = tree.equal_range(1500);
+    REQUIRE(first4 == last4);
+    REQUIRE(first4 == tree.end());
+  }
+
+  SECTION("equal_range - consistency with lower_bound and upper_bound") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int i = 1; i <= 50; ++i) {
+      tree.insert(i * 2, i * 20);  // Insert only even numbers
+    }
+
+    // Test several keys
+    for (int key : {10, 25, 50, 75, 100, 150}) {
+      auto [er_first, er_last] = tree.equal_range(key);
+      auto lb = tree.lower_bound(key);
+      auto ub = tree.upper_bound(key);
+
+      // equal_range should return {lower_bound, upper_bound}
+      REQUIRE(er_first == lb);
+      REQUIRE(er_last == ub);
+    }
+  }
+
+  SECTION("equal_range - range iteration") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Find element
+    auto [first, last] = tree.equal_range(10);
+    REQUIRE(first != tree.end());
+
+    // Iterate over the range (should be exactly one element for unique keys)
+    std::vector<int> keys;
+    for (auto it = first; it != last; ++it) {
+      keys.push_back(it->first);
+    }
+
+    REQUIRE(keys.size() == 1);
+    REQUIRE(keys[0] == 10);
+  }
+}
+
 TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
