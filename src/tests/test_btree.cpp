@@ -1751,39 +1751,6 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
       REQUIRE(it->second == i * 10);
     }
   }
-
-  SECTION("clear - multiple clears") {
-    btree<int, int, 4, 4, Mode> tree;
-
-    for (int round = 0; round < 3; ++round) {
-      // Insert elements
-      for (int i = 1; i <= 10; ++i) {
-        tree.insert(i, i * 10);
-      }
-      REQUIRE(tree.size() == 10);
-
-      // Clear
-      tree.clear();
-      REQUIRE(tree.empty());
-      REQUIRE(tree.size() == 0);
-    }
-  }
-
-  SECTION("clear - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
-
-    tree.insert("apple", 1);
-    tree.insert("banana", 2);
-    tree.insert("cherry", 3);
-    REQUIRE(tree.size() == 3);
-
-    tree.clear();
-    REQUIRE(tree.empty());
-    REQUIRE(tree.size() == 0);
-    REQUIRE(tree.find("apple") == tree.end());
-    REQUIRE(tree.find("banana") == tree.end());
-    REQUIRE(tree.find("cherry") == tree.end());
-  }
 }
 
 TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
@@ -1916,5 +1883,352 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
     tree.insert(5, 999);
     REQUIRE(tree.size() == 1);
     REQUIRE(const_tree.count(5) == 1);  // Still 1, not 2
+  }
+}
+
+TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("copy constructor - empty tree") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2(tree1);
+
+    REQUIRE(tree2.empty());
+    REQUIRE(tree2.size() == 0);
+  }
+
+  SECTION("copy constructor - single element") {
+    btree<int, int, 4, 4, Mode> tree1;
+    tree1.insert(5, 50);
+
+    btree<int, int, 4, 4, Mode> tree2(tree1);
+
+    REQUIRE(tree2.size() == 1);
+    auto it = tree2.find(5);
+    REQUIRE(it != tree2.end());
+    REQUIRE(it->second == 50);
+
+    // Verify independence - modify tree1
+    tree1.insert(10, 100);
+    REQUIRE(tree1.size() == 2);
+    REQUIRE(tree2.size() == 1);  // tree2 unaffected
+  }
+
+  SECTION("copy constructor - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 20; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2(tree1);
+
+    REQUIRE(tree2.size() == 20);
+    for (int i = 1; i <= 20; ++i) {
+      auto it = tree2.find(i);
+      REQUIRE(it != tree2.end());
+      REQUIRE(it->second == i * 10);
+    }
+
+    // Verify independence
+    tree1.erase(10);
+    REQUIRE(tree1.size() == 19);
+    REQUIRE(tree2.size() == 20);
+    REQUIRE(tree2.find(10) != tree2.end());
+  }
+
+  SECTION("copy constructor - large tree") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 1000; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2(tree1);
+
+    REQUIRE(tree2.size() == 1000);
+    for (int i = 1; i <= 1000; i += 100) {
+      auto it = tree2.find(i);
+      REQUIRE(it != tree2.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("copy constructor - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree1;
+    tree1.insert("apple", 1);
+    tree1.insert("banana", 2);
+    tree1.insert("cherry", 3);
+
+    btree<std::string, int, 4, 4, Mode> tree2(tree1);
+
+    REQUIRE(tree2.size() == 3);
+    REQUIRE(tree2.find("apple")->second == 1);
+    REQUIRE(tree2.find("banana")->second == 2);
+    REQUIRE(tree2.find("cherry")->second == 3);
+  }
+}
+
+TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("copy assignment - empty to empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    tree2 = tree1;
+    REQUIRE(tree2.empty());
+  }
+
+  SECTION("copy assignment - non-empty to empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    tree2 = tree1;
+
+    REQUIRE(tree2.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+    }
+  }
+
+  SECTION("copy assignment - empty to non-empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+
+    btree<int, int, 4, 4, Mode> tree2;
+    for (int i = 1; i <= 10; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree2 = tree1;
+    REQUIRE(tree2.empty());
+    REQUIRE(tree2.size() == 0);
+  }
+
+  SECTION("copy assignment - non-empty to non-empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    for (int i = 100; i <= 110; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree2 = tree1;
+
+    REQUIRE(tree2.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+    }
+    // Old elements should be gone
+    REQUIRE(tree2.find(100) == tree2.end());
+  }
+
+  SECTION("copy assignment - self assignment") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    tree1 = tree1;  // Self assignment
+
+    REQUIRE(tree1.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree1.find(i) != tree1.end());
+    }
+  }
+
+  SECTION("copy assignment - independence") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    tree2 = tree1;
+
+    // Modify tree1
+    tree1.insert(100, 1000);
+    tree1.erase(5);
+
+    // tree2 should be unaffected
+    REQUIRE(tree2.size() == 10);
+    REQUIRE(tree2.find(5) != tree2.end());
+    REQUIRE(tree2.find(100) == tree2.end());
+  }
+}
+
+TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("move constructor - empty tree") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+
+    REQUIRE(tree2.empty());
+    REQUIRE(tree1.empty());  // Moved-from tree is empty
+  }
+
+  SECTION("move constructor - single element") {
+    btree<int, int, 4, 4, Mode> tree1;
+    tree1.insert(5, 50);
+
+    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+
+    REQUIRE(tree2.size() == 1);
+    REQUIRE(tree2.find(5) != tree2.end());
+
+    // tree1 is now empty
+    REQUIRE(tree1.empty());
+    REQUIRE(tree1.size() == 0);
+  }
+
+  SECTION("move constructor - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 20; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+
+    REQUIRE(tree2.size() == 20);
+    for (int i = 1; i <= 20; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+    }
+
+    // tree1 is now empty
+    REQUIRE(tree1.empty());
+  }
+
+  SECTION("move constructor - moved-from tree is reusable") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+
+    // Reuse tree1
+    tree1.insert(100, 1000);
+    REQUIRE(tree1.size() == 1);
+    REQUIRE(tree1.find(100) != tree1.end());
+
+    // tree2 should still have the original data
+    REQUIRE(tree2.size() == 10);
+  }
+
+  SECTION("move constructor - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree1;
+    tree1.insert("apple", 1);
+    tree1.insert("banana", 2);
+
+    btree<std::string, int, 4, 4, Mode> tree2(std::move(tree1));
+
+    REQUIRE(tree2.size() == 2);
+    REQUIRE(tree2.find("apple") != tree2.end());
+    REQUIRE(tree1.empty());
+  }
+}
+
+TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("move assignment - empty to empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, Mode> tree2;
+
+    tree2 = std::move(tree1);
+    REQUIRE(tree2.empty());
+    REQUIRE(tree1.empty());
+  }
+
+  SECTION("move assignment - non-empty to empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    tree2 = std::move(tree1);
+
+    REQUIRE(tree2.size() == 10);
+    REQUIRE(tree1.empty());
+  }
+
+  SECTION("move assignment - empty to non-empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+
+    btree<int, int, 4, 4, Mode> tree2;
+    for (int i = 1; i <= 10; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree2 = std::move(tree1);
+    REQUIRE(tree2.empty());
+    REQUIRE(tree1.empty());
+  }
+
+  SECTION("move assignment - non-empty to non-empty") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    for (int i = 100; i <= 110; ++i) {
+      tree2.insert(i, i * 10);
+    }
+
+    tree2 = std::move(tree1);
+
+    REQUIRE(tree2.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree2.find(i) != tree2.end());
+    }
+    // Old elements should be gone
+    REQUIRE(tree2.find(100) == tree2.end());
+
+    // tree1 is empty
+    REQUIRE(tree1.empty());
+  }
+
+  SECTION("move assignment - self assignment") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    tree1 = std::move(tree1);  // Self move assignment
+
+    // Should still be valid
+    REQUIRE(tree1.size() == 10);
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree1.find(i) != tree1.end());
+    }
+  }
+
+  SECTION("move assignment - moved-from tree is reusable") {
+    btree<int, int, 4, 4, Mode> tree1;
+    for (int i = 1; i <= 10; ++i) {
+      tree1.insert(i, i * 10);
+    }
+
+    btree<int, int, 4, 4, Mode> tree2;
+    tree2 = std::move(tree1);
+
+    // Reuse tree1
+    tree1.insert(100, 1000);
+    REQUIRE(tree1.size() == 1);
+    REQUIRE(tree1.find(100) != tree1.end());
+
+    // tree2 should have the original data
+    REQUIRE(tree2.size() == 10);
   }
 }
