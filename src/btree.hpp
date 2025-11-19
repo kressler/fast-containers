@@ -874,11 +874,13 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
-  // Check if key already exists first (before checking if leaf is full)
-  // If key exists, no need to split
-  auto existing = leaf->data.find(key);
-  if (existing != leaf->data.end()) {
-    return {iterator(leaf, existing), false};
+  // Use lower_bound to find position - single search for both existence check
+  // and insertion point
+  auto pos = leaf->data.lower_bound(key);
+
+  // Check if key already exists at the position found by lower_bound
+  if (pos != leaf->data.end() && pos->first == key) {
+    return {iterator(leaf, pos), false};
   }
 
   // If leaf is full, split it
@@ -886,11 +888,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return split_leaf(leaf, key, value);
   }
 
-  // Leaf has space - insert normally
+  // Leaf has space - insert using hint to avoid re-searching
   // Track if this will become the new minimum
   bool will_be_new_min = leaf->data.empty() || key < leaf->data.begin()->first;
 
-  auto [leaf_it, inserted] = leaf->data.insert(key, value);
+  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, value);
   if (inserted) {
     size_++;
 
