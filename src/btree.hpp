@@ -968,27 +968,13 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Use templated lambda to handle search logic for both node types
   auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
-    // Use find() to locate this node's entry
-    // Note: We search by the node's current minimum, but the parent might not
-    // have been updated yet, so we also check nearby positions
-    auto it = children.find(*node_min);
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
 
-    // Check if we found it at the exact position
+    // The entry pointing to this node should be at 'it' or one position before
     if (it != children.end() && it->second == node) {
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
-      }
-      auto prev_it = it;
-      --prev_it;
-      return prev_it->second;
-    }
-
-    // If not found at exact position, use lower_bound as fallback
-    // (parent might still have old key for this node)
-    it = children.lower_bound(*node_min);
-    if (it != children.end() && it->second == node) {
-      if (it == children.begin()) {
-        return nullptr;
       }
       auto prev_it = it;
       --prev_it;
@@ -997,7 +983,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       --it;
       if (it->second == node) {
         if (it == children.begin()) {
-          return nullptr;
+          return nullptr;  // This is the leftmost child
         }
         auto prev_it = it;
         --prev_it;
@@ -1053,29 +1039,15 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Use templated lambda to handle search logic for both node types
   auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
-    // Use find() to locate this node's entry
-    // Note: We search by the node's current minimum, but the parent might not
-    // have been updated yet, so we also check nearby positions
-    auto it = children.find(*node_min);
+    // Use lower_bound to efficiently find this node's position
+    auto it = children.lower_bound(*node_min);
 
-    // Check if we found it at the exact position
+    // The entry pointing to this node should be at 'it' or one position before
     if (it != children.end() && it->second == node) {
       auto next_it = it;
       ++next_it;
       if (next_it == children.end()) {
         return nullptr;  // This is the rightmost child
-      }
-      return next_it->second;
-    }
-
-    // If not found at exact position, use lower_bound as fallback
-    // (parent might still have old key for this node)
-    it = children.lower_bound(*node_min);
-    if (it != children.end() && it->second == node) {
-      auto next_it = it;
-      ++next_it;
-      if (next_it == children.end()) {
-        return nullptr;
       }
       return next_it->second;
     } else if (it != children.begin()) {
@@ -1084,7 +1056,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         auto next_it = it;
         ++next_it;
         if (next_it == children.end()) {
-          return nullptr;
+          return nullptr;  // This is the rightmost child
         }
         return next_it->second;
       }
@@ -1289,14 +1261,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     InternalNode* parent = node->parent;
     assert(parent != nullptr && "Merging non-root leaf should have parent");
 
-    // Find and remove the entry for this leaf in parent
+    // Find and remove the entry for this leaf in parent using its minimum key
     auto& parent_children = parent->leaf_children;
-    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-      if (it->second == node) {
-        parent_children.remove(it->first);
-        break;
-      }
-    }
+    const Key& node_min = node->data.begin()->first;
+    auto it = parent_children.find(node_min);
+    assert(it != parent_children.end() && it->second == node &&
+           "Node's minimum key should map to node in parent");
+    parent_children.remove(it->first);
 
     // Deallocate this leaf
     deallocate_leaf_node(node);
@@ -1347,14 +1318,15 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     InternalNode* parent = node->parent;
     assert(parent != nullptr && "Merging non-root node should have parent");
 
-    // Find and remove the entry for this node in parent
+    // Find and remove the entry for this node in parent using its minimum key
     auto& parent_children = parent->internal_children;
-    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-      if (it->second == node) {
-        parent_children.remove(it->first);
-        break;
-      }
-    }
+    const Key& node_min = node->children_are_leaves
+                              ? node->leaf_children.begin()->first
+                              : node->internal_children.begin()->first;
+    auto it = parent_children.find(node_min);
+    assert(it != parent_children.end() && it->second == node &&
+           "Node's minimum key should map to node in parent");
+    parent_children.remove(it->first);
 
     // Deallocate this node
     deallocate_internal_node(node);
@@ -1408,14 +1380,14 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     InternalNode* parent = node->parent;
     assert(parent != nullptr && "Merging non-root leaf should have parent");
 
-    // Find and remove the entry for right sibling in parent
+    // Find and remove the entry for right sibling in parent using its minimum
+    // key
     auto& parent_children = parent->leaf_children;
-    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-      if (it->second == right_sibling) {
-        parent_children.remove(it->first);
-        break;
-      }
-    }
+    const Key& right_sibling_min = right_sibling->data.begin()->first;
+    auto it = parent_children.find(right_sibling_min);
+    assert(it != parent_children.end() && it->second == right_sibling &&
+           "Right sibling's minimum key should map to right sibling in parent");
+    parent_children.remove(it->first);
 
     // Deallocate right sibling
     deallocate_leaf_node(right_sibling);
@@ -1466,14 +1438,17 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     InternalNode* parent = node->parent;
     assert(parent != nullptr && "Merging non-root node should have parent");
 
-    // Find and remove the entry for right sibling in parent
+    // Find and remove the entry for right sibling in parent using its minimum
+    // key
     auto& parent_children = parent->internal_children;
-    for (auto it = parent_children.begin(); it != parent_children.end(); ++it) {
-      if (it->second == right_sibling) {
-        parent_children.remove(it->first);
-        break;
-      }
-    }
+    const Key& right_sibling_min =
+        right_sibling->children_are_leaves
+            ? right_sibling->leaf_children.begin()->first
+            : right_sibling->internal_children.begin()->first;
+    auto it = parent_children.find(right_sibling_min);
+    assert(it != parent_children.end() && it->second == right_sibling &&
+           "Right sibling's minimum key should map to right sibling in parent");
+    parent_children.remove(it->first);
 
     // Deallocate right sibling
     deallocate_internal_node(right_sibling);
