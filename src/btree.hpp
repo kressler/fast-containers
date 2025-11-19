@@ -369,6 +369,28 @@ class btree {
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
 
   /**
+   * Constructs an element in-place in the tree.
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns a pair with an iterator to the inserted/existing element
+   * and a bool indicating whether insertion took place.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  std::pair<iterator, bool> emplace(Args&&... args);
+
+  /**
+   * Constructs an element in-place with a position hint.
+   * The hint iterator is currently ignored (for std::map compatibility).
+   * The arguments are forwarded to construct a value_type (std::pair<Key,
+   * Value>). Returns an iterator to the inserted/existing element.
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  iterator emplace_hint(const_iterator hint, Args&&... args);
+
+  /**
    * Removes the element with the given key from the tree.
    * Returns the number of elements removed (0 or 1).
    *
@@ -890,6 +912,35 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+                         SearchModeT, MoveModeT>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace(Args&&... args) {
+  // Construct the pair from the arguments
+  value_type pair(std::forward<Args>(args)...);
+  // Extract key and value, then insert
+  return insert(pair.first, pair.second);
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+template <typename... Args>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::iterator
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::emplace_hint(const_iterator hint, Args&&... args) {
+  // For now, ignore the hint and just call emplace
+  // In the future, we could use the hint to optimize the search
+  (void)hint;  // Suppress unused parameter warning
+  return emplace(std::forward<Args>(args)...).first;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
