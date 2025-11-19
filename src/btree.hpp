@@ -105,6 +105,32 @@ class btree {
   ~btree();
 
   /**
+   * Copy constructor - creates a deep copy of the tree.
+   * Complexity: O(n)
+   */
+  btree(const btree& other);
+
+  /**
+   * Copy assignment operator - replaces contents with a deep copy.
+   * Complexity: O(n + m) where n is this tree's size, m is other's size
+   */
+  btree& operator=(const btree& other);
+
+  /**
+   * Move constructor - takes ownership of another tree's resources.
+   * Leaves other in a valid but empty state.
+   * Complexity: O(1)
+   */
+  btree(btree&& other) noexcept;
+
+  /**
+   * Move assignment operator - replaces contents by taking ownership.
+   * Leaves other in a valid but empty state.
+   * Complexity: O(n) where n is this tree's size
+   */
+  btree& operator=(btree&& other) noexcept;
+
+  /**
    * Returns the number of elements in the tree.
    * Complexity: O(1)
    */
@@ -212,6 +238,23 @@ class btree {
    * Complexity: O(1)
    */
   iterator end() { return iterator(); }
+
+  /**
+   * Returns a const_iterator to the first element.
+   * Complexity: O(1) - uses cached leftmost leaf pointer
+   */
+  const_iterator begin() const {
+    if (size_ == 0) {
+      return end();
+    }
+    return const_iterator(leftmost_leaf_, leftmost_leaf_->data.begin());
+  }
+
+  /**
+   * Returns a const_iterator to one past the last element.
+   * Complexity: O(1)
+   */
+  const_iterator end() const { return const_iterator(); }
 
   /**
    * Finds an element with the given key.
@@ -526,6 +569,95 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::~btree() {
   deallocate_tree();
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::btree(const btree& other)
+    : root_is_leaf_(true),
+      leaf_root_(nullptr),
+      size_(0),
+      leftmost_leaf_(nullptr),
+      rightmost_leaf_(nullptr) {
+  // Copy all elements using insert (use const iterators)
+  for (const_iterator it = other.begin(); it != other.end(); ++it) {
+    insert(it->first, it->second);
+  }
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::operator=(const btree& other) {
+  if (this != &other) {
+    // Clear existing contents
+    deallocate_tree();
+
+    // Copy all elements from other (use const iterators)
+    for (const_iterator it = other.begin(); it != other.end(); ++it) {
+      insert(it->first, it->second);
+    }
+  }
+  return *this;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::btree(btree&& other) noexcept
+    : root_is_leaf_(other.root_is_leaf_),
+      size_(other.size_),
+      leftmost_leaf_(other.leftmost_leaf_),
+      rightmost_leaf_(other.rightmost_leaf_) {
+  // Move the correct root pointer based on type
+  if (root_is_leaf_) {
+    leaf_root_ = other.leaf_root_;
+  } else {
+    internal_root_ = other.internal_root_;
+  }
+
+  // Leave other in a valid empty state
+  other.root_is_leaf_ = true;
+  other.leaf_root_ = nullptr;
+  other.size_ = 0;
+  other.leftmost_leaf_ = nullptr;
+  other.rightmost_leaf_ = nullptr;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::operator=(btree&& other) noexcept {
+  if (this != &other) {
+    // Deallocate existing tree
+    deallocate_tree();
+
+    // Move other's resources to this
+    root_is_leaf_ = other.root_is_leaf_;
+    if (root_is_leaf_) {
+      leaf_root_ = other.leaf_root_;
+    } else {
+      internal_root_ = other.internal_root_;
+    }
+    size_ = other.size_;
+    leftmost_leaf_ = other.leftmost_leaf_;
+    rightmost_leaf_ = other.rightmost_leaf_;
+
+    // Leave other in a valid empty state
+    other.root_is_leaf_ = true;
+    other.leaf_root_ = nullptr;
+    other.size_ = 0;
+    other.leftmost_leaf_ = nullptr;
+    other.rightmost_leaf_ = nullptr;
+  }
+  return *this;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
