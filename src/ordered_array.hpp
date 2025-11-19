@@ -263,6 +263,32 @@ class ordered_array {
   }
 
   /**
+   * Find the first element greater than the given key.
+   *
+   * @param key The key to search for
+   * @return Iterator to the first element > key, or end() if all elements <=
+   * key
+   */
+  iterator upper_bound(const Key& key) {
+    auto pos = upper_bound_key(key);
+    size_type idx = pos - keys_.begin();
+    return iterator(this, idx);
+  }
+
+  /**
+   * Find the first element greater than the given key (const version).
+   *
+   * @param key The key to search for
+   * @return Const iterator to the first element > key, or end() if all
+   * elements <= key
+   */
+  const_iterator upper_bound(const Key& key) const {
+    auto pos = upper_bound_key(key);
+    size_type idx = pos - keys_.begin();
+    return const_iterator(this, idx);
+  }
+
+  /**
    * Remove an element by key.
    * If the element does not exist, does nothing.
    *
@@ -705,6 +731,144 @@ class ordered_array {
 
     return keys_.begin() + i;
   }
+
+  /**
+   * SIMD-accelerated upper bound search for 32-bit keys (int32_t, uint32_t,
+   * float) Compares 8 keys at a time using AVX2 to find first element > key
+   */
+  template <typename K>
+    requires(sizeof(K) == 4)
+  auto simd_upper_bound_4byte(const K& key) const {
+    // Prepare search key in SIMD register (broadcast to all 8 lanes)
+    int32_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+    __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
+
+    size_type i = 0;
+    // Process 8 keys at a time with full AVX2
+    for (; i + 8 <= size_; i += 8) {
+      // Load 8 keys from array (aligned - array is 64-byte aligned, i is
+      // multiple of 8)
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Compare: keys_vec > search_vec (returns 0xFFFFFFFF where true)
+      __m256i cmp_gt = _mm256_cmpgt_epi32(keys_vec, search_vec_256);
+
+      // Check if any key is > search_key
+      int mask = _mm256_movemask_epi8(cmp_gt);
+      if (mask != 0) {
+        // Found a position where key > search_key
+        // Use bit manipulation to find the exact index within this block
+        // Each 4-byte element contributes 4 bits to the mask
+        // Count trailing zeros and divide by 4 to get element offset
+        size_type offset =
+            std::countr_zero(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+    }
+
+    // Process 4 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 4 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      // Aligned load (i is multiple of 8 from previous loop)
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+      __m128i cmp_gt = _mm_cmpgt_epi32(keys_vec, search_vec_128);
+
+      int mask = _mm_movemask_epi8(cmp_gt);
+      if (mask != 0) {
+        size_type offset =
+            std::countr_zero(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 4;
+    }
+
+    // Process 2 keys at a time with 64-bit SIMD
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      __m128i keys_vec = _mm_castpd_si128(
+          _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
+      __m128i cmp_gt = _mm_cmpgt_epi32(keys_vec, search_vec_128);
+
+      int mask = _mm_movemask_epi8(cmp_gt);
+      if (mask != 0) {
+        size_type offset =
+            std::countr_zero(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
+    while (i < size_ && !(keys_[i] > key)) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
+  }
+
+  /**
+   * SIMD-accelerated upper bound search for 64-bit keys (int64_t, uint64_t,
+   * double) Compares 4 keys at a time using AVX2 to find first element > key
+   */
+  template <typename K>
+    requires(sizeof(K) == 8)
+  auto simd_upper_bound_8byte(const K& key) const {
+    // Prepare search key in SIMD register (broadcast to all 4 lanes)
+    int64_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+    __m256i search_vec_256 = _mm256_set1_epi64x(key_bits);
+
+    size_type i = 0;
+    // Process 4 keys at a time with full AVX2
+    for (; i + 4 <= size_; i += 4) {
+      // Load 4 keys from array (aligned - array is 64-byte aligned, i is
+      // multiple of 4)
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Compare: keys_vec > search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
+      __m256i cmp_gt = _mm256_cmpgt_epi64(keys_vec, search_vec_256);
+
+      // Check if any key is > search_key
+      int mask = _mm256_movemask_epi8(cmp_gt);
+      if (mask != 0) {
+        // Found a position where key > search_key
+        // Use bit manipulation to find the exact index within this block
+        // Each 8-byte element contributes 8 bits to the mask
+        // Count trailing zeros and divide by 8 to get element offset
+        size_type offset =
+            std::countr_zero(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+    }
+
+    // Process 2 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi64x(key_bits);
+      // Aligned load (i is multiple of 4 from previous loop)
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+      __m128i cmp_gt = _mm_cmpgt_epi64(keys_vec, search_vec_128);
+
+      int mask = _mm_movemask_epi8(cmp_gt);
+      if (mask != 0) {
+        size_type offset =
+            std::countr_zero(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
+    while (i < size_ && !(keys_[i] > key)) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
+  }
 #endif
 
   /**
@@ -879,6 +1043,60 @@ class ordered_array {
       auto it = keys_.begin();
       auto end_it = keys_.begin() + size_;
       while (it != end_it && *it < key) {
+        ++it;
+      }
+      return it;
+#endif
+    } else {
+      static_assert(SearchModeT == SearchMode::Binary ||
+                        SearchModeT == SearchMode::Linear ||
+                        SearchModeT == SearchMode::SIMD,
+                    "Invalid SearchMode");
+    }
+  }
+
+  /**
+   * Find the insertion position for a key where all elements before are <= key.
+   * Returns an iterator to the first element greater than the given key.
+   *
+   * @param key The key to search for
+   * @return Iterator to the first element > key
+   */
+  auto upper_bound_key(const Key& key) const {
+    if constexpr (SearchModeT == SearchMode::Linear) {
+      // Linear search: scan from beginning until we find key > search key
+      auto it = keys_.begin();
+      auto end_it = keys_.begin() + size_;
+      while (it != end_it && !(*it > key)) {
+        ++it;
+      }
+      return it;
+    } else if constexpr (SearchModeT == SearchMode::Binary) {
+      // Binary search using standard library
+      return std::upper_bound(keys_.begin(), keys_.begin() + size_, key);
+    } else if constexpr (SearchModeT == SearchMode::SIMD) {
+      // SIMD-accelerated linear search
+#ifdef __AVX2__
+      if constexpr (SIMDSearchable<Key>) {
+        if constexpr (sizeof(Key) == 4) {
+          return simd_upper_bound_4byte(key);
+        } else if constexpr (sizeof(Key) == 8) {
+          return simd_upper_bound_8byte(key);
+        }
+      } else {
+        // Fallback to regular linear search if type doesn't support SIMD
+        auto it = keys_.begin();
+        auto end_it = keys_.begin() + size_;
+        while (it != end_it && !(*it > key)) {
+          ++it;
+        }
+        return it;
+      }
+#else
+      // AVX2 not available, fall back to linear search
+      auto it = keys_.begin();
+      auto end_it = keys_.begin() + size_;
+      while (it != end_it && !(*it > key)) {
         ++it;
       }
       return it;

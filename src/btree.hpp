@@ -235,6 +235,64 @@ class btree {
   }
 
   /**
+   * Returns an iterator to the first element not less than the given key.
+   * If all elements are less than key, returns end().
+   *
+   * Complexity: O(log n)
+   */
+  iterator lower_bound(const Key& key) {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.lower_bound(key);
+    if (it != leaf->data.end()) {
+      return iterator(leaf, it);
+    }
+
+    // If we reached the end of this leaf, move to the next leaf
+    // (the next leaf will have all elements greater than this leaf's max)
+    if (leaf->next_leaf != nullptr) {
+      return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
+    }
+
+    return end();
+  }
+
+  /**
+   * Returns an iterator to the first element greater than the given key.
+   * If all elements are less than or equal to key, returns end().
+   *
+   * Complexity: O(log n)
+   */
+  iterator upper_bound(const Key& key) {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.upper_bound(key);
+    if (it != leaf->data.end()) {
+      return iterator(leaf, it);
+    }
+
+    // If we reached the end of this leaf, move to the next leaf
+    // (the next leaf will have all elements greater than this leaf's max)
+    if (leaf->next_leaf != nullptr) {
+      return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
+    }
+
+    return end();
+  }
+
+  /**
    * Inserts a key-value pair into the tree.
    * Returns a pair with an iterator to the inserted/existing element and a bool
    * indicating whether insertion took place (true) or the key already existed
