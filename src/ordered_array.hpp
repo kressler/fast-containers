@@ -263,6 +263,36 @@ class ordered_array {
   }
 
   /**
+   * Find the first element greater than the given key.
+   *
+   * @param key The key to search for
+   * @return Iterator to the first element > key, or end() if all elements <=
+   * key
+   */
+  iterator upper_bound(const Key& key) {
+    auto it = lower_bound(key);
+    if (it != end() && it->first == key) {
+      ++it;
+    }
+    return it;
+  }
+
+  /**
+   * Find the first element greater than the given key (const version).
+   *
+   * @param key The key to search for
+   * @return Const iterator to the first element > key, or end() if all
+   * elements <= key
+   */
+  const_iterator upper_bound(const Key& key) const {
+    auto it = lower_bound(key);
+    if (it != end() && it->first == key) {
+      ++it;
+    }
+    return it;
+  }
+
+  /**
    * Remove an element by key.
    * If the element does not exist, does nothing.
    *
