@@ -109,6 +109,83 @@ while (num_bytes > 0) *dst++ = *src++;
 - Scans 8 int32 keys in parallel
 - Best on read-heavy, large arrays (>32 elements)
 
+## btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchMode, MoveMode>
+
+### Implementation Learnings (PR #35)
+
+#### Bulk Transfer Operations (O(n²) → O(n))
+```cpp
+// ❌ Element-by-element (shifts array N times for N elements)
+for (auto& elem : source) {
+  dest.insert(elem.first, elem.second);
+}
+
+// ✅ Bulk transfer (shifts array once)
+dest.transfer_prefix_from(source, count);
+dest.transfer_suffix_from(source, count);
+```
+
+#### Template Methods Eliminate Duplication (~300+ lines saved)
+```cpp
+// ✅ Single templated method handles both LeafNode and InternalNode
+template <typename NodeType>
+void merge_with_left_sibling(NodeType* node) {
+  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    // Leaf-specific logic
+  } else {
+    // InternalNode-specific logic
+  }
+}
+```
+
+#### Templated Lambdas with Compile-Time Branching
+```cpp
+// ✅ Single lambda handles multiple child types
+auto process = [&]<typename ChildPtrType, bool UpdateParents>(auto& children) {
+  // ... common logic ...
+  if constexpr (UpdateParents) {
+    it->second->parent = node;  // Only compiled when UpdateParents=true
+  }
+};
+```
+
+#### Memory Safety: Capture Before Invalidation
+```cpp
+// ❌ WRONG: Accessing after transfer empties the container
+node->data.transfer_prefix_from(sibling->data, count);
+const Key min = sibling->data.begin()->first;  // UB: sibling is empty!
+
+// ✅ CORRECT: Capture before transfer
+const Key min = sibling->data.begin()->first;
+node->data.transfer_prefix_from(sibling->data, count);
+```
+
+#### Const Correctness
+```cpp
+// Mark variables const when never modified after initialization
+const size_type count = source.size();
+const bool needs_merge = size < threshold;
+const Key& min_key = node->begin()->first;
+```
+
+#### Code Clarity
+```cpp
+// ❌ Unnecessary intermediate variables
+auto next_it = it;
+++next_it;
+return next_it->second;
+
+// ✅ Direct manipulation
+++it;
+return it->second;
+```
+
+### B+ Tree Structure
+- **Leaves**: Store actual data, linked list for range queries
+- **Internal nodes**: Store child pointers, guide searches
+- **Rebalancing**: Hysteresis thresholds prevent thrashing
+- **Underflow handling**: Borrow from siblings → Merge → Cascade up tree
+
 ## Benchmark Best Practices
 
 ### Template Consolidation (43% code reduction)
