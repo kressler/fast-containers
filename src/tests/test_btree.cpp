@@ -2232,3 +2232,189 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
     REQUIRE(tree2.size() == 10);
   }
 }
+
+TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("operator[] - insert new element with default value") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Access non-existent key creates it with default value (0 for int)
+    int& value = tree[5];
+    REQUIRE(value == 0);
+    REQUIRE(tree.size() == 1);
+
+    // Verify the element exists
+    auto it = tree.find(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->second == 0);
+  }
+
+  SECTION("operator[] - access existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Access existing key returns its value
+    int& value = tree[5];
+    REQUIRE(value == 50);
+    REQUIRE(tree.size() == 1);  // Size unchanged
+  }
+
+  SECTION("operator[] - modify value through reference") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Modify value through operator[]
+    tree[5] = 100;
+
+    REQUIRE(tree[5] == 100);
+    auto it = tree.find(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("operator[] - insert and modify in one operation") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert and immediately modify
+    tree[10] = 999;
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(tree[10] == 999);
+  }
+
+  SECTION("operator[] - multiple inserts and accesses") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert multiple elements
+    tree[1] = 10;
+    tree[2] = 20;
+    tree[3] = 30;
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree[1] == 10);
+    REQUIRE(tree[2] == 20);
+    REQUIRE(tree[3] == 30);
+
+    // Modify existing
+    tree[2] = 200;
+    REQUIRE(tree[2] == 200);
+    REQUIRE(tree.size() == 3);  // Size unchanged
+  }
+
+  SECTION("operator[] - mixed insert and access") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Pre-populate some elements
+    for (int i = 1; i <= 10; i += 2) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 5);  // 1, 3, 5, 7, 9
+
+    // Access existing (odd numbers)
+    REQUIRE(tree[1] == 10);
+    REQUIRE(tree[5] == 50);
+    REQUIRE(tree.size() == 5);
+
+    // Insert new (even numbers)
+    tree[2] = 20;
+    tree[4] = 40;
+    REQUIRE(tree.size() == 7);
+
+    // Verify all elements
+    for (int i = 1; i <= 5; ++i) {
+      REQUIRE(tree[i] == i * 10);
+    }
+  }
+
+  SECTION("operator[] - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert many elements
+    for (int i = 1; i <= 100; ++i) {
+      tree[i] = i * 10;
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      REQUIRE(tree[i] == i * 10);
+    }
+
+    // Modify some elements
+    for (int i = 1; i <= 100; i += 10) {
+      tree[i] = 999;
+    }
+
+    // Verify modifications
+    for (int i = 1; i <= 100; i += 10) {
+      REQUIRE(tree[i] == 999);
+    }
+
+    REQUIRE(tree.size() == 100);  // Size unchanged
+  }
+
+  SECTION("operator[] - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    // Insert with operator[]
+    tree["apple"] = 1;
+    tree["banana"] = 2;
+    tree["cherry"] = 3;
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree["apple"] == 1);
+    REQUIRE(tree["banana"] == 2);
+    REQUIRE(tree["cherry"] == 3);
+
+    // Modify existing
+    tree["banana"] = 20;
+    REQUIRE(tree["banana"] == 20);
+    REQUIRE(tree.size() == 3);
+
+    // Insert new
+    tree["date"] = 4;
+    REQUIRE(tree.size() == 4);
+    REQUIRE(tree["date"] == 4);
+  }
+
+  SECTION("operator[] - default value for custom types") {
+    btree<int, std::string, 4, 4, Mode> tree;
+
+    // Access non-existent key creates it with default value (empty string)
+    std::string& value = tree[5];
+    REQUIRE(value.empty());
+    REQUIRE(tree.size() == 1);
+
+    // Modify the value
+    tree[5] = "hello";
+    REQUIRE(tree[5] == "hello");
+  }
+
+  SECTION("operator[] - increment pattern") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Common pattern: increment counter
+    for (int i = 0; i < 10; ++i) {
+      tree[5]++;  // Increment value at key 5
+    }
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(tree[5] == 10);
+  }
+
+  SECTION("operator[] - overwrite pattern") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert initial value
+    tree.insert(5, 50);
+    REQUIRE(tree[5] == 50);
+
+    // Overwrite with operator[]
+    tree[5] = 100;
+    REQUIRE(tree[5] == 100);
+    REQUIRE(tree.size() == 1);
+  }
+}
