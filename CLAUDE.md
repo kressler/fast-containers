@@ -186,6 +186,160 @@ return it->second;
 - **Rebalancing**: Hysteresis thresholds prevent thrashing
 - **Underflow handling**: Borrow from siblings → Merge → Cascade up tree
 
+### Phases 10-15: std::map API Compatibility (PRs #40-45)
+
+#### Phase 10: operator[] - Insert/Access with Default Construction
+**Implementation**:
+```cpp
+Value& operator[](const Key& key) {
+  auto [it, inserted] = insert(key, Value{});
+  return it->second;
+}
+```
+
+**Critical Bug Fixed**: `insert()` was checking if leaf was full BEFORE checking if key exists
+```cpp
+// ❌ WRONG: Unnecessary splits on repeated operator[] calls
+if (leaf->data.size() >= LeafNodeSize) {
+  return split_leaf(leaf, key, value);
+}
+auto existing = leaf->data.find(key);
+
+// ✅ CORRECT: Check existence first
+auto pos = leaf->data.lower_bound(key);
+if (pos != leaf->data.end() && pos->first == key) {
+  return {iterator(leaf, pos), false};
+}
+if (leaf->data.size() >= LeafNodeSize) {
+  return split_leaf(leaf, key, value);
+}
+```
+
+**Optimization**: Eliminate duplicate search using `insert_hint()`
+```cpp
+// Before: find() + insert() → 2 searches
+auto existing = leaf->data.find(key);
+if (existing != leaf->data.end()) return ...;
+auto [it, inserted] = leaf->data.insert(key, value);  // searches again
+
+// After: lower_bound() + insert_hint() → 1 search
+auto pos = leaf->data.lower_bound(key);
+if (pos != leaf->data.end() && pos->first == key) return ...;
+auto [it, inserted] = leaf->data.insert_hint(pos, key, value);  // uses pos
+```
+
+**Added to ordered_array**:
+```cpp
+std::pair<iterator, bool> insert_hint(iterator hint, const Key& key, const Value& value) {
+  // Assumes hint from lower_bound(), skips re-searching
+  assert(idx == size_ || keys_[idx] >= key);
+  assert(idx == 0 || keys_[idx - 1] < key);
+  // Direct insertion at hinted position
+}
+```
+
+#### Phase 11: emplace() - In-Place Construction
+**Implementation**: Constructs pair, delegates to insert()
+```cpp
+template <typename... Args>
+std::pair<iterator, bool> emplace(Args&&... args) {
+  value_type pair(std::forward<Args>(args)...);
+  return insert(pair.first, pair.second);
+}
+```
+
+**Design Decision**: Keep simple approach vs full emplace
+- **Issue**: Need key to search before constructing value in-place
+- **Options**:
+  1. Construct temp pair → move (current, simple)
+  2. Key + value_args variant (complex, marginal benefit)
+- **Choice**: (1) - Less complexity, key construction unavoidable anyway
+
+#### Phase 12: swap() - O(1) Container Exchange
+**Challenge**: Union member (leaf_root_ vs internal_root_) requires careful swapping
+```cpp
+void swap(btree& other) noexcept {
+  if (root_is_leaf_ && other.root_is_leaf_) {
+    std::swap(leaf_root_, other.leaf_root_);
+  } else if (!root_is_leaf_ && !other.root_is_leaf_) {
+    std::swap(internal_root_, other.internal_root_);
+  } else {
+    // Mixed: manual swap with temp variable
+    if (root_is_leaf_) {
+      LeafNode* temp = leaf_root_;
+      internal_root_ = other.internal_root_;
+      other.leaf_root_ = temp;
+    } else { /* reverse */ }
+  }
+  std::swap(root_is_leaf_, other.root_is_leaf_);
+  std::swap(size_, other.size_);
+  std::swap(leftmost_leaf_, other.leftmost_leaf_);
+  std::swap(rightmost_leaf_, other.rightmost_leaf_);
+}
+```
+
+#### Phase 13: equal_range() - Range Queries
+**Simple delegation pattern**:
+```cpp
+std::pair<iterator, iterator> equal_range(const Key& key) {
+  return {lower_bound(key), upper_bound(key)};
+}
+```
+- For unique keys: range contains ≤1 element
+- Leverages existing lower_bound/upper_bound implementations
+
+#### Phase 14: key_comp() and value_comp() - Comparison Objects
+**Type definitions**:
+```cpp
+using key_compare = std::less<Key>;
+
+class value_compare {
+ public:
+  bool operator()(const value_type& lhs, const value_type& rhs) const {
+    return key_compare()(lhs.first, rhs.first);
+  }
+};
+```
+- Stateless functors → cheap to copy
+- value_compare only compares keys (ignores values)
+- Compatible with std::sort and other algorithms
+
+#### Phase 15: get_allocator() - Allocator Access
+**API compatibility layer**:
+```cpp
+using allocator_type = std::allocator<value_type>;
+allocator_type get_allocator() const { return allocator_type(); }
+```
+- Current impl uses raw new/delete for nodes
+- Provides std::map API compatibility
+- Future: integrate allocator throughout implementation
+
+### Merge Conflict Resolution Pattern (Phases 10-15)
+
+**Test file conflicts**: Multiple phases added tests after same location
+```bash
+# Extract sections from conflicting regions
+sed -n 'START,END p' file > phase_N_tests.txt
+
+# Combine in phase order (14 then 15, not 15 then 14)
+cat phase_14_tests.txt phase_15_tests.txt > combined.txt
+
+# Reconstruct file: before + combined + after
+cat before_conflict.txt combined.txt after_conflict.txt > file
+```
+
+**Header file conflicts**: Type aliases and methods
+- **Pattern**: Phase N adds type alias + method, Phase N+1 adds different alias + method
+- **Resolution**: Combine ALL aliases, then ALL methods in phase order
+- **Order matters**: Dependent types (value_compare uses key_compare) must be ordered correctly
+
+**Verification**:
+```bash
+cmake --build cmake-build-debug --target test_btree
+ctest --test-dir cmake-build-debug --output-on-failure
+# Check specific phase: ./test_btree "[tag]"
+```
+
 ## Benchmark Best Practices
 
 ### Template Consolidation (43% code reduction)
