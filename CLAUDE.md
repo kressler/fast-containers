@@ -6,10 +6,17 @@
 
 ## Structure
 ```
-src/{ordered_array.hpp, tests/, benchmarks/}
+src/
+  ordered_array.hpp (interface)      # 554 lines
+  ordered_array.ipp (implementation) # 958 lines
+  btree.hpp (interface)              # 667 lines
+  btree.ipp (implementation)         # 1532 lines
+  tests/, benchmarks/, binary/
 third_party/{catch2/, benchmark/, lyra/}  # submodules
 hooks/, install-hooks.sh
 ```
+
+**Header-Implementation Separation**: Template implementations are in `.ipp` files (included at end of `.hpp`) for cleaner interfaces.
 
 ## Build Commands
 
@@ -422,6 +429,69 @@ gh api \
 - `-F body=` handles multi-line text correctly
 - `$(cat file)` preserves formatting
 - Works when `gh pr edit` fails with GraphQL errors
+
+## Template Interface/Implementation Separation
+
+**Pattern**: `.hpp` files contain interface declarations, `.ipp` files contain implementations.
+
+### Structure
+```cpp
+// ordered_array.hpp
+#pragma once
+#include <...>
+
+namespace fast_containers {
+  template <...>
+  class ordered_array {
+   public:
+    void method();  // Declaration only
+   private:
+    T* data_;
+  };
+
+  #include "ordered_array.ipp"  // Include at end, before closing namespace
+}
+```
+
+```cpp
+// ordered_array.ipp - NO header guards
+namespace fast_containers {
+  template <Comparable Key, typename Value, std::size_t Length,
+            SearchMode SearchModeT, MoveMode MoveModeT>
+  void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::method() {
+    // Full implementation with complete template syntax
+  }
+}
+```
+
+### What stays in .hpp vs moves to .ipp
+
+**Keep in .hpp:**
+- Header guards, includes, namespace
+- Enums, concepts, type aliases
+- Class/struct declarations
+- Method declarations with documentation
+- Trivial one-liners (e.g., `size()`, `empty()`, `begin()`, `end()`)
+- Small nested classes (<20 lines)
+
+**Move to .ipp:**
+- All non-trivial method implementations
+- Private helper implementations
+- Template method specializations
+- Complex constructors/destructors
+
+### Benefits
+- 🔍 **Readability**: Interface visible at a glance (49-68% smaller headers)
+- ⚡ **Compile time**: Implementation changes don't require full header recompilation
+- 📖 **Documentation**: Clear separation of what vs how
+- 🛠️ **Maintainability**: Easier navigation and code review
+
+### Example Refactoring Results
+
+| Component | Old .hpp | New .hpp | New .ipp | Reduction |
+|-----------|----------|----------|----------|-----------|
+| ordered_array | 1,129 lines | 554 lines | 958 lines | 51% |
+| btree | 2,113 lines | 667 lines | 1,532 lines | 68% |
 
 ## Common Pitfalls
 
