@@ -961,3 +961,286 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
     }
   }
 }
+
+// Phase 6: Iterator-based erase operations
+TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("erase(iterator) - single element from middle") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.find(5);
+    REQUIRE(it != tree.end());
+
+    auto next = tree.erase(it);
+    REQUIRE(tree.size() == 9);
+    REQUIRE(next != tree.end());
+    REQUIRE(next->first == 6);
+    REQUIRE(next->second == 60);
+
+    // Verify 5 is gone
+    REQUIRE(tree.find(5) == tree.end());
+
+    // Verify others still exist
+    for (int i = 1; i <= 10; ++i) {
+      if (i != 5) {
+        auto found = tree.find(i);
+        REQUIRE(found != tree.end());
+        REQUIRE(found->second == i * 10);
+      }
+    }
+  }
+
+  SECTION("erase(iterator) - first element") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.begin();
+    REQUIRE(it->first == 1);
+
+    auto next = tree.erase(it);
+    REQUIRE(tree.size() == 9);
+    REQUIRE(next == tree.begin());
+    REQUIRE(next->first == 2);
+  }
+
+  SECTION("erase(iterator) - last element") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.find(10);
+    REQUIRE(it != tree.end());
+
+    auto next = tree.erase(it);
+    REQUIRE(tree.size() == 9);
+    REQUIRE(next == tree.end());
+  }
+
+  SECTION("erase(iterator) - all elements one by one forward") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    while (!tree.empty()) {
+      auto it = tree.begin();
+      tree.erase(it);
+    }
+
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.begin() == tree.end());
+  }
+
+  SECTION("erase(iterator) - triggers underflow and borrow") {
+    btree<int, int, 3, 3, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Erase middle elements to trigger underflow
+    auto it = tree.find(5);
+    tree.erase(it);
+    REQUIRE(tree.size() == 9);
+
+    // Verify tree is still valid
+    int count = 0;
+    for (auto pair : tree) {
+      (void)pair;
+      count++;
+    }
+    REQUIRE(count == 9);
+  }
+
+  SECTION("erase(iterator) - triggers underflow and merge") {
+    btree<int, int, 3, 3, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Erase multiple elements to trigger merges
+    for (int i = 1; i <= 10; ++i) {
+      auto it = tree.find(i);
+      if (it != tree.end()) {
+        tree.erase(it);
+      }
+    }
+
+    REQUIRE(tree.size() == 10);
+
+    // Verify remaining elements
+    for (int i = 11; i <= 20; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("erase(iterator, iterator) - range erase middle") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto first = tree.find(4);
+    auto last = tree.find(8);
+    REQUIRE(first != tree.end());
+    REQUIRE(last != tree.end());
+
+    auto next = tree.erase(first, last);
+    REQUIRE(tree.size() == 6);  // Erased 4, 5, 6, 7
+    REQUIRE(next == tree.find(8));
+
+    // Verify erased elements are gone
+    for (int i = 4; i <= 7; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+
+    // Verify remaining elements
+    for (int i : {1, 2, 3, 8, 9, 10}) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("erase(iterator, iterator) - range erase from begin") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto last = tree.find(6);
+    auto next = tree.erase(tree.begin(), last);
+
+    REQUIRE(tree.size() == 5);  // Erased 1-5
+    REQUIRE(next == tree.begin());
+    REQUIRE(next->first == 6);
+  }
+
+  SECTION("erase(iterator, iterator) - range erase to end") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto first = tree.find(6);
+    auto next = tree.erase(first, tree.end());
+
+    REQUIRE(tree.size() == 5);  // Erased 6-10
+    REQUIRE(next == tree.end());
+
+    // Verify remaining elements
+    for (int i = 1; i <= 5; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("erase(iterator, iterator) - erase everything") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto next = tree.erase(tree.begin(), tree.end());
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.empty());
+    REQUIRE(next == tree.end());
+  }
+
+  SECTION("erase(iterator, iterator) - empty range") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.find(5);
+    auto next = tree.erase(it, it);  // Empty range
+
+    REQUIRE(tree.size() == 10);  // Nothing erased
+    REQUIRE(next == it);
+  }
+
+  SECTION("erase(iterator, iterator) - large range with underflow") {
+    btree<int, int, 3, 3, Mode> tree;
+    for (int i = 1; i <= 50; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto first = tree.find(10);
+    auto last = tree.find(40);
+    tree.erase(first, last);
+
+    REQUIRE(tree.size() == 20);  // Erased 10-39
+
+    // Verify tree integrity
+    int count = 0;
+    for (auto pair : tree) {
+      (void)pair;
+      count++;
+    }
+    REQUIRE(count == 20);
+
+    // Verify specific elements
+    for (int i = 1; i <= 9; ++i) {
+      REQUIRE(tree.find(i) != tree.end());
+    }
+    for (int i = 40; i <= 50; ++i) {
+      REQUIRE(tree.find(i) != tree.end());
+    }
+  }
+
+  SECTION("erase(iterator) - with string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+    tree.insert("date", 4);
+    tree.insert("elderberry", 5);
+
+    auto it = tree.find("cherry");
+    REQUIRE(it != tree.end());
+
+    auto next = tree.erase(it);
+    REQUIRE(tree.size() == 4);
+    REQUIRE(next != tree.end());
+    REQUIRE(next->first == "date");
+
+    REQUIRE(tree.find("cherry") == tree.end());
+  }
+
+  SECTION("erase(iterator, iterator) - sequential operations") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert 1-20
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Erase 5-10
+    tree.erase(tree.find(5), tree.find(11));
+    REQUIRE(tree.size() == 14);
+
+    // Verify elements 5-10 are gone
+    for (int i = 5; i <= 10; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+
+    // Verify remaining elements
+    for (int i = 1; i <= 4; ++i) {
+      REQUIRE(tree.find(i) != tree.end());
+    }
+    for (int i = 11; i <= 20; ++i) {
+      REQUIRE(tree.find(i) != tree.end());
+    }
+  }
+}

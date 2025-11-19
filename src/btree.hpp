@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -254,6 +255,29 @@ class btree {
    * Complexity: O(log n)
    */
   size_type erase(const Key& key);
+
+  /**
+   * Removes the element at the given iterator position.
+   * Returns an iterator to the element following the erased element.
+   *
+   * The iterator pos must be valid and dereferenceable (not end()).
+   *
+   * Note: Due to potential node merges during underflow handling, the returned
+   * iterator is reconstructed using find() if the next element is in a
+   * different leaf, adding O(log n) overhead.
+   *
+   * Complexity: O(log n)
+   */
+  iterator erase(iterator pos);
+
+  /**
+   * Removes elements in the range [first, last).
+   * Returns an iterator to the element following the last erased element
+   * (i.e., returns last).
+   *
+   * Complexity: O(k * log n) where k is the number of elements erased
+   */
+  iterator erase(iterator first, iterator last);
 
  private:
   /**
@@ -935,20 +959,86 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return 1;
   }
 
+  // Update parent key if minimum changed (do this BEFORE checking underflow)
+  // This ensures parent keys are always correct before any rebalancing
+  if (!leaf->data.empty() && leaf->parent != nullptr) {
+    const Key& new_min = leaf->data.begin()->first;
+    update_parent_key_recursive(leaf, new_min);
+  }
+
   const size_type underflow_threshold =
       min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
                                           : 0;
   if (leaf->data.size() < underflow_threshold) {
     handle_underflow(leaf);
-  } else if (!leaf->data.empty() && leaf->parent != nullptr) {
-    // No underflow, but check if minimum key changed
-    const Key& new_min = leaf->data.begin()->first;
-    // Only need to update parent if this leaf is still around
-    // (might have been merged away in underflow handling)
-    update_parent_key_recursive(leaf, new_min);
   }
 
   return 1;
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::iterator
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::erase(iterator pos) {
+  assert(pos != end() && "Cannot erase end iterator");
+
+  // Get the next element before erasing
+  // We need to save the key because the iterator will be invalidated
+  iterator next = pos;
+  ++next;
+
+  std::optional<Key> next_key;
+  if (next != end()) {
+    next_key = (*next).first;
+  }
+
+  // Get the key to erase
+  const Key erase_key = (*pos).first;
+
+  // Perform the erase operation
+  erase(erase_key);
+
+  // Reconstruct iterator to next element
+  // If the next element existed, find it; otherwise return end()
+  if (next_key.has_value()) {
+    return find(*next_key);
+  }
+  return end();
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+               MoveModeT>::iterator
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+      MoveModeT>::erase(iterator first, iterator last) {
+  // Save the key of the 'last' element to detect when to stop
+  // We can't rely on iterator comparison because iterators may be invalidated
+  // during node merges
+  std::optional<Key> last_key;
+  if (last != end()) {
+    last_key = (*last).first;
+  }
+
+  // Erase elements one by one until we reach 'last'
+  while (first != end()) {
+    // Check if we've reached the 'last' position by comparing keys
+    if (last_key.has_value() && (*first).first == *last_key) {
+      break;
+    }
+    first = erase(first);
+  }
+
+  // Return iterator to the element following the last erased element
+  // This is the original 'last' position
+  if (last_key.has_value()) {
+    return find(*last_key);
+  }
+  return end();
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
@@ -1240,6 +1330,56 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
          "merge_with_left_sibling requires left sibling");
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    // Special case: if node is empty, just remove it from parent
+    if (node->data.empty()) {
+      // Find this node in parent by iterating (can't use key lookup)
+      InternalNode* parent = node->parent;
+      assert(parent != nullptr && "Merging non-root leaf should have parent");
+      auto& parent_children = parent->leaf_children;
+
+      // Linear search for this node
+      auto it = parent_children.begin();
+      while (it != parent_children.end() && it->second != node) {
+        ++it;
+      }
+      assert(it != parent_children.end() && "Empty node should be in parent");
+      parent_children.remove(it->first);
+
+      // Update leaf chain
+      if (node->prev_leaf) {
+        node->prev_leaf->next_leaf = node->next_leaf;
+      }
+      if (node->next_leaf) {
+        node->next_leaf->prev_leaf = node->prev_leaf;
+      }
+      if (leftmost_leaf_ == node) {
+        leftmost_leaf_ = node->next_leaf;
+      }
+      if (rightmost_leaf_ == node) {
+        rightmost_leaf_ = node->prev_leaf;
+      }
+
+      deallocate_leaf_node(node);
+
+      // Check if parent underflowed
+      const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+      const size_type parent_underflow_threshold =
+          min_internal_size() > internal_hysteresis()
+              ? min_internal_size() - internal_hysteresis()
+              : 0;
+      if (!parent_is_root &&
+          parent_children.size() < parent_underflow_threshold) {
+        handle_underflow(parent);
+      } else if (parent_is_root && parent_children.size() == 1) {
+        LeafNode* new_root = parent_children.begin()->second;
+        new_root->parent = nullptr;
+        root_is_leaf_ = true;
+        leaf_root_ = new_root;
+        deallocate_internal_node(parent);
+      }
+      return;
+    }
+
     // Capture node's minimum key BEFORE transferring data
     const Key node_min = node->data.begin()->first;
 
@@ -1363,6 +1503,56 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
          "merge_with_right_sibling requires right sibling");
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    // Special case: if node is empty, just remove it from parent
+    if (node->data.empty()) {
+      // Find this node in parent by iterating (can't use key lookup)
+      InternalNode* parent = node->parent;
+      assert(parent != nullptr && "Merging non-root leaf should have parent");
+      auto& parent_children = parent->leaf_children;
+
+      // Linear search for this node
+      auto it = parent_children.begin();
+      while (it != parent_children.end() && it->second != node) {
+        ++it;
+      }
+      assert(it != parent_children.end() && "Empty node should be in parent");
+      parent_children.remove(it->first);
+
+      // Update leaf chain
+      if (node->prev_leaf) {
+        node->prev_leaf->next_leaf = node->next_leaf;
+      }
+      if (node->next_leaf) {
+        node->next_leaf->prev_leaf = node->prev_leaf;
+      }
+      if (leftmost_leaf_ == node) {
+        leftmost_leaf_ = node->next_leaf;
+      }
+      if (rightmost_leaf_ == node) {
+        rightmost_leaf_ = node->prev_leaf;
+      }
+
+      deallocate_leaf_node(node);
+
+      // Check if parent underflowed
+      const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+      const size_type parent_underflow_threshold =
+          min_internal_size() > internal_hysteresis()
+              ? min_internal_size() - internal_hysteresis()
+              : 0;
+      if (!parent_is_root &&
+          parent_children.size() < parent_underflow_threshold) {
+        handle_underflow(parent);
+      } else if (parent_is_root && parent_children.size() == 1) {
+        LeafNode* new_root = parent_children.begin()->second;
+        new_root->parent = nullptr;
+        root_is_leaf_ = true;
+        leaf_root_ = new_root;
+        deallocate_internal_node(parent);
+      }
+      return;
+    }
+
     // Capture right sibling's minimum key BEFORE transferring data
     const Key right_sibling_min = right_sibling->data.begin()->first;
 
