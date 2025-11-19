@@ -357,6 +357,17 @@ class btree {
   }
 
   /**
+   * Returns a pair of iterators representing the range of elements with the
+   * given key. For a B+ tree with unique keys, this range will contain at most
+   * one element. Returns {lower_bound(key), upper_bound(key)}.
+   *
+   * Complexity: O(log n)
+   */
+  std::pair<iterator, iterator> equal_range(const Key& key) {
+    return {lower_bound(key), upper_bound(key)};
+  }
+
+  /**
    * Inserts a key-value pair into the tree.
    * Returns a pair with an iterator to the inserted/existing element and a bool
    * indicating whether insertion took place (true) or the key already existed
