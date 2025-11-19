@@ -976,18 +976,16 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
       }
-      auto prev_it = it;
-      --prev_it;
-      return prev_it->second;
+      --it;
+      return it->second;
     } else if (it != children.begin()) {
       --it;
       if (it->second == node) {
         if (it == children.begin()) {
           return nullptr;  // This is the leftmost child
         }
-        auto prev_it = it;
-        --prev_it;
-        return prev_it->second;
+        --it;
+        return it->second;
       }
     }
 
@@ -1044,21 +1042,19 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
     // The entry pointing to this node should be at 'it' or one position before
     if (it != children.end() && it->second == node) {
-      auto next_it = it;
-      ++next_it;
-      if (next_it == children.end()) {
+      ++it;
+      if (it == children.end()) {
         return nullptr;  // This is the rightmost child
       }
-      return next_it->second;
+      return it->second;
     } else if (it != children.begin()) {
       --it;
       if (it->second == node) {
-        auto next_it = it;
-        ++next_it;
-        if (next_it == children.end()) {
+        ++it;
+        if (it == children.end()) {
           return nullptr;  // This is the rightmost child
         }
-        return next_it->second;
+        return it->second;
       }
     }
 
@@ -1113,8 +1109,9 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     // Try to borrow at least hysteresis elements for efficiency
     // But don't leave sibling below min_size
     size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
-    size_type can_borrow =
-        left_children.size() > min_size ? left_children.size() - min_size : 0;
+    size_type can_borrow = (left_children.size() > min_size)
+                               ? (left_children.size() - min_size)
+                               : 0;
     size_type actual_borrow = std::min(target_borrow, can_borrow);
 
     if (actual_borrow == 0) {
@@ -1181,8 +1178,9 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     // Try to borrow at least hysteresis elements for efficiency
     // But don't leave sibling below min_size
     size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
-    size_type can_borrow =
-        right_children.size() > min_size ? right_children.size() - min_size : 0;
+    size_type can_borrow = (right_children.size() > min_size)
+                               ? (right_children.size() - min_size)
+                               : 0;
     size_type actual_borrow = std::min(target_borrow, can_borrow);
 
     if (actual_borrow == 0) {
