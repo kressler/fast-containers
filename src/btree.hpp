@@ -369,6 +369,16 @@ class btree {
   std::pair<iterator, bool> insert(const Key& key, const Value& value);
 
   /**
+   * Accesses or inserts an element with the specified key.
+   * If the key exists, returns a reference to the associated value.
+   * If the key does not exist, inserts a new element with default-constructed
+   * value and returns a reference to it.
+   *
+   * Complexity: O(log n)
+   */
+  Value& operator[](const Key& key);
+
+  /**
    * Removes the element with the given key from the tree.
    * Returns the number of elements removed (0 or 1).
    *
@@ -864,6 +874,13 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Case 2: Tree has elements - find appropriate leaf
   LeafNode* leaf = find_leaf_for_key(key);
 
+  // Check if key already exists first (before checking if leaf is full)
+  // If key exists, no need to split
+  auto existing = leaf->data.find(key);
+  if (existing != leaf->data.end()) {
+    return {iterator(leaf, existing), false};
+  }
+
   // If leaf is full, split it
   if (leaf->data.size() >= LeafNodeSize) {
     return split_leaf(leaf, key, value);
@@ -890,6 +907,17 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   return {iterator(leaf, leaf_it), inserted};
+}
+
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+             MoveModeT>::operator[](const Key& key) {
+  // Try to insert with default-constructed value
+  // If key exists, insert returns the existing element
+  auto [it, inserted] = insert(key, Value{});
+  return it->second;
 }
 
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
