@@ -214,6 +214,23 @@ class btree {
   iterator end() { return iterator(); }
 
   /**
+   * Returns a const_iterator to the first element.
+   * Complexity: O(1) - uses cached leftmost leaf pointer
+   */
+  const_iterator begin() const {
+    if (size_ == 0) {
+      return end();
+    }
+    return const_iterator(leftmost_leaf_, leftmost_leaf_->data.begin());
+  }
+
+  /**
+   * Returns a const_iterator to one past the last element.
+   * Complexity: O(1)
+   */
+  const_iterator end() const { return const_iterator(); }
+
+  /**
    * Finds an element with the given key.
    * Returns an iterator to the element if found, end() otherwise.
    * Complexity: O(log n)
@@ -230,6 +247,27 @@ class btree {
     auto it = leaf->data.find(key);
     if (it != leaf->data.end()) {
       return iterator(leaf, it);
+    }
+    return end();
+  }
+
+  /**
+   * Finds an element with the given key (const version).
+   * Returns a const_iterator to the element if found, end() otherwise.
+   * Complexity: O(log n)
+   */
+  const_iterator find(const Key& key) const {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.find(key);
+    if (it != leaf->data.end()) {
+      return const_iterator(leaf, it);
     }
     return end();
   }
@@ -336,6 +374,22 @@ class btree {
    * Complexity: O(k * log n) where k is the number of elements erased
    */
   iterator erase(iterator first, iterator last);
+
+  /**
+   * Removes all elements from the tree, leaving it empty.
+   * All iterators are invalidated.
+   *
+   * Complexity: O(n)
+   */
+  void clear() { deallocate_tree(); }
+
+  /**
+   * Returns the number of elements with the specified key.
+   * Since btree does not allow duplicates, this returns either 0 or 1.
+   *
+   * Complexity: O(log n)
+   */
+  size_type count(const Key& key) const { return find(key) != end() ? 1 : 0; }
 
  private:
   /**

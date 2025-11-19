@@ -1649,3 +1649,272 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
     REQUIRE(ub_1000 == tree.end());
   }
 }
+TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("clear - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+  }
+
+  SECTION("clear - single element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    REQUIRE(tree.size() == 1);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.find(5) == tree.end());
+  }
+
+  SECTION("clear - multiple elements, single leaf") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 3; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 3);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    for (int i = 1; i <= 3; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+  }
+
+  SECTION("clear - multiple leaves") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert enough to create multiple leaves
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 20);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    for (int i = 1; i <= 20; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+  }
+
+  SECTION("clear - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert 1000 elements
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 1000);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+  }
+
+  SECTION("clear - reuse after clear") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert elements
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 10);
+
+    // Clear
+    tree.clear();
+    REQUIRE(tree.empty());
+
+    // Reuse - insert new elements
+    for (int i = 100; i <= 110; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 11);
+
+    // Verify old elements are gone
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+
+    // Verify new elements exist
+    for (int i = 100; i <= 110; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("clear - multiple clears") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int round = 0; round < 3; ++round) {
+      // Insert elements
+      for (int i = 1; i <= 10; ++i) {
+        tree.insert(i, i * 10);
+      }
+      REQUIRE(tree.size() == 10);
+
+      // Clear
+      tree.clear();
+      REQUIRE(tree.empty());
+      REQUIRE(tree.size() == 0);
+    }
+  }
+
+  SECTION("clear - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+    REQUIRE(tree.size() == 3);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.find("apple") == tree.end());
+    REQUIRE(tree.find("banana") == tree.end());
+    REQUIRE(tree.find("cherry") == tree.end());
+  }
+}
+
+TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("count - empty tree") {
+    const btree<int, int, 4, 4, Mode> tree;
+    REQUIRE(tree.count(5) == 0);
+    REQUIRE(tree.count(0) == 0);
+    REQUIRE(tree.count(100) == 0);
+  }
+
+  SECTION("count - single element found") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+  }
+
+  SECTION("count - single element not found") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(3) == 0);
+    REQUIRE(const_tree.count(7) == 0);
+  }
+
+  SECTION("count - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Elements that exist
+    for (int i = 1; i <= 20; ++i) {
+      REQUIRE(const_tree.count(i) == 1);
+    }
+
+    // Elements that don't exist
+    REQUIRE(const_tree.count(0) == 0);
+    REQUIRE(const_tree.count(21) == 0);
+    REQUIRE(const_tree.count(100) == 0);
+  }
+
+  SECTION("count - after erase") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+
+    tree.erase(5);
+    REQUIRE(const_tree.count(5) == 0);
+    REQUIRE(const_tree.count(4) == 1);
+    REQUIRE(const_tree.count(6) == 1);
+  }
+
+  SECTION("count - with gaps in data") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert: 1, 5, 10, 15, 20, 25, 30
+    tree.insert(1, 10);
+    for (int i = 5; i <= 30; i += 5) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Elements that exist
+    REQUIRE(const_tree.count(1) == 1);
+    REQUIRE(const_tree.count(5) == 1);
+    REQUIRE(const_tree.count(10) == 1);
+    REQUIRE(const_tree.count(30) == 1);
+
+    // Elements in gaps
+    REQUIRE(const_tree.count(2) == 0);
+    REQUIRE(const_tree.count(3) == 0);
+    REQUIRE(const_tree.count(7) == 0);
+    REQUIRE(const_tree.count(12) == 0);
+    REQUIRE(const_tree.count(27) == 0);
+  }
+
+  SECTION("count - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+
+    const auto& const_tree = tree;
+
+    REQUIRE(const_tree.count("apple") == 1);
+    REQUIRE(const_tree.count("banana") == 1);
+    REQUIRE(const_tree.count("cherry") == 1);
+    REQUIRE(const_tree.count("date") == 0);
+    REQUIRE(const_tree.count("zebra") == 0);
+  }
+
+  SECTION("count - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Check various elements
+    REQUIRE(const_tree.count(1) == 1);
+    REQUIRE(const_tree.count(500) == 1);
+    REQUIRE(const_tree.count(1000) == 1);
+    REQUIRE(const_tree.count(0) == 0);
+    REQUIRE(const_tree.count(1001) == 0);
+    REQUIRE(const_tree.count(5000) == 0);
+  }
+
+  SECTION("count - no duplicates allowed") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    tree.insert(5, 50);
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+
+    // Try to insert duplicate (should not be inserted)
+    tree.insert(5, 999);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(const_tree.count(5) == 1);  // Still 1, not 2
+  }
+}
