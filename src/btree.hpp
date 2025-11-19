@@ -654,7 +654,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   LeafNode* new_leaf = allocate_leaf_node();
 
   // Calculate split point (ceil(LeafNodeSize / 2))
-  size_type split_point = (LeafNodeSize + 1) / 2;
+  const size_type split_point = (LeafNodeSize + 1) / 2;
 
   // Use split_at() to efficiently move second half to new leaf
   auto split_it = leaf->data.begin();
@@ -794,7 +794,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   InternalNode* new_node = allocate_internal_node(node->children_are_leaves);
 
   // Calculate split point
-  size_type split_point = (InternalNodeSize + 1) / 2;
+  const size_type split_point = (InternalNodeSize + 1) / 2;
 
   // Use templated lambda to handle split logic for both child types
   auto perform_split = [&]<typename ChildPtrType>(
@@ -900,7 +900,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   LeafNode* leaf = find_leaf_for_key(key);
 
   // Remove from leaf (returns 0 if not found, 1 if removed)
-  size_type removed = leaf->data.remove(key);
+  const size_type removed = leaf->data.remove(key);
   if (removed == 0) {
     return 0;  // Key not found
   }
@@ -1108,11 +1108,11 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                          size_type min_size, size_type hysteresis) -> bool {
     // Try to borrow at least hysteresis elements for efficiency
     // But don't leave sibling below min_size
-    size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
-    size_type can_borrow = (left_children.size() > min_size)
-                               ? (left_children.size() - min_size)
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
+    const size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
+    const size_type can_borrow = (left_children.size() > min_size)
+                                     ? (left_children.size() - min_size)
+                                     : 0;
+    const size_type actual_borrow = std::min(target_borrow, can_borrow);
 
     if (actual_borrow == 0) {
       return false;
@@ -1177,11 +1177,11 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                          size_type min_size, size_type hysteresis) -> bool {
     // Try to borrow at least hysteresis elements for efficiency
     // But don't leave sibling below min_size
-    size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
-    size_type can_borrow = (right_children.size() > min_size)
-                               ? (right_children.size() - min_size)
-                               : 0;
-    size_type actual_borrow = std::min(target_borrow, can_borrow);
+    const size_type target_borrow = hysteresis > 0 ? hysteresis : 1;
+    const size_type can_borrow = (right_children.size() > min_size)
+                                     ? (right_children.size() - min_size)
+                                     : 0;
+    const size_type actual_borrow = std::min(target_borrow, can_borrow);
 
     if (actual_borrow == 0) {
       return false;
@@ -1189,7 +1189,7 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
     // Transfer prefix from right sibling to end of this node
     // This does a bulk copy and shifts arrays only once
-    size_type old_size = children.size();
+    const size_type old_size = children.size();
     children.transfer_prefix_from(right_children, actual_borrow);
 
     // Update parent pointers for all transferred children (if applicable)
@@ -1244,7 +1244,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     const Key node_min = node->data.begin()->first;
 
     // Merge leaf data
-    size_type count = node->data.size();
+    const size_type count = node->data.size();
     left_sibling->data.transfer_prefix_from(node->data, count);
 
     // Update leaf chain pointers
@@ -1273,8 +1273,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     deallocate_leaf_node(node);
 
     // Check if parent underflowed (use hysteresis threshold)
-    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    size_type parent_underflow_threshold =
+    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    const size_type parent_underflow_threshold =
         min_internal_size() > internal_hysteresis()
             ? min_internal_size() - internal_hysteresis()
             : 0;
@@ -1299,8 +1299,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto merge_children = [&]<typename ChildPtrType>(auto& children,
                                                      auto& left_children) {
       // Move all children from this node to left sibling using bulk transfer
-      size_type count = children.size();
-      size_type old_size = left_children.size();
+      const size_type count = children.size();
+      const size_type old_size = left_children.size();
       left_children.transfer_prefix_from(children, count);
 
       // Update parent pointers for all transferred children
@@ -1334,8 +1334,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     deallocate_internal_node(node);
 
     // Check if parent underflowed (use hysteresis threshold)
-    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    size_type parent_underflow_threshold =
+    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    const size_type parent_underflow_threshold =
         min_internal_size() > internal_hysteresis()
             ? min_internal_size() - internal_hysteresis()
             : 0;
@@ -1367,7 +1367,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     const Key right_sibling_min = right_sibling->data.begin()->first;
 
     // Merge leaf data
-    size_type count = right_sibling->data.size();
+    const size_type count = right_sibling->data.size();
     node->data.transfer_prefix_from(right_sibling->data, count);
 
     // Update leaf chain pointers
@@ -1396,8 +1396,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     deallocate_leaf_node(right_sibling);
 
     // Check if parent underflowed (use hysteresis threshold)
-    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    size_type parent_underflow_threshold =
+    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    const size_type parent_underflow_threshold =
         min_internal_size() > internal_hysteresis()
             ? min_internal_size() - internal_hysteresis()
             : 0;
@@ -1423,8 +1423,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto merge_children = [&]<typename ChildPtrType>(auto& children,
                                                      auto& right_children) {
       // Move all children from right sibling to this node using bulk transfer
-      size_type count = right_children.size();
-      size_type old_size = children.size();
+      const size_type count = right_children.size();
+      const size_type old_size = children.size();
       children.transfer_prefix_from(right_children, count);
 
       // Update parent pointers for all transferred children
@@ -1458,8 +1458,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     deallocate_internal_node(right_sibling);
 
     // Check if parent underflowed (use hysteresis threshold)
-    bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    size_type parent_underflow_threshold =
+    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+    const size_type parent_underflow_threshold =
         min_internal_size() > internal_hysteresis()
             ? min_internal_size() - internal_hysteresis()
             : 0;
