@@ -278,6 +278,85 @@ class btree {
   }
 
   /**
+   * Finds an element with the given key (const version).
+   * Returns a const_iterator to the element if found, end() otherwise.
+   * Complexity: O(log n)
+   */
+  const_iterator find(const Key& key) const {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.find(key);
+    if (it != leaf->data.end()) {
+      return const_iterator(leaf, it);
+    }
+    return end();
+  }
+
+  /**
+   * Returns an iterator to the first element not less than the given key.
+   * If all elements are less than key, returns end().
+   *
+   * Complexity: O(log n)
+   */
+  iterator lower_bound(const Key& key) {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.lower_bound(key);
+    if (it != leaf->data.end()) {
+      return iterator(leaf, it);
+    }
+
+    // If we reached the end of this leaf, move to the next leaf
+    // (the next leaf will have all elements greater than this leaf's max)
+    if (leaf->next_leaf != nullptr) {
+      return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
+    }
+
+    return end();
+  }
+
+  /**
+   * Returns an iterator to the first element greater than the given key.
+   * If all elements are less than or equal to key, returns end().
+   *
+   * Complexity: O(log n)
+   */
+  iterator upper_bound(const Key& key) {
+    if (size_ == 0) {
+      return end();
+    }
+
+    // Find the leaf that should contain the key
+    LeafNode* leaf = find_leaf_for_key(key);
+
+    // Search within the leaf
+    auto it = leaf->data.upper_bound(key);
+    if (it != leaf->data.end()) {
+      return iterator(leaf, it);
+    }
+
+    // If we reached the end of this leaf, move to the next leaf
+    // (the next leaf will have all elements greater than this leaf's max)
+    if (leaf->next_leaf != nullptr) {
+      return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
+    }
+
+    return end();
+  }
+
+  /**
    * Inserts a key-value pair into the tree.
    * Returns a pair with an iterator to the inserted/existing element and a bool
    * indicating whether insertion took place (true) or the key already existed
@@ -321,6 +400,22 @@ class btree {
    * Complexity: O(k * log n) where k is the number of elements erased
    */
   iterator erase(iterator first, iterator last);
+
+  /**
+   * Removes all elements from the tree, leaving it empty.
+   * All iterators are invalidated.
+   *
+   * Complexity: O(n)
+   */
+  void clear() { deallocate_tree(); }
+
+  /**
+   * Returns the number of elements with the specified key.
+   * Since btree does not allow duplicates, this returns either 0 or 1.
+   *
+   * Complexity: O(log n)
+   */
+  size_type count(const Key& key) const { return find(key) != end() ? 1 : 0; }
 
  private:
   /**

@@ -1245,6 +1245,647 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 }
 
+TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("lower_bound - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto it = tree.lower_bound(5);
+    REQUIRE(it == tree.end());
+  }
+
+  SECTION("upper_bound - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto it = tree.upper_bound(5);
+    REQUIRE(it == tree.end());
+  }
+
+  SECTION("lower_bound - exact match") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.lower_bound(10);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 10);
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("upper_bound - exact match") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.upper_bound(10);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 11);
+    REQUIRE(it->second == 110);
+  }
+
+  SECTION("lower_bound - key between elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert: 1, 3, 5, 7, 9
+    for (int i = 1; i <= 9; i += 2) {
+      tree.insert(i, i * 10);
+    }
+
+    // lower_bound(4) should return iterator to 5
+    auto it = tree.lower_bound(4);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("upper_bound - key between elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert: 1, 3, 5, 7, 9
+    for (int i = 1; i <= 9; i += 2) {
+      tree.insert(i, i * 10);
+    }
+
+    // upper_bound(4) should return iterator to 5
+    auto it = tree.upper_bound(4);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("lower_bound - key at beginning") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.lower_bound(1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == 10);
+  }
+
+  SECTION("upper_bound - key at beginning") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.upper_bound(1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 2);
+    REQUIRE(it->second == 20);
+  }
+
+  SECTION("lower_bound - key at end") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.lower_bound(10);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 10);
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("upper_bound - key at end") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.upper_bound(10);
+    REQUIRE(it == tree.end());
+  }
+
+  SECTION("lower_bound - key before all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 10; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.lower_bound(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 10);
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("upper_bound - key before all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 10; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.upper_bound(5);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 10);
+    REQUIRE(it->second == 100);
+  }
+
+  SECTION("lower_bound - key after all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.lower_bound(20);
+    REQUIRE(it == tree.end());
+  }
+
+  SECTION("upper_bound - key after all elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto it = tree.upper_bound(20);
+    REQUIRE(it == tree.end());
+  }
+
+  SECTION("lower_bound and upper_bound - range query") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Find all elements in range [5, 15)
+    auto first = tree.lower_bound(5);
+    auto last = tree.upper_bound(14);
+
+    REQUIRE(first != tree.end());
+    REQUIRE(first->first == 5);
+
+    // Count elements in range
+    int count = 0;
+    for (auto it = first; it != last; ++it) {
+      count++;
+      REQUIRE(it->first >= 5);
+      REQUIRE(it->first <= 14);
+    }
+    REQUIRE(count == 10);  // 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+  }
+
+  SECTION("lower_bound - across leaf boundaries") {
+    // Create a tree that will have multiple leaves
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert enough elements to create multiple leaves (more than leaf size)
+    for (int i = 1; i <= 50; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test lower_bound at various positions
+    auto it25 = tree.lower_bound(25);
+    REQUIRE(it25 != tree.end());
+    REQUIRE(it25->first == 25);
+    REQUIRE(it25->second == 250);
+
+    auto it30 = tree.lower_bound(30);
+    REQUIRE(it30 != tree.end());
+    REQUIRE(it30->first == 30);
+    REQUIRE(it30->second == 300);
+  }
+
+  SECTION("upper_bound - across leaf boundaries") {
+    // Create a tree that will have multiple leaves
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert enough elements to create multiple leaves
+    for (int i = 1; i <= 50; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test upper_bound at various positions
+    auto it25 = tree.upper_bound(25);
+    REQUIRE(it25 != tree.end());
+    REQUIRE(it25->first == 26);
+    REQUIRE(it25->second == 260);
+
+    auto it30 = tree.upper_bound(30);
+    REQUIRE(it30 != tree.end());
+    REQUIRE(it30->first == 31);
+    REQUIRE(it30->second == 310);
+  }
+
+  SECTION("lower_bound - with gaps in data") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert: 1, 5, 10, 15, 20, 25, 30
+    tree.insert(1, 10);
+    for (int i = 5; i <= 30; i += 5) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test lower_bound for values in gaps
+    auto it3 = tree.lower_bound(3);
+    REQUIRE(it3 != tree.end());
+    REQUIRE(it3->first == 5);
+
+    auto it12 = tree.lower_bound(12);
+    REQUIRE(it12 != tree.end());
+    REQUIRE(it12->first == 15);
+
+    auto it27 = tree.lower_bound(27);
+    REQUIRE(it27 != tree.end());
+    REQUIRE(it27->first == 30);
+  }
+
+  SECTION("upper_bound - with gaps in data") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert: 1, 5, 10, 15, 20, 25, 30
+    tree.insert(1, 10);
+    for (int i = 5; i <= 30; i += 5) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test upper_bound for values in gaps
+    auto it3 = tree.upper_bound(3);
+    REQUIRE(it3 != tree.end());
+    REQUIRE(it3->first == 5);
+
+    auto it12 = tree.upper_bound(12);
+    REQUIRE(it12 != tree.end());
+    REQUIRE(it12->first == 15);
+
+    auto it27 = tree.upper_bound(27);
+    REQUIRE(it27 != tree.end());
+    REQUIRE(it27->first == 30);
+  }
+
+  SECTION("lower_bound and upper_bound - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+    tree.insert("date", 4);
+    tree.insert("elderberry", 5);
+
+    // lower_bound("cherry") -> "cherry"
+    auto lb_cherry = tree.lower_bound("cherry");
+    REQUIRE(lb_cherry != tree.end());
+    REQUIRE(lb_cherry->first == "cherry");
+    REQUIRE(lb_cherry->second == 3);
+
+    // upper_bound("cherry") -> "date"
+    auto ub_cherry = tree.upper_bound("cherry");
+    REQUIRE(ub_cherry != tree.end());
+    REQUIRE(ub_cherry->first == "date");
+    REQUIRE(ub_cherry->second == 4);
+
+    // lower_bound("cake") -> "cherry"
+    auto lb_cake = tree.lower_bound("cake");
+    REQUIRE(lb_cake != tree.end());
+    REQUIRE(lb_cake->first == "cherry");
+
+    // upper_bound("cake") -> "cherry"
+    auto ub_cake = tree.upper_bound("cake");
+    REQUIRE(ub_cake != tree.end());
+    REQUIRE(ub_cake->first == "cherry");
+
+    // lower_bound("zebra") -> end()
+    auto lb_zebra = tree.lower_bound("zebra");
+    REQUIRE(lb_zebra == tree.end());
+
+    // upper_bound("zebra") -> end()
+    auto ub_zebra = tree.upper_bound("zebra");
+    REQUIRE(ub_zebra == tree.end());
+  }
+
+  SECTION("lower_bound and upper_bound - single element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // lower_bound(5) -> 5
+    auto lb_eq = tree.lower_bound(5);
+    REQUIRE(lb_eq != tree.end());
+    REQUIRE(lb_eq->first == 5);
+
+    // upper_bound(5) -> end()
+    auto ub_eq = tree.upper_bound(5);
+    REQUIRE(ub_eq == tree.end());
+
+    // lower_bound(3) -> 5
+    auto lb_less = tree.lower_bound(3);
+    REQUIRE(lb_less != tree.end());
+    REQUIRE(lb_less->first == 5);
+
+    // upper_bound(3) -> 5
+    auto ub_less = tree.upper_bound(3);
+    REQUIRE(ub_less != tree.end());
+    REQUIRE(ub_less->first == 5);
+
+    // lower_bound(7) -> end()
+    auto lb_greater = tree.lower_bound(7);
+    REQUIRE(lb_greater == tree.end());
+
+    // upper_bound(7) -> end()
+    auto ub_greater = tree.upper_bound(7);
+    REQUIRE(ub_greater == tree.end());
+  }
+
+  SECTION("lower_bound and upper_bound - duplicates not allowed") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert 1-10
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Try to insert duplicate (should not be inserted)
+    auto result = tree.insert(5, 999);
+    REQUIRE(result.second == false);  // Not inserted
+    REQUIRE(tree.size() == 10);
+
+    // lower_bound and upper_bound should work correctly
+    auto lb = tree.lower_bound(5);
+    auto ub = tree.upper_bound(5);
+
+    REQUIRE(lb != tree.end());
+    REQUIRE(lb->first == 5);
+    REQUIRE(lb->second == 50);  // Original value, not 999
+
+    REQUIRE(ub != tree.end());
+    REQUIRE(ub->first == 6);
+  }
+
+  SECTION("lower_bound and upper_bound - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert 1000 elements
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Test lower_bound at various positions
+    auto lb_100 = tree.lower_bound(100);
+    REQUIRE(lb_100 != tree.end());
+    REQUIRE(lb_100->first == 100);
+
+    auto lb_500 = tree.lower_bound(500);
+    REQUIRE(lb_500 != tree.end());
+    REQUIRE(lb_500->first == 500);
+
+    auto lb_999 = tree.lower_bound(999);
+    REQUIRE(lb_999 != tree.end());
+    REQUIRE(lb_999->first == 999);
+
+    // Test upper_bound at various positions
+    auto ub_100 = tree.upper_bound(100);
+    REQUIRE(ub_100 != tree.end());
+    REQUIRE(ub_100->first == 101);
+
+    auto ub_500 = tree.upper_bound(500);
+    REQUIRE(ub_500 != tree.end());
+    REQUIRE(ub_500->first == 501);
+
+    auto ub_999 = tree.upper_bound(999);
+    REQUIRE(ub_999 != tree.end());
+    REQUIRE(ub_999->first == 1000);
+
+    auto ub_1000 = tree.upper_bound(1000);
+    REQUIRE(ub_1000 == tree.end());
+  }
+}
+TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("clear - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+  }
+
+  SECTION("clear - single element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+    REQUIRE(tree.size() == 1);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.find(5) == tree.end());
+  }
+
+  SECTION("clear - multiple elements, single leaf") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 3; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 3);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    for (int i = 1; i <= 3; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+  }
+
+  SECTION("clear - multiple leaves") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert enough to create multiple leaves
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 20);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    for (int i = 1; i <= 20; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+  }
+
+  SECTION("clear - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert 1000 elements
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 1000);
+
+    tree.clear();
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+  }
+
+  SECTION("clear - reuse after clear") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert elements
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 10);
+
+    // Clear
+    tree.clear();
+    REQUIRE(tree.empty());
+
+    // Reuse - insert new elements
+    for (int i = 100; i <= 110; ++i) {
+      tree.insert(i, i * 10);
+    }
+    REQUIRE(tree.size() == 11);
+
+    // Verify old elements are gone
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+
+    // Verify new elements exist
+    for (int i = 100; i <= 110; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("count - empty tree") {
+    const btree<int, int, 4, 4, Mode> tree;
+    REQUIRE(tree.count(5) == 0);
+    REQUIRE(tree.count(0) == 0);
+    REQUIRE(tree.count(100) == 0);
+  }
+
+  SECTION("count - single element found") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+  }
+
+  SECTION("count - single element not found") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(3) == 0);
+    REQUIRE(const_tree.count(7) == 0);
+  }
+
+  SECTION("count - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 20; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Elements that exist
+    for (int i = 1; i <= 20; ++i) {
+      REQUIRE(const_tree.count(i) == 1);
+    }
+
+    // Elements that don't exist
+    REQUIRE(const_tree.count(0) == 0);
+    REQUIRE(const_tree.count(21) == 0);
+    REQUIRE(const_tree.count(100) == 0);
+  }
+
+  SECTION("count - after erase") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+
+    tree.erase(5);
+    REQUIRE(const_tree.count(5) == 0);
+    REQUIRE(const_tree.count(4) == 1);
+    REQUIRE(const_tree.count(6) == 1);
+  }
+
+  SECTION("count - with gaps in data") {
+    btree<int, int, 4, 4, Mode> tree;
+    // Insert: 1, 5, 10, 15, 20, 25, 30
+    tree.insert(1, 10);
+    for (int i = 5; i <= 30; i += 5) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Elements that exist
+    REQUIRE(const_tree.count(1) == 1);
+    REQUIRE(const_tree.count(5) == 1);
+    REQUIRE(const_tree.count(10) == 1);
+    REQUIRE(const_tree.count(30) == 1);
+
+    // Elements in gaps
+    REQUIRE(const_tree.count(2) == 0);
+    REQUIRE(const_tree.count(3) == 0);
+    REQUIRE(const_tree.count(7) == 0);
+    REQUIRE(const_tree.count(12) == 0);
+    REQUIRE(const_tree.count(27) == 0);
+  }
+
+  SECTION("count - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    tree.insert("apple", 1);
+    tree.insert("banana", 2);
+    tree.insert("cherry", 3);
+
+    const auto& const_tree = tree;
+
+    REQUIRE(const_tree.count("apple") == 1);
+    REQUIRE(const_tree.count("banana") == 1);
+    REQUIRE(const_tree.count("cherry") == 1);
+    REQUIRE(const_tree.count("date") == 0);
+    REQUIRE(const_tree.count("zebra") == 0);
+  }
+
+  SECTION("count - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 1000; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    const auto& const_tree = tree;
+
+    // Check various elements
+    REQUIRE(const_tree.count(1) == 1);
+    REQUIRE(const_tree.count(500) == 1);
+    REQUIRE(const_tree.count(1000) == 1);
+    REQUIRE(const_tree.count(0) == 0);
+    REQUIRE(const_tree.count(1001) == 0);
+    REQUIRE(const_tree.count(5000) == 0);
+  }
+
+  SECTION("count - no duplicates allowed") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    tree.insert(5, 50);
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.count(5) == 1);
+
+    // Try to insert duplicate (should not be inserted)
+    tree.insert(5, 999);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(const_tree.count(5) == 1);  // Still 1, not 2
+  }
+}
+
 TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
