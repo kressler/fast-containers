@@ -2233,6 +2233,225 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 }
 
+TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("emplace - insert new element") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace with separate key and value
+    auto [it, inserted] = tree.emplace(5, 50);
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace - existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Try to emplace duplicate
+    auto [it, inserted] = tree.emplace(5, 999);
+
+    REQUIRE(!inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->second == 50);  // Original value unchanged
+  }
+
+  SECTION("emplace - multiple elements") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace(1, 10);
+    auto [it2, ins2] = tree.emplace(2, 20);
+    auto [it3, ins3] = tree.emplace(3, 30);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("emplace - with std::pair") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace using std::pair
+    auto [it, inserted] = tree.emplace(std::make_pair(5, 50));
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace("apple", 1);
+    auto [it2, ins2] = tree.emplace("banana", 2);
+    auto [it3, ins3] = tree.emplace("cherry", 3);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find("apple")->second == 1);
+    REQUIRE(tree.find("banana")->second == 2);
+    REQUIRE(tree.find("cherry")->second == 3);
+  }
+
+  SECTION("emplace - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.emplace(i, i * 10);
+      REQUIRE(inserted);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("emplace - return value on duplicate") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto [it1, ins1] = tree.emplace(5, 50);
+    REQUIRE(ins1);
+    REQUIRE(it1->second == 50);
+
+    auto [it2, ins2] = tree.emplace(5, 999);
+    REQUIRE(!ins2);
+    REQUIRE(it2->second == 50);  // Returns iterator to existing element
+  }
+}
+
+TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("emplace_hint - insert new element") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace with hint (hint is ignored for now)
+    auto it = tree.emplace_hint(tree.end(), 5, 50);
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace_hint - existing element") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    // Try to emplace duplicate with hint
+    auto it = tree.emplace_hint(tree.begin(), 5, 999);
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->second == 50);  // Original value unchanged
+  }
+
+  SECTION("emplace_hint - multiple elements with hints") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), 1, 10);
+    auto it2 = tree.emplace_hint(it1, 2, 20);
+    auto it3 = tree.emplace_hint(it2, 3, 30);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("emplace_hint - with std::pair") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Emplace using std::pair with hint
+    auto it = tree.emplace_hint(tree.end(), std::make_pair(5, 50));
+
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("emplace_hint - string keys") {
+    btree<std::string, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), "apple", 1);
+    auto it2 = tree.emplace_hint(tree.end(), "banana", 2);
+    auto it3 = tree.emplace_hint(tree.end(), "cherry", 3);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find("apple")->second == 1);
+    REQUIRE(tree.find("banana")->second == 2);
+    REQUIRE(tree.find("cherry")->second == 3);
+  }
+
+  SECTION("emplace_hint - large tree") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto hint = tree.end();
+    for (int i = 1; i <= 100; ++i) {
+      hint = tree.emplace_hint(hint, i, i * 10);
+      REQUIRE(hint->first == i);
+      REQUIRE(hint->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("emplace_hint - return value on duplicate") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto it1 = tree.emplace_hint(tree.end(), 5, 50);
+    REQUIRE(it1->second == 50);
+
+    auto it2 = tree.emplace_hint(it1, 5, 999);
+    REQUIRE(it2->second == 50);  // Returns iterator to existing element
+  }
+
+  SECTION("emplace_hint - wrong hint doesn't break correctness") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Insert some elements
+    tree.insert(1, 10);
+    tree.insert(5, 50);
+    tree.insert(10, 100);
+
+    // Emplace with "wrong" hint (doesn't matter since we ignore it)
+    auto it = tree.emplace_hint(tree.begin(), 7, 70);
+
+    REQUIRE(tree.size() == 4);
+    REQUIRE(it->first == 7);
+    REQUIRE(it->second == 70);
+    REQUIRE(tree.find(7) != tree.end());
+  }
+}
 TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
