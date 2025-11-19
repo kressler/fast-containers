@@ -205,6 +205,50 @@ class ordered_array {
   }
 
   /**
+   * Inserts a key-value pair using a position hint.
+   * The hint should be an iterator returned by lower_bound(key).
+   * If the hint is correct, this avoids searching again.
+   *
+   * @param hint Iterator hint to the insertion position
+   * @param key The key to insert
+   * @param value The value to insert
+   * @return Pair of iterator to inserted/existing element and bool indicating
+   * success
+   */
+  std::pair<iterator, bool> insert_hint(iterator hint, const Key& key,
+                                        const Value& value) {
+    // Check if array is full
+    if (size_ >= Length) {
+      throw std::runtime_error("Cannot insert: array is full");
+    }
+
+    // Get the index from the hint
+    size_type idx = hint.index_;
+
+    // Verify the hint is valid (optional debug check)
+    // In release builds, we trust the hint for performance
+    assert(idx <= size_);
+    assert(idx == size_ || keys_[idx] >= key);
+    assert(idx == 0 || keys_[idx - 1] < key);
+
+    // Check if key already exists at the hint position
+    if (idx < size_ && keys_[idx] == key) {
+      return {iterator(this, idx), false};
+    }
+
+    // Shift elements to the right to make space in both arrays
+    simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+    simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+
+    // Insert the new elements
+    keys_[idx] = key;
+    values_[idx] = value;
+    ++size_;
+
+    return {iterator(this, idx), true};
+  }
+
+  /**
    * Find an element by key.
    *
    * @param key The key to search for
