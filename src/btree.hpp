@@ -968,13 +968,27 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Use templated lambda to handle search logic for both node types
   auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
-    // Use lower_bound to efficiently find this node's position
-    auto it = children.lower_bound(*node_min);
+    // Use find() to locate this node's entry
+    // Note: We search by the node's current minimum, but the parent might not
+    // have been updated yet, so we also check nearby positions
+    auto it = children.find(*node_min);
 
-    // The entry pointing to this node should be at 'it' or one position before
+    // Check if we found it at the exact position
     if (it != children.end() && it->second == node) {
       if (it == children.begin()) {
         return nullptr;  // This is the leftmost child
+      }
+      auto prev_it = it;
+      --prev_it;
+      return prev_it->second;
+    }
+
+    // If not found at exact position, use lower_bound as fallback
+    // (parent might still have old key for this node)
+    it = children.lower_bound(*node_min);
+    if (it != children.end() && it->second == node) {
+      if (it == children.begin()) {
+        return nullptr;
       }
       auto prev_it = it;
       --prev_it;
@@ -983,13 +997,15 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       --it;
       if (it->second == node) {
         if (it == children.begin()) {
-          return nullptr;  // This is the leftmost child
+          return nullptr;
         }
         auto prev_it = it;
         --prev_it;
         return prev_it->second;
       }
     }
+
+    assert(false && "Node not found in parent's children");
     return nullptr;
   };
 
@@ -1037,15 +1053,29 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
   // Use templated lambda to handle search logic for both node types
   auto find_sibling = [&]<typename ChildPtrType>(auto& children) -> NodeType* {
-    // Use lower_bound to efficiently find this node's position
-    auto it = children.lower_bound(*node_min);
+    // Use find() to locate this node's entry
+    // Note: We search by the node's current minimum, but the parent might not
+    // have been updated yet, so we also check nearby positions
+    auto it = children.find(*node_min);
 
-    // The entry pointing to this node should be at 'it' or one position before
+    // Check if we found it at the exact position
     if (it != children.end() && it->second == node) {
       auto next_it = it;
       ++next_it;
       if (next_it == children.end()) {
         return nullptr;  // This is the rightmost child
+      }
+      return next_it->second;
+    }
+
+    // If not found at exact position, use lower_bound as fallback
+    // (parent might still have old key for this node)
+    it = children.lower_bound(*node_min);
+    if (it != children.end() && it->second == node) {
+      auto next_it = it;
+      ++next_it;
+      if (next_it == children.end()) {
+        return nullptr;
       }
       return next_it->second;
     } else if (it != children.begin()) {
@@ -1054,11 +1084,13 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         auto next_it = it;
         ++next_it;
         if (next_it == children.end()) {
-          return nullptr;  // This is the rightmost child
+          return nullptr;
         }
         return next_it->second;
       }
     }
+
+    assert(false && "Node not found in parent's children");
     return nullptr;
   };
 
