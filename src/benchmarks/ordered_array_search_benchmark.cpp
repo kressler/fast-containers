@@ -42,7 +42,7 @@ static void BM_OrderedArray_RemoveInsert(benchmark::State& state) {
   for (auto _ : state) {
     // Remove the element we're about to insert (if it exists)
     if (arr.size() == Size) {
-      arr.remove(keys[Size - 1]);
+      arr.erase(keys[Size - 1]);
     }
 
     // Measure insert into array of size (Size-1)

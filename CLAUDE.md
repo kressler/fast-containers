@@ -66,7 +66,7 @@ concept Comparable = requires(T a, T b) {
 | SearchMode | Use When | Size | Workload |
 |------------|----------|------|----------|
 | **SIMD** | Read-heavy | >32 | Negative lookups, find-dominant |
-| **Linear** | Write-heavy | <32 | Frequent insert/remove, early exit benefits |
+| **Linear** | Write-heavy | <32 | Frequent insert/erase, early exit benefits |
 | **Binary** | Balanced | >64 | Mixed read/write, or no AVX2 |
 
 ### SIMD Find Performance (vs Linear)
@@ -428,7 +428,7 @@ gh api \
 | Issue | Wrong | Correct |
 |-------|-------|---------|
 | Iterator refs | `for (auto& p : arr)` | `for (auto p : arr)` |
-| Key modification | `it->first = val` | `arr.remove(old); arr.insert(new, val)` |
+| Key modification | `it->first = val` | `arr.erase(old); arr.insert(new, val)` |
 | Submodule update | - | `git submodule update --remote` |
 
 ## Future Optimizations

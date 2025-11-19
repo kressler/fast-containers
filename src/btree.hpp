@@ -1279,7 +1279,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     // Found it at lower_bound position
     is_leftmost = (it == children.begin());
     if (it->first != new_min) {
-      children.remove(it->first);
+      children.erase(it->first);
       auto [new_it, ins] = children.insert(new_min, child);
       assert(ins && "Re-inserting child with new minimum key should succeed");
     }
@@ -1288,7 +1288,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     --it;
     if (it->second == child && it->first != new_min) {
       is_leftmost = (it == children.begin());
-      children.remove(it->first);
+      children.erase(it->first);
       auto [new_it, ins] = children.insert(new_min, child);
       assert(ins && "Re-inserting child with new minimum key should succeed");
     }
@@ -1317,7 +1317,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   LeafNode* leaf = find_leaf_for_key(key);
 
   // Remove from leaf (returns 0 if not found, 1 if removed)
-  const size_type removed = leaf->data.remove(key);
+  const size_type removed = leaf->data.erase(key);
   if (removed == 0) {
     return 0;  // Key not found
   }
@@ -1736,7 +1736,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         ++it;
       }
       assert(it != parent_children.end() && "Empty node should be in parent");
-      parent_children.remove(it->first);
+      parent_children.erase(it->first);
 
       // Update leaf chain
       if (node->prev_leaf) {
@@ -1800,7 +1800,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto it = parent_children.find(node_min);
     assert(it != parent_children.end() && it->second == node &&
            "Node's minimum key should map to node in parent");
-    parent_children.remove(it->first);
+    parent_children.erase(it->first);
 
     // Deallocate this leaf
     deallocate_leaf_node(node);
@@ -1861,7 +1861,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto it = parent_children.find(node_min);
     assert(it != parent_children.end() && it->second == node &&
            "Node's minimum key should map to node in parent");
-    parent_children.remove(it->first);
+    parent_children.erase(it->first);
 
     // Deallocate this node
     deallocate_internal_node(node);
@@ -1909,7 +1909,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         ++it;
       }
       assert(it != parent_children.end() && "Empty node should be in parent");
-      parent_children.remove(it->first);
+      parent_children.erase(it->first);
 
       // Update leaf chain
       if (node->prev_leaf) {
@@ -1973,7 +1973,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto it = parent_children.find(right_sibling_min);
     assert(it != parent_children.end() && it->second == right_sibling &&
            "Right sibling's minimum key should map to right sibling in parent");
-    parent_children.remove(it->first);
+    parent_children.erase(it->first);
 
     // Deallocate right sibling
     deallocate_leaf_node(right_sibling);
@@ -2035,7 +2035,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto it = parent_children.find(right_sibling_min);
     assert(it != parent_children.end() && it->second == right_sibling &&
            "Right sibling's minimum key should map to right sibling in parent");
-    parent_children.remove(it->first);
+    parent_children.erase(it->first);
 
     // Deallocate right sibling
     deallocate_internal_node(right_sibling);

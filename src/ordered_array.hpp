@@ -337,13 +337,13 @@ class ordered_array {
   }
 
   /**
-   * Remove an element by key.
+   * Erase an element by key.
    * If the element does not exist, does nothing.
    *
-   * @param key The key to remove
-   * @return The number of elements removed (0 or 1)
+   * @param key The key to erase
+   * @return The number of elements erased (0 or 1)
    */
-  size_type remove(const Key& key) {
+  size_type erase(const Key& key) {
     auto it = find(key);
     if (it != end()) {
       size_type idx = it.index();
@@ -848,7 +848,7 @@ class ordered_array {
 
   /**
    * Move elements forward (towards lower indices) using SIMD when possible.
-   * Used for remove operations to shift elements left and fill gaps.
+   * Used for erase operations to shift elements left and fill gaps.
    *
    * @tparam T The element type
    * @param first Start of the source range
@@ -871,7 +871,7 @@ class ordered_array {
       if (num_bytes == 0)
         return;
 
-      // Work forwards (safe since dest < src for remove operations)
+      // Work forwards (safe since dest < src for erase operations)
       char* src = reinterpret_cast<char*>(first);
       char* dst = reinterpret_cast<char*>(dest_first);
 

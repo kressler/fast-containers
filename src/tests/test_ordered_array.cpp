@@ -144,7 +144,7 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
   SECTION("Remove existing element") {
     REQUIRE(arr.size() == 5);
 
-    arr.remove(30);
+    arr.erase(30);
     REQUIRE(arr.size() == 4);
     REQUIRE(arr.find(30) == arr.end());
 
@@ -160,39 +160,39 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
   }
 
   SECTION("Remove first element") {
-    arr.remove(10);
+    arr.erase(10);
     REQUIRE(arr.size() == 4);
     REQUIRE(arr.find(10) == arr.end());
     REQUIRE(arr.begin()->first == 20);
   }
 
   SECTION("Remove last element") {
-    arr.remove(50);
+    arr.erase(50);
     REQUIRE(arr.size() == 4);
     REQUIRE(arr.find(50) == arr.end());
   }
 
   SECTION("Remove non-existing element does nothing") {
-    arr.remove(100);
+    arr.erase(100);
     REQUIRE(arr.size() == 5);
 
-    arr.remove(25);
+    arr.erase(25);
     REQUIRE(arr.size() == 5);
   }
 
   SECTION("Remove returns number of elements removed") {
     // Removing existing element returns 1
-    auto removed = arr.remove(30);
+    auto removed = arr.erase(30);
     REQUIRE(removed == 1);
     REQUIRE(arr.size() == 4);
 
     // Removing non-existing element returns 0
-    removed = arr.remove(100);
+    removed = arr.erase(100);
     REQUIRE(removed == 0);
     REQUIRE(arr.size() == 4);
 
     // Removing already removed element returns 0
-    removed = arr.remove(30);
+    removed = arr.erase(30);
     REQUIRE(removed == 0);
     REQUIRE(arr.size() == 4);
   }
@@ -430,8 +430,8 @@ TEST_CASE("ordered_array search mode comparison",
   }
 
   SECTION("Both modes handle removal the same way") {
-    binary_arr.remove(10);
-    linear_arr.remove(10);
+    binary_arr.erase(10);
+    linear_arr.erase(10);
 
     REQUIRE(binary_arr.size() == linear_arr.size());
     REQUIRE(binary_arr.find(10) == binary_arr.end());
