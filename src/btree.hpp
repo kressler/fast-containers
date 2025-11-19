@@ -37,6 +37,7 @@ class btree {
   using mapped_type = Value;
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
+  using allocator_type = std::allocator<value_type>;
   using key_compare = std::less<Key>;
 
   /**
@@ -167,6 +168,14 @@ class btree {
    * Complexity: O(1)
    */
   value_compare value_comp() const { return value_compare(); }
+
+  /**
+   * Returns the allocator associated with the container.
+   * Note: The current implementation uses raw new/delete for node allocation.
+   * This method provides API compatibility with std::map.
+   * Complexity: O(1)
+   */
+  allocator_type get_allocator() const { return allocator_type(); }
 
   /**
    * Forward iterator for btree.

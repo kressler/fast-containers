@@ -2322,6 +2322,130 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 }
 
+TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("get_allocator - basic functionality") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto alloc = tree.get_allocator();
+
+    // Verify we got an allocator
+    // Should be std::allocator<std::pair<int, int>>
+    static_assert(
+        std::is_same_v<decltype(alloc), std::allocator<std::pair<int, int>>>);
+  }
+
+  SECTION("get_allocator - type alias") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    // Verify allocator_type alias matches get_allocator return type
+    static_assert(std::is_same_v<typename decltype(tree)::allocator_type,
+                                 std::allocator<std::pair<int, int>>>);
+
+    auto alloc = tree.get_allocator();
+    static_assert(std::is_same_v<decltype(alloc),
+                                 typename decltype(tree)::allocator_type>);
+  }
+
+  SECTION("get_allocator - const tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    tree.insert(5, 50);
+
+    const auto& const_tree = tree;
+    auto alloc = const_tree.get_allocator();
+
+    // Should work with const tree
+    static_assert(
+        std::is_same_v<decltype(alloc), std::allocator<std::pair<int, int>>>);
+  }
+
+  SECTION("get_allocator - empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto alloc = tree.get_allocator();
+
+    // Should work even on empty tree
+    REQUIRE(tree.empty());
+    static_assert(
+        std::is_same_v<decltype(alloc), std::allocator<std::pair<int, int>>>);
+  }
+
+  SECTION("get_allocator - non-empty tree") {
+    btree<int, int, 4, 4, Mode> tree;
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    auto alloc = tree.get_allocator();
+    REQUIRE(tree.size() == 10);
+
+    // Should work on non-empty tree
+    static_assert(
+        std::is_same_v<decltype(alloc), std::allocator<std::pair<int, int>>>);
+  }
+
+  SECTION("get_allocator - string key type") {
+    btree<std::string, int, 4, 4, Mode> tree;
+    auto alloc = tree.get_allocator();
+
+    // Allocator should be for std::pair<std::string, int>
+    static_assert(std::is_same_v<decltype(alloc),
+                                 std::allocator<std::pair<std::string, int>>>);
+  }
+
+  SECTION("get_allocator - different value types") {
+    btree<int, std::string, 4, 4, Mode> tree;
+    auto alloc = tree.get_allocator();
+
+    // Allocator should be for std::pair<int, std::string>
+    static_assert(std::is_same_v<decltype(alloc),
+                                 std::allocator<std::pair<int, std::string>>>);
+  }
+
+  SECTION("get_allocator - allocator can allocate") {
+    btree<int, int, 4, 4, Mode> tree;
+    auto alloc = tree.get_allocator();
+
+    // Test that the allocator can actually allocate/deallocate
+    auto ptr = alloc.allocate(1);
+    REQUIRE(ptr != nullptr);
+
+    // Construct a pair
+    std::allocator_traits<decltype(alloc)>::construct(alloc, ptr, 5, 50);
+    REQUIRE(ptr->first == 5);
+    REQUIRE(ptr->second == 50);
+
+    // Destroy and deallocate
+    std::allocator_traits<decltype(alloc)>::destroy(alloc, ptr);
+    alloc.deallocate(ptr, 1);
+  }
+
+  SECTION("get_allocator - multiple calls return equivalent allocators") {
+    btree<int, int, 4, 4, Mode> tree;
+
+    auto alloc1 = tree.get_allocator();
+    auto alloc2 = tree.get_allocator();
+
+    // Standard allocators are stateless, so they should be equal
+    REQUIRE(alloc1 == alloc2);
+  }
+
+  SECTION("get_allocator - allocator type properties") {
+    using TreeType = btree<int, int, 4, 4, Mode>;
+    using AllocType = typename TreeType::allocator_type;
+
+    // Verify allocator type properties
+    static_assert(
+        std::is_same_v<typename AllocType::value_type, std::pair<int, int>>);
+
+    // std::allocator is copy constructible
+    static_assert(std::is_copy_constructible_v<AllocType>);
+
+    // std::allocator is move constructible
+    static_assert(std::is_move_constructible_v<AllocType>);
+  }
+}
+
 TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
                    LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
