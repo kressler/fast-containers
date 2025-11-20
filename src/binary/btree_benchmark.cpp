@@ -33,18 +33,22 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
                                           std::numeric_limits<int>::max());
   TimingStats stats;
   unsigned int dummy;
-  std::unordered_set<int> keys;
+  std::set<typename T::key_type> keys{};
 
   auto insert = [&]() -> void {
-    int val = dist(rng);
-    keys.insert(val);
+    // int val = dist(rng);
+    typename T::key_type key;
+    for (int i = 0; i < key.size(); ++i) {
+      key[i] = dist(rng);
+    }
+    keys.insert(key);
     uint64_t start = __rdtscp(&dummy);
-    tree.insert({val, {}});
+    tree.insert({key, {}});
     uint64_t stop = __rdtscp(&dummy);
     stats.insert_time += stop - start;
   };
 
-  auto find = [&](const int key) -> void {
+  auto find = [&](const typename T::key_type& key) -> void {
     uint64_t start = __rdtscp(&dummy);
     benchmark::DoNotOptimize(tree.find(key));
     uint64_t stop = __rdtscp(&dummy);
@@ -52,7 +56,7 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
   };
 
   auto erase = [&]() -> void {
-    int key = *keys.begin();
+    auto key = *keys.begin();
     keys.erase(key);
     uint64_t start = __rdtscp(&dummy);
     benchmark::DoNotOptimize(tree.find(key));
@@ -95,6 +99,8 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
   return stats;
 }
 
+using LambdaType = std::function<TimingStats()>;
+
 int main(int argc, char** argv) {
   bool show_help = false;
   uint64_t seed = 42;
@@ -104,6 +110,101 @@ int main(int argc, char** argv) {
   size_t batch_size = 1000;
   std::vector<std::string> names;
   std::unordered_map<std::string, TimingStats> results;
+
+  auto benchmarker = [&](auto tree) -> TimingStats {
+    return run_benchmark(tree, seed, target_iterations, tree_size, batches,
+                         batch_size);
+  };
+
+  std::map<std::string, LambdaType> benchmarkers{
+      /* 256 byte values */
+      {"btree_8_256_64_64_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 1>,
+                                    std::array<std::byte, 256>, 64, 64,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 1>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 1>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 1>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"absl_8_256",
+       [&]() -> TimingStats {
+         return benchmarker(absl::btree_map<std::array<std::int64_t, 1>,
+                                            std::array<std::byte, 256>>{});
+       }},
+      {"btree_16_256_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_16_256_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_16_256_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"absl_16_256",
+       [&]() -> TimingStats {
+         return benchmarker(absl::btree_map<std::array<std::int64_t, 2>,
+                                            std::array<std::byte, 256>>{});
+       }},
+
+      {"btree_32_256_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_32_256_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_32_256_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 256>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"absl_32_256",
+       [&]() -> TimingStats {
+         return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
+                                            std::array<std::byte, 256>>{});
+       }},
+  };
 
   // Define command line interface
   auto cli = lyra::cli() | lyra::help(show_help) |
@@ -132,59 +233,17 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  for (const auto& name : names) {
+    if (!benchmarkers.count(name)) {
+      std::cerr << "Unknown benchmark: " << name << std::endl;
+      exit(1);
+    }
+  }
+
   for (size_t iter = 0; iter < target_iterations; ++iter) {
-    if (iter % 100 == 0)
-      std::cout << "Iteration " << iter << std::endl;
+    std::cout << "Iteration " << iter << std::endl;
     for (const auto& name : names) {
-      /* Large payloads */
-      if (name == "btree_64_64_256_simd_simd") {
-        fast_containers::btree<int, std::array<std::byte, 256>, 64, 64,
-                               fast_containers::SearchMode::SIMD>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "btree_16_128_256_simd_simd") {
-        fast_containers::btree<int, std::array<std::byte, 256>, 16, 128,
-                               fast_containers::SearchMode::SIMD>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "btree_16_128_256_bin_simd") {
-        fast_containers::btree<int, std::array<std::byte, 256>, 16, 128,
-                               fast_containers::SearchMode::Binary>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "absl_256") {
-        absl::btree_map<int, std::array<std::byte, 256>> tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-        /* Small payloads */
-      } else if (name == "btree_64_64_8_simd_simd") {
-        fast_containers::btree<int, std::array<std::byte, 8>, 64, 64,
-                               fast_containers::SearchMode::SIMD>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "btree_64_128_8_simd_simd") {
-        fast_containers::btree<int, std::array<std::byte, 8>, 64, 128,
-                               fast_containers::SearchMode::SIMD>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "btree_64_128_8_bin_simd") {
-        fast_containers::btree<int, std::array<std::byte, 256>, 64, 128,
-                               fast_containers::SearchMode::Binary>
-            tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else if (name == "absl_8") {
-        absl::btree_map<int, std::array<std::byte, 8>> tree;
-        results[name] += run_benchmark(tree, seed, target_iterations, tree_size,
-                                       batches, batch_size);
-      } else {
-        std::cerr << "Unknown benchmark: " << name << std::endl;
-      }
+      results[name] += benchmarkers.at(name)();
     }
   }
 
