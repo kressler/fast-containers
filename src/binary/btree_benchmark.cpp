@@ -204,6 +204,60 @@ int main(int argc, char** argv) {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
                                             std::array<std::byte, 256>>{});
        }},
+
+      /* 32 byte values */
+      {"btree_16_32_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_16_32_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_16_32_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"absl_16_32",
+       [&]() -> TimingStats {
+         return benchmarker(absl::btree_map<std::array<std::int64_t, 2>,
+                                            std::array<std::byte, 32>>{});
+       }},
+      {"btree_32_32_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_32_32_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_32_32_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"absl_32_32",
+       [&]() -> TimingStats {
+         return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
+                                            std::array<std::byte, 32>>{});
+       }},
   };
 
   // Define command line interface
