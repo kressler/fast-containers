@@ -621,7 +621,8 @@ void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
 #ifdef __AVX2__
 /**
- * SIMD-accelerated linear search for 32-bit keys (int32_t, uint32_t, float)
+ * SIMD-accelerated linear search for 32-bit keys
+ * Supports: int32_t (signed), uint32_t (unsigned)
  * Compares 8 keys at a time using AVX2
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -630,9 +631,24 @@ template <typename K>
   requires(sizeof(K) == 4)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_4byte(const K& key) const {
-  // Prepare search key in SIMD register (broadcast to all 8 lanes)
+  static_assert(SimdPrimitive<K>,
+                "4-byte SIMD search requires primitive type (int32_t, uint32_t, int, unsigned int, or float)");
+  // Prepare search key - for unsigned, flip sign bit for proper comparison
   int32_t key_bits;
   std::memcpy(&key_bits, &key, sizeof(K));
+
+  // Check if type is unsigned (uint32_t or unsigned int)
+  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+
+  if constexpr (is_unsigned) {
+    // Flip sign bit: converts unsigned comparison to signed comparison
+    // 0x00000000 -> 0x80000000 (smallest unsigned becomes smallest signed)
+    // 0x7FFFFFFF -> 0xFFFFFFFF
+    // 0x80000000 -> 0x00000000
+    // 0xFFFFFFFF -> 0x7FFFFFFF (largest unsigned becomes largest signed)
+    key_bits ^= static_cast<int32_t>(0x80000000u);
+  }
+
   __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
 
   size_type i = 0;
@@ -642,6 +658,12 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     // multiple of 8)
     __m256i keys_vec =
         _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+    // For unsigned, flip sign bits before comparison
+    if constexpr (is_unsigned) {
+      __m256i flip_mask = _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
+      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+    }
 
     // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
     __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
@@ -664,6 +686,12 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     // Aligned load (i is multiple of 8 from previous loop)
     __m128i keys_vec =
         _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
     __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
 
     int mask = _mm_movemask_epi8(cmp_lt);
@@ -679,6 +707,12 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     __m128i search_vec_128 = _mm_set1_epi32(key_bits);
     __m128i keys_vec = _mm_castpd_si128(
         _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
     __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
 
     int mask = _mm_movemask_epi8(cmp_lt);
@@ -698,7 +732,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 }
 
 /**
- * SIMD-accelerated linear search for 64-bit keys (int64_t, uint64_t, double)
+ * SIMD-accelerated linear search for 64-bit keys
+ * Supports: int64_t (signed), uint64_t (unsigned)
  * Compares 4 keys at a time using AVX2
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -707,9 +742,20 @@ template <typename K>
   requires(sizeof(K) == 8)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_8byte(const K& key) const {
-  // Prepare search key in SIMD register (broadcast to all 4 lanes)
+  static_assert(SimdPrimitive<K>,
+                "8-byte SIMD search requires primitive type (int64_t, uint64_t, long, unsigned long, or double)");
+  // Prepare search key - for unsigned, flip sign bit for proper comparison
   int64_t key_bits;
   std::memcpy(&key_bits, &key, sizeof(K));
+
+  // Check if type is unsigned (uint64_t or unsigned long)
+  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+
+  if constexpr (is_unsigned) {
+    // Flip sign bit: converts unsigned comparison to signed comparison
+    key_bits ^= static_cast<int64_t>(0x8000000000000000ULL);
+  }
+
   __m256i search_vec_256 = _mm256_set1_epi64x(key_bits);
 
   size_type i = 0;
@@ -719,6 +765,13 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     // multiple of 4)
     __m256i keys_vec =
         _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+    // For unsigned, flip sign bits before comparison
+    if constexpr (is_unsigned) {
+      __m256i flip_mask =
+          _mm256_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
+      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+    }
 
     // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
     __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
@@ -741,6 +794,13 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     // Aligned load (i is multiple of 4 from previous loop)
     __m128i keys_vec =
         _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask =
+          _mm_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
     __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
 
     int mask = _mm_movemask_epi8(cmp_lt);
