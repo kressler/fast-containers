@@ -309,21 +309,19 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Leaf has space - insert using hint to avoid re-searching
-  // Track if this will become the new minimum
-  bool will_be_new_min = leaf->data.empty() || key < leaf->data.begin()->first;
-
   auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, value);
   if (inserted) {
     size_++;
 
-    // If we inserted a new minimum and leaf has a parent, update parent key
-    if (will_be_new_min && leaf->parent != nullptr) {
+    // If we inserted at the beginning and leaf has a parent, update parent key
+    // Iterator comparison avoids expensive key comparison
+    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
       update_parent_key_recursive(leaf, key);
     }
 
-    // Update leftmost_leaf_ if necessary
-    if (leftmost_leaf_ == nullptr ||
-        key < leftmost_leaf_->data.begin()->first) {
+    // Update leftmost_leaf_ if we inserted at the beginning of the leftmost leaf
+    // Avoids key comparison by checking leaf position in linked list
+    if (leaf_it == leaf->data.begin() && leaf->prev_leaf == nullptr) {
       leftmost_leaf_ = leaf;
     }
   }

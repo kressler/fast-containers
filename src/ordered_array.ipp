@@ -645,6 +645,11 @@ auto ordered_array<Key, Value, Length, SearchModeT,
 
     __m256i search_vec_256 = _mm256_set1_epi32(key_be);
 
+    // Sign flip constant for unsigned comparison
+    // AVX2 only has signed comparison, so we XOR with 0x8000... to convert
+    // unsigned comparison to signed comparison
+    const __m256i sign_flip = _mm256_set1_epi32(0x80000000);
+
     size_type i = 0;
     // Process 8 byte arrays at a time with AVX2
     for (; i + 8 <= size_; i += 8) {
@@ -659,10 +664,13 @@ auto ordered_array<Key, Value, Length, SearchModeT,
                           12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
       keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
 
-      // Compare as unsigned integers (lexicographic order is preserved)
-      // Use subtraction with saturation to detect less-than
-      __m256i cmp_result = _mm256_cmpeq_epi32(keys_vec, search_vec_256);
-      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+      // Flip sign bits for unsigned comparison
+      keys_vec = _mm256_xor_si256(keys_vec, sign_flip);
+      __m256i search_vec_flipped = _mm256_xor_si256(search_vec_256, sign_flip);
+
+      // Compare as unsigned integers (via sign flip)
+      __m256i cmp_result = _mm256_cmpeq_epi32(keys_vec, search_vec_flipped);
+      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_flipped, keys_vec);
 
       // Combine: we want keys_vec < search_vec
       int mask = _mm256_movemask_epi8(cmp_lt);
@@ -686,7 +694,12 @@ auto ordered_array<Key, Value, Length, SearchModeT,
           _mm_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
       keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
 
-      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      // Flip sign bits for unsigned comparison
+      const __m128i sign_flip_128 = _mm_set1_epi32(0x80000000);
+      keys_vec = _mm_xor_si128(keys_vec, sign_flip_128);
+      __m128i search_vec_flipped = _mm_xor_si128(search_vec_128, sign_flip_128);
+
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_flipped, keys_vec);
       int mask = _mm_movemask_epi8(cmp_lt);
 
       if (mask != static_cast<int>(0xFFFF)) {
@@ -861,6 +874,9 @@ auto ordered_array<Key, Value, Length, SearchModeT,
 
     __m256i search_vec_256 = _mm256_set1_epi64x(key_be);
 
+    // Sign flip constant for unsigned comparison
+    const __m256i sign_flip = _mm256_set1_epi64x(0x8000000000000000ULL);
+
     size_type i = 0;
     // Process 4 byte arrays at a time with AVX2
     for (; i + 4 <= size_; i += 4) {
@@ -875,8 +891,12 @@ auto ordered_array<Key, Value, Length, SearchModeT,
                           8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
       keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
 
-      // Compare as unsigned integers (lexicographic order is preserved)
-      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+      // Flip sign bits for unsigned comparison
+      keys_vec = _mm256_xor_si256(keys_vec, sign_flip);
+      __m256i search_vec_flipped = _mm256_xor_si256(search_vec_256, sign_flip);
+
+      // Compare as unsigned integers (via sign flip)
+      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_flipped, keys_vec);
 
       int mask = _mm256_movemask_epi8(cmp_lt);
 
@@ -899,7 +919,12 @@ auto ordered_array<Key, Value, Length, SearchModeT,
           _mm_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
       keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
 
-      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+      // Flip sign bits for unsigned comparison
+      const __m128i sign_flip_128 = _mm_set1_epi64x(0x8000000000000000ULL);
+      keys_vec = _mm_xor_si128(keys_vec, sign_flip_128);
+      __m128i search_vec_flipped = _mm_xor_si128(search_vec_128, sign_flip_128);
+
+      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_flipped, keys_vec);
       int mask = _mm_movemask_epi8(cmp_lt);
 
       if (mask != static_cast<int>(0xFFFF)) {
@@ -1053,6 +1078,11 @@ auto ordered_array<Key, Value, Length, SearchModeT,
     __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
     __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
 
+    // Sign flip constant for unsigned comparison
+    // AVX2 only has signed comparison, so we XOR with 0x8000... to convert
+    // unsigned comparison to signed comparison
+    const __m256i sign_flip = _mm256_set1_epi64x(0x8000000000000000ULL);
+
     const __m256i shuffle_mask =
         _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8,
                         9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
@@ -1082,13 +1112,19 @@ auto ordered_array<Key, Value, Length, SearchModeT,
       __m256i keys_chunk0 = _mm256_permute4x64_epi64(temp_c0, 0xD8);
       __m256i keys_chunk1 = _mm256_permute4x64_epi64(temp_c1, 0xD8);
 
-      // Compare first chunks
-      __m256i cmp_eq0 = _mm256_cmpeq_epi64(keys_chunk0, search_vec0);
-      __m256i cmp_lt0 = _mm256_cmpgt_epi64(search_vec0, keys_chunk0);
+      // Flip sign bits for unsigned comparison
+      keys_chunk0 = _mm256_xor_si256(keys_chunk0, sign_flip);
+      keys_chunk1 = _mm256_xor_si256(keys_chunk1, sign_flip);
+      __m256i search_vec0_flipped = _mm256_xor_si256(search_vec0, sign_flip);
+      __m256i search_vec1_flipped = _mm256_xor_si256(search_vec1, sign_flip);
 
-      // Compare second chunks
-      __m256i cmp_eq1 = _mm256_cmpeq_epi64(keys_chunk1, search_vec1);
-      __m256i cmp_lt1 = _mm256_cmpgt_epi64(search_vec1, keys_chunk1);
+      // Compare first chunks (unsigned via sign flip)
+      __m256i cmp_eq0 = _mm256_cmpeq_epi64(keys_chunk0, search_vec0_flipped);
+      __m256i cmp_lt0 = _mm256_cmpgt_epi64(search_vec0_flipped, keys_chunk0);
+
+      // Compare second chunks (unsigned via sign flip)
+      __m256i cmp_eq1 = _mm256_cmpeq_epi64(keys_chunk1, search_vec1_flipped);
+      __m256i cmp_lt1 = _mm256_cmpgt_epi64(search_vec1_flipped, keys_chunk1);
 
       // Hierarchical: key < search if (chunk0 < search0) OR
       //                               (chunk0 == search0 AND chunk1 < search1)
