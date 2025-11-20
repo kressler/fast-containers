@@ -622,7 +622,7 @@ void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 #ifdef __AVX2__
 /**
  * SIMD-accelerated linear search for 32-bit keys
- * Supports: int32_t (signed), uint32_t (unsigned)
+ * Supports: int32_t (signed), uint32_t (unsigned), float
  * Compares 8 keys at a time using AVX2
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -633,107 +633,143 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_4byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "4-byte SIMD search requires primitive type (int32_t, uint32_t, int, unsigned int, or float)");
-  // Prepare search key - for unsigned, flip sign bit for proper comparison
-  int32_t key_bits;
-  std::memcpy(&key_bits, &key, sizeof(K));
 
-  // Check if type is unsigned (uint32_t or unsigned int)
-  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+  // Float types use different SIMD instructions
+  if constexpr (std::is_same_v<K, float>) {
+    // Use floating-point comparison instructions
+    __m256 search_vec_256 = _mm256_set1_ps(key);
 
-  if constexpr (is_unsigned) {
-    // Flip sign bit: converts unsigned comparison to signed comparison
-    // 0x00000000 -> 0x80000000 (smallest unsigned becomes smallest signed)
-    // 0x7FFFFFFF -> 0xFFFFFFFF
-    // 0x80000000 -> 0x00000000
-    // 0xFFFFFFFF -> 0x7FFFFFFF (largest unsigned becomes largest signed)
-    key_bits ^= static_cast<int32_t>(0x80000000u);
-  }
+    size_type i = 0;
+    // Process 8 floats at a time with AVX2
+    for (; i + 8 <= size_; i += 8) {
+      __m256 keys_vec = _mm256_load_ps(reinterpret_cast<const float*>(&keys_[i]));
 
-  __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
+      // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
+      __m256 cmp_lt = _mm256_cmp_ps(keys_vec, search_vec_256, _CMP_LT_OQ);
 
-  size_type i = 0;
-  // Process 8 keys at a time with full AVX2
-  for (; i + 8 <= size_; i += 8) {
-    // Load 8 keys from array (aligned - array is 64-byte aligned, i is
-    // multiple of 8)
-    __m256i keys_vec =
-        _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
-
-    // For unsigned, flip sign bits before comparison
-    if constexpr (is_unsigned) {
-      __m256i flip_mask = _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
-      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+      // movemask_ps returns 8 bits (one per float)
+      int mask = _mm256_movemask_ps(cmp_lt);
+      if (mask != 0xFF) {
+        // Found first position where key >= search_key
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+        return keys_.begin() + i + offset;
+      }
     }
 
-    // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
-    __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+    // Process 4 floats at a time with SSE
+    if (i + 4 <= size_) {
+      __m128 search_vec_128 = _mm_set1_ps(key);
+      __m128 keys_vec = _mm_load_ps(reinterpret_cast<const float*>(&keys_[i]));
+      __m128 cmp_lt = _mm_cmp_ps(keys_vec, search_vec_128, _CMP_LT_OQ);
 
-    // Check if any key is >= search_key
-    int mask = _mm256_movemask_epi8(cmp_lt);
-    if (mask != static_cast<int>(0xFFFFFFFF)) {
-      // Found a position where key >= search_key
-      // Use bit manipulation to find the exact index within this block
-      // Each 4-byte element contributes 4 bits to the mask
-      // Count trailing ones and divide by 4 to get element offset
-      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
-      return keys_.begin() + i + offset;
+      int mask = _mm_movemask_ps(cmp_lt);
+      if (mask != 0x0F) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+        return keys_.begin() + i + offset;
+      }
+      i += 4;
     }
-  }
 
-  // Process 4 keys at a time with half AVX2 (128-bit SSE)
-  if (i + 4 <= size_) {
-    __m128i search_vec_128 = _mm_set1_epi32(key_bits);
-    // Aligned load (i is multiple of 8 from previous loop)
-    __m128i keys_vec =
-        _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+    // Handle remaining 0-3 keys with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
+
+  } else {
+    // Integer types use integer comparison
+    int32_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+
+    // Check if type is unsigned (uint32_t or unsigned int)
+    constexpr bool is_unsigned = std::is_unsigned_v<K>;
 
     if constexpr (is_unsigned) {
-      __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
-      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+      // Flip sign bit: converts unsigned comparison to signed comparison
+      key_bits ^= static_cast<int32_t>(0x80000000u);
     }
 
-    __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+    __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
 
-    int mask = _mm_movemask_epi8(cmp_lt);
-    if (mask != static_cast<int>(0xFFFF)) {
-      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
-      return keys_.begin() + i + offset;
+    size_type i = 0;
+    // Process 8 keys at a time with full AVX2
+    for (; i + 8 <= size_; i += 8) {
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // For unsigned, flip sign bits before comparison
+      if constexpr (is_unsigned) {
+        __m256i flip_mask = _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
+        keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+      }
+
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
+      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+
+      // Check if any key is >= search_key
+      int mask = _mm256_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Each 4-byte element contributes 4 bits to the mask
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
     }
-    i += 4;
+
+    // Process 4 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 4 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+      if constexpr (is_unsigned) {
+        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+        keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+      }
+
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 4;
+    }
+
+    // Process 2 keys at a time with 64-bit SIMD
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_bits);
+      __m128i keys_vec = _mm_castpd_si128(
+          _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
+
+      if constexpr (is_unsigned) {
+        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+        keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+      }
+
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if ((mask & 0xFF) != 0xFF) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
   }
-
-  // Process 2 keys at a time with 64-bit SIMD
-  if (i + 2 <= size_) {
-    __m128i search_vec_128 = _mm_set1_epi32(key_bits);
-    __m128i keys_vec = _mm_castpd_si128(
-        _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
-
-    if constexpr (is_unsigned) {
-      __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
-      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
-    }
-
-    __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
-
-    int mask = _mm_movemask_epi8(cmp_lt);
-    if ((mask & 0xFF) != 0xFF) {
-      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
-      return keys_.begin() + i + offset;
-    }
-    i += 2;
-  }
-
-  // Handle remaining 0-1 keys with scalar
-  while (i < size_ && keys_[i] < key) {
-    ++i;
-  }
-
-  return keys_.begin() + i;
 }
 
 /**
  * SIMD-accelerated linear search for 64-bit keys
- * Supports: int64_t (signed), uint64_t (unsigned)
+ * Supports: int64_t (signed), uint64_t (unsigned), double
  * Compares 4 keys at a time using AVX2
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -744,79 +780,119 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_8byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "8-byte SIMD search requires primitive type (int64_t, uint64_t, long, unsigned long, or double)");
-  // Prepare search key - for unsigned, flip sign bit for proper comparison
-  int64_t key_bits;
-  std::memcpy(&key_bits, &key, sizeof(K));
 
-  // Check if type is unsigned (uint64_t or unsigned long)
-  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+  // Double types use different SIMD instructions
+  if constexpr (std::is_same_v<K, double>) {
+    // Use floating-point comparison instructions
+    __m256d search_vec_256 = _mm256_set1_pd(key);
 
-  if constexpr (is_unsigned) {
-    // Flip sign bit: converts unsigned comparison to signed comparison
-    key_bits ^= static_cast<int64_t>(0x8000000000000000ULL);
-  }
+    size_type i = 0;
+    // Process 4 doubles at a time with AVX2
+    for (; i + 4 <= size_; i += 4) {
+      __m256d keys_vec = _mm256_load_pd(reinterpret_cast<const double*>(&keys_[i]));
 
-  __m256i search_vec_256 = _mm256_set1_epi64x(key_bits);
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
+      // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
+      __m256d cmp_lt = _mm256_cmp_pd(keys_vec, search_vec_256, _CMP_LT_OQ);
 
-  size_type i = 0;
-  // Process 4 keys at a time with full AVX2
-  for (; i + 4 <= size_; i += 4) {
-    // Load 4 keys from array (aligned - array is 64-byte aligned, i is
-    // multiple of 4)
-    __m256i keys_vec =
-        _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+      // movemask_pd returns 4 bits (one per double)
+      int mask = _mm256_movemask_pd(cmp_lt);
+      if (mask != 0x0F) {
+        // Found first position where key >= search_key
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+        return keys_.begin() + i + offset;
+      }
+    }
 
-    // For unsigned, flip sign bits before comparison
+    // Process 2 doubles at a time with SSE
+    if (i + 2 <= size_) {
+      __m128d search_vec_128 = _mm_set1_pd(key);
+      __m128d keys_vec = _mm_load_pd(reinterpret_cast<const double*>(&keys_[i]));
+      __m128d cmp_lt = _mm_cmp_pd(keys_vec, search_vec_128, _CMP_LT_OQ);
+
+      int mask = _mm_movemask_pd(cmp_lt);
+      if (mask != 0x03) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
+
+  } else {
+    // Integer types use integer comparison
+    int64_t key_bits;
+    std::memcpy(&key_bits, &key, sizeof(K));
+
+    // Check if type is unsigned (uint64_t or unsigned long)
+    constexpr bool is_unsigned = std::is_unsigned_v<K>;
+
     if constexpr (is_unsigned) {
-      __m256i flip_mask =
-          _mm256_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
-      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+      // Flip sign bit: converts unsigned comparison to signed comparison
+      key_bits ^= static_cast<int64_t>(0x8000000000000000ULL);
     }
 
-    // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
-    __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+    __m256i search_vec_256 = _mm256_set1_epi64x(key_bits);
 
-    // Check if any key is >= search_key
-    int mask = _mm256_movemask_epi8(cmp_lt);
-    if (mask != static_cast<int>(0xFFFFFFFF)) {
-      // Found a position where key >= search_key
-      // Use bit manipulation to find the exact index within this block
-      // Each 8-byte element contributes 8 bits to the mask
-      // Count trailing ones and divide by 8 to get element offset
-      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-      return keys_.begin() + i + offset;
+    size_type i = 0;
+    // Process 4 keys at a time with full AVX2
+    for (; i + 4 <= size_; i += 4) {
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // For unsigned, flip sign bits before comparison
+      if constexpr (is_unsigned) {
+        __m256i flip_mask =
+            _mm256_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
+        keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+      }
+
+      // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
+      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+
+      // Check if any key is >= search_key
+      int mask = _mm256_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Each 8-byte element contributes 8 bits to the mask
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
     }
+
+    // Process 2 keys at a time with half AVX2 (128-bit SSE)
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi64x(key_bits);
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+      if constexpr (is_unsigned) {
+        __m128i flip_mask =
+            _mm_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
+        keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+      }
+
+      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+
+      int mask = _mm_movemask_epi8(cmp_lt);
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 keys with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
   }
-
-  // Process 2 keys at a time with half AVX2 (128-bit SSE)
-  if (i + 2 <= size_) {
-    __m128i search_vec_128 = _mm_set1_epi64x(key_bits);
-    // Aligned load (i is multiple of 4 from previous loop)
-    __m128i keys_vec =
-        _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
-
-    if constexpr (is_unsigned) {
-      __m128i flip_mask =
-          _mm_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
-      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
-    }
-
-    __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
-
-    int mask = _mm_movemask_epi8(cmp_lt);
-    if (mask != static_cast<int>(0xFFFF)) {
-      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-      return keys_.begin() + i + offset;
-    }
-    i += 2;
-  }
-
-  // Handle remaining 0-1 keys with scalar
-  while (i < size_ && keys_[i] < key) {
-    ++i;
-  }
-
-  return keys_.begin() + i;
 }
 
 /**
