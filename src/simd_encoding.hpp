@@ -49,7 +49,7 @@ inline std::array<std::byte, 4> encode_int32(int32_t value) {
   // Convert to big-endian byte array using bswap
   bits = __builtin_bswap32(bits);
   std::array<std::byte, 4> result;
-  std::memcpy(result.data(), &bits, sizeof(bits));
+  *reinterpret_cast<uint32_t*>(result.data()) = bits;
   return result;
 }
 
@@ -63,7 +63,7 @@ inline std::array<std::byte, 4> encode_uint32(uint32_t value) {
   // Unsigned already has correct ordering, just convert to big-endian
   value = __builtin_bswap32(value);
   std::array<std::byte, 4> result;
-  std::memcpy(result.data(), &value, sizeof(value));
+  *reinterpret_cast<uint32_t*>(result.data()) = value;
   return result;
 }
 
@@ -80,7 +80,7 @@ inline std::array<std::byte, 8> encode_int64(int64_t value) {
   // Convert to big-endian byte array using bswap
   bits = __builtin_bswap64(bits);
   std::array<std::byte, 8> result;
-  std::memcpy(result.data(), &bits, sizeof(bits));
+  *reinterpret_cast<uint64_t*>(result.data()) = bits;
   return result;
 }
 
@@ -94,7 +94,7 @@ inline std::array<std::byte, 8> encode_uint64(uint64_t value) {
   // Unsigned already has correct ordering, just convert to big-endian
   value = __builtin_bswap64(value);
   std::array<std::byte, 8> result;
-  std::memcpy(result.data(), &value, sizeof(value));
+  *reinterpret_cast<uint64_t*>(result.data()) = value;
   return result;
 }
 
@@ -134,7 +134,7 @@ inline std::array<std::byte, 4> encode_float(float value) {
   // Convert to big-endian byte array using bswap
   sortable = __builtin_bswap32(sortable);
   std::array<std::byte, 4> result;
-  std::memcpy(result.data(), &sortable, sizeof(sortable));
+  *reinterpret_cast<uint32_t*>(result.data()) = sortable;
   return result;
 }
 
@@ -157,7 +157,7 @@ inline std::array<std::byte, 8> encode_double(double value) {
   // Convert to big-endian byte array using bswap
   sortable = __builtin_bswap64(sortable);
   std::array<std::byte, 8> result;
-  std::memcpy(result.data(), &sortable, sizeof(sortable));
+  *reinterpret_cast<uint64_t*>(result.data()) = sortable;
   return result;
 }
 
@@ -172,8 +172,7 @@ inline std::array<std::byte, 8> encode_double(double value) {
  * @return Original int32_t value
  */
 inline int32_t decode_int32(const std::array<std::byte, 4>& encoded) {
-  uint32_t bits;
-  std::memcpy(&bits, encoded.data(), sizeof(bits));
+  uint32_t bits = *reinterpret_cast<const uint32_t*>(encoded.data());
   bits = __builtin_bswap32(bits);
   // Undo sign bit flip
   return static_cast<int32_t>(bits ^ 0x80000000u);
@@ -183,8 +182,7 @@ inline int32_t decode_int32(const std::array<std::byte, 4>& encoded) {
  * @brief Decode byte array back to uint32_t.
  */
 inline uint32_t decode_uint32(const std::array<std::byte, 4>& encoded) {
-  uint32_t bits;
-  std::memcpy(&bits, encoded.data(), sizeof(bits));
+  uint32_t bits = *reinterpret_cast<const uint32_t*>(encoded.data());
   return __builtin_bswap32(bits);
 }
 
@@ -192,8 +190,7 @@ inline uint32_t decode_uint32(const std::array<std::byte, 4>& encoded) {
  * @brief Decode byte array back to int64_t.
  */
 inline int64_t decode_int64(const std::array<std::byte, 8>& encoded) {
-  uint64_t bits;
-  std::memcpy(&bits, encoded.data(), sizeof(bits));
+  uint64_t bits = *reinterpret_cast<const uint64_t*>(encoded.data());
   bits = __builtin_bswap64(bits);
   // Undo sign bit flip
   return static_cast<int64_t>(bits ^ 0x8000000000000000ull);
@@ -203,8 +200,7 @@ inline int64_t decode_int64(const std::array<std::byte, 8>& encoded) {
  * @brief Decode byte array back to uint64_t.
  */
 inline uint64_t decode_uint64(const std::array<std::byte, 8>& encoded) {
-  uint64_t bits;
-  std::memcpy(&bits, encoded.data(), sizeof(bits));
+  uint64_t bits = *reinterpret_cast<const uint64_t*>(encoded.data());
   return __builtin_bswap64(bits);
 }
 
@@ -212,8 +208,7 @@ inline uint64_t decode_uint64(const std::array<std::byte, 8>& encoded) {
  * @brief Decode byte array back to float.
  */
 inline float decode_float(const std::array<std::byte, 4>& encoded) {
-  uint32_t sortable;
-  std::memcpy(&sortable, encoded.data(), sizeof(sortable));
+  uint32_t sortable = *reinterpret_cast<const uint32_t*>(encoded.data());
   sortable = __builtin_bswap32(sortable);
 
   // Undo the transformation
@@ -229,8 +224,7 @@ inline float decode_float(const std::array<std::byte, 4>& encoded) {
  * @brief Decode byte array back to double.
  */
 inline double decode_double(const std::array<std::byte, 8>& encoded) {
-  uint64_t sortable;
-  std::memcpy(&sortable, encoded.data(), sizeof(sortable));
+  uint64_t sortable = *reinterpret_cast<const uint64_t*>(encoded.data());
   sortable = __builtin_bswap64(sortable);
 
   // Undo the transformation
