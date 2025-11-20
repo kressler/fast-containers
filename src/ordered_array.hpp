@@ -37,11 +37,37 @@ concept Comparable = requires(T a, T b) {
   { a == b } -> std::convertible_to<bool>;
 };
 
-// Concept for types that can use SIMD-accelerated search
+// Concept for primitive types that have well-defined SIMD comparison semantics
 template <typename T>
-concept SIMDSearchable =
-    Comparable<T> && std::is_trivially_copyable_v<T> &&
-    (sizeof(T) == 4 || sizeof(T) == 8 || sizeof(T) == 16 || sizeof(T) == 32);
+concept SimdPrimitive =
+    // Fixed-size integer types (preferred)
+    std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+    std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> ||
+    // Floating point types
+    std::is_same_v<T, float> || std::is_same_v<T, double> ||
+    // Common aliases that map to fixed-size types
+    (std::is_same_v<T, int> && sizeof(int) == 4) ||
+    (std::is_same_v<T, unsigned int> && sizeof(unsigned int) == 4) ||
+    (std::is_same_v<T, long> && sizeof(long) == 8) ||
+    (std::is_same_v<T, unsigned long> && sizeof(unsigned long) == 8);
+
+// Concept for byte arrays suitable for lexicographic SIMD comparison
+template <typename T>
+concept SimdByteArray = std::is_same_v<T, std::array<std::byte, 4>> ||
+                        std::is_same_v<T, std::array<std::byte, 8>> ||
+                        std::is_same_v<T, std::array<std::byte, 16>> ||
+                        std::is_same_v<T, std::array<std::byte, 32>> ||
+                        std::is_same_v<T, std::array<unsigned char, 4>> ||
+                        std::is_same_v<T, std::array<unsigned char, 8>> ||
+                        std::is_same_v<T, std::array<unsigned char, 16>> ||
+                        std::is_same_v<T, std::array<unsigned char, 32>>;
+
+// Concept for types that can use SIMD-accelerated search
+// Supports primitive types and byte arrays suitable for lexicographic
+// comparison
+template <typename T>
+concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
+                         (SimdPrimitive<T> || SimdByteArray<T>);
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
