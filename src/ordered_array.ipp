@@ -1033,33 +1033,70 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_16byte(const K& key) const {
-  // Byte arrays use chunked 64-bit comparison for better performance
+  // Byte arrays use SIMD chunked comparison for best performance
   if constexpr (SimdByteArray<K>) {
-    // Load search key and byte-swap to big-endian for lexicographic comparison
+    // Prepare search chunks (byte-swap to big-endian for lexicographic ordering)
     uint64_t search_chunks[2];
     std::memcpy(search_chunks, &key, sizeof(K));
     search_chunks[0] = __builtin_bswap64(search_chunks[0]);
     search_chunks[1] = __builtin_bswap64(search_chunks[1]);
 
+    __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
+    __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
+
+    const __m256i shuffle_mask = _mm256_set_epi8(
+        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+
     size_type i = 0;
-    // Process keys one at a time with hierarchical chunk comparison
-    for (; i < size_; ++i) {
-      // Load key as 2 chunks
-      uint64_t key_chunks[2];
-      std::memcpy(key_chunks, &keys_[i], sizeof(K));
+    // Process 4 keys at a time with SIMD chunk comparison (4 × 16 = 64 bytes)
+    for (; i + 4 <= size_; i += 4) {
+      // Load 4 keys: keys01 = [k0.c0|k0.c1|k1.c0|k1.c1]
+      //              keys23 = [k2.c0|k2.c1|k3.c0|k3.c1]
+      __m256i keys01 = _mm256_loadu_si256(
+          reinterpret_cast<const __m256i*>(&keys_[i]));
+      __m256i keys23 = _mm256_loadu_si256(
+          reinterpret_cast<const __m256i*>(&keys_[i + 2]));
 
       // Byte-swap to big-endian
-      key_chunks[0] = __builtin_bswap64(key_chunks[0]);
-      key_chunks[1] = __builtin_bswap64(key_chunks[1]);
+      keys01 = _mm256_shuffle_epi8(keys01, shuffle_mask);
+      keys23 = _mm256_shuffle_epi8(keys23, shuffle_mask);
 
-      // Hierarchical comparison: check chunk0 first, then chunk1 if needed
-      if (key_chunks[0] > search_chunks[0]) {
-        return keys_.begin() + i;
-      } else if (key_chunks[0] == search_chunks[0]) {
-        if (key_chunks[1] >= search_chunks[1]) {
-          return keys_.begin() + i;
-        }
+      // Separate interleaved chunks:
+      // unpacklo: [k0.c0|k2.c0|k1.c0|k3.c0]
+      // unpackhi: [k0.c1|k2.c1|k1.c1|k3.c1]
+      __m256i temp_c0 = _mm256_unpacklo_epi64(keys01, keys23);
+      __m256i temp_c1 = _mm256_unpackhi_epi64(keys01, keys23);
+
+      // Permute to get correct order:
+      // 0xD8 = 11011000 binary = select [0,2,1,3] = [k0,k1,k2,k3]
+      __m256i keys_chunk0 = _mm256_permute4x64_epi64(temp_c0, 0xD8);
+      __m256i keys_chunk1 = _mm256_permute4x64_epi64(temp_c1, 0xD8);
+
+      // Compare first chunks
+      __m256i cmp_eq0 = _mm256_cmpeq_epi64(keys_chunk0, search_vec0);
+      __m256i cmp_lt0 = _mm256_cmpgt_epi64(search_vec0, keys_chunk0);
+
+      // Compare second chunks
+      __m256i cmp_eq1 = _mm256_cmpeq_epi64(keys_chunk1, search_vec1);
+      __m256i cmp_lt1 = _mm256_cmpgt_epi64(search_vec1, keys_chunk1);
+
+      // Hierarchical: key < search if (chunk0 < search0) OR
+      //                               (chunk0 == search0 AND chunk1 < search1)
+      __m256i lt_combined =
+          _mm256_or_si256(cmp_lt0, _mm256_and_si256(cmp_eq0, cmp_lt1));
+
+      int mask = _mm256_movemask_epi8(lt_combined);
+
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
       }
+    }
+
+    // Handle remaining 0-3 keys with scalar comparison
+    while (i < size_ && keys_[i] < key) {
+      ++i;
     }
 
     return keys_.begin() + i;
@@ -1087,9 +1124,9 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_32byte(const K& key) const {
-  // Byte arrays use chunked 64-bit comparison for better performance
+  // Byte arrays use SIMD chunked comparison for best performance
   if constexpr (SimdByteArray<K>) {
-    // Load search key and byte-swap to big-endian for lexicographic comparison
+    // Prepare search chunks (byte-swap to big-endian for lexicographic ordering)
     uint64_t search_chunks[4];
     std::memcpy(search_chunks, &key, sizeof(K));
     search_chunks[0] = __builtin_bswap64(search_chunks[0]);
@@ -1097,10 +1134,19 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     search_chunks[2] = __builtin_bswap64(search_chunks[2]);
     search_chunks[3] = __builtin_bswap64(search_chunks[3]);
 
+    __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
+    __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
+    __m256i search_vec2 = _mm256_set1_epi64x(search_chunks[2]);
+    __m256i search_vec3 = _mm256_set1_epi64x(search_chunks[3]);
+
+    const __m256i shuffle_mask = _mm256_set_epi8(
+        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+
     size_type i = 0;
-    // Process keys one at a time with hierarchical chunk comparison
+    // Process keys one at a time (simpler, still uses SIMD for chunk comparison)
     for (; i < size_; ++i) {
-      // Load key as 4 chunks
+      // Load one 32-byte key = [c0|c1|c2|c3]
       uint64_t key_chunks[4];
       std::memcpy(key_chunks, &keys_[i], sizeof(K));
 
@@ -1126,6 +1172,11 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
           }
         }
       }
+    }
+
+    // Handle remaining 0-1 keys with scalar comparison
+    while (i < size_ && keys_[i] < key) {
+      ++i;
     }
 
     return keys_.begin() + i;
