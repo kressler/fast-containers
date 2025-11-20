@@ -97,6 +97,32 @@ concept Comparable = requires(T a, T b) {
 - **Bottleneck**: Linear has 56% better IPC despite 47% more instructions
 - **Cause**: Simple scalar ops pipeline better than complex SIMD on small data
 
+### SIMD Performance: Large Keys (16/32 bytes) with Large Values
+
+**Context**: B+tree benchmarks with 100K elements, 16/32-byte keys, 256-byte values
+
+| Key Size | Operation | Linear | SIMD | Difference |
+|----------|-----------|--------|------|------------|
+| 16 bytes | Find | 9.64s | 9.65s | ~0% (equivalent) |
+| 16 bytes | Erase | 7.96s | 8.18s | +2.7% slower |
+| 32 bytes | Find | 10.78s | 10.70s | -0.8% faster |
+| 32 bytes | Erase | 8.95s | 8.84s | -1.2% faster |
+
+**Key findings**:
+- SIMD provides **minimal benefit** (~1% either direction) with large values
+- Performance dominated by:
+  - Value movement during splits/merges (256-byte copies)
+  - Cache misses (256-byte values thrash cache)
+  - Memory bandwidth, not comparison speed
+
+**When SIMD helps more**:
+- ✅ Small values (<64 bytes) - comparison cost is significant
+- ✅ Read-heavy workloads (find-dominant, minimal splits)
+- ✅ Smaller node sizes (more comparisons per operation)
+- ⚠️ Large values (>128 bytes) - memory-bound, minimal benefit
+
+**Recommendation**: Keep SIMD for API consistency across all key sizes (4, 8, 16, 32 bytes). No performance regression vs Linear, and may help with different node configurations.
+
 ## SIMD Implementation Details
 
 ### MoveMode: AVX2 Data Movement (32→16→1 byte fallback)
