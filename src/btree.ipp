@@ -154,8 +154,8 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find(const Key& key) {
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
+    const Key& key) {
   if (size_ == 0) {
     return end();
   }
@@ -177,8 +177,8 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                MoveModeT>::const_iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-      MoveModeT>::find(const Key& key) const {
+btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
+    const Key& key) const {
   if (size_ == 0) {
     return end();
   }

@@ -4,7 +4,7 @@
 # before committing them.
 #
 # This hook:
-# 1. Finds all staged C++ files (.cpp, .hpp)
+# 1. Finds all staged C++ files (.cpp, .hpp, .ipp)
 # 2. Runs clang-format on them
 # 3. Re-stages any files that were modified
 # 4. Continues with the commit
@@ -17,7 +17,7 @@ if ! command -v clang-format &> /dev/null; then
 fi
 
 # Get list of staged C++ files
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp)$')
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp|ipp)$')
 
 if [ -z "$STAGED_FILES" ]; then
     # No C++ files staged, nothing to format

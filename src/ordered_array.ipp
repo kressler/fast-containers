@@ -120,7 +120,7 @@ ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::operator=(
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 std::pair<typename ordered_array<Key, Value, Length, SearchModeT,
-                                  MoveModeT>::iterator,
+                                 MoveModeT>::iterator,
           bool>
 ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::insert(
     const Key& key, const Value& value) {
@@ -166,7 +166,7 @@ ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::insert(
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 std::pair<typename ordered_array<Key, Value, Length, SearchModeT,
-                                  MoveModeT>::iterator,
+                                 MoveModeT>::iterator,
           bool>
 ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::insert_hint(
     iterator hint, const Key& key, const Value& value) {
@@ -629,14 +629,16 @@ template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename K>
   requires(sizeof(K) == 4)
-auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_lower_bound_4byte(const K& key) const {
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_4byte(const K& key) const {
   static_assert(SimdPrimitive<K> || SimdByteArray<K>,
-                "4-byte SIMD search requires primitive type (int32_t, uint32_t, int, unsigned int, float) or byte array");
+                "4-byte SIMD search requires primitive type (int32_t, "
+                "uint32_t, int, unsigned int, float) or byte array");
 
   // Byte array types use lexicographic byte comparison
   if constexpr (SimdByteArray<K>) {
-    // For byte arrays, use byte-swap to convert to big-endian for lexicographic comparison
+    // For byte arrays, use byte-swap to convert to big-endian for lexicographic
+    // comparison
     uint32_t key_be;
     std::memcpy(&key_be, &key, sizeof(K));
     key_be = __builtin_bswap32(key_be);  // Convert to big-endian
@@ -652,9 +654,9 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
       // Byte-swap each 4-byte array to big-endian for lexicographic comparison
       // Shuffle bytes: [3,2,1,0, 7,6,5,4, ...] -> [0,1,2,3, 4,5,6,7, ...]
-      const __m256i shuffle_mask = _mm256_set_epi8(
-          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
-          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+      const __m256i shuffle_mask =
+          _mm256_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3,
+                          12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
       keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
 
       // Compare as unsigned integers (lexicographic order is preserved)
@@ -680,8 +682,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
           _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
 
       // Byte-swap for big-endian
-      const __m128i shuffle_mask = _mm_set_epi8(
-          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+      const __m128i shuffle_mask =
+          _mm_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
       keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
 
       __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
@@ -707,7 +709,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     size_type i = 0;
     // Process 8 floats at a time with AVX2
     for (; i + 8 <= size_; i += 8) {
-      __m256 keys_vec = _mm256_load_ps(reinterpret_cast<const float*>(&keys_[i]));
+      __m256 keys_vec =
+          _mm256_load_ps(reinterpret_cast<const float*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
       // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
@@ -765,7 +768,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
       // For unsigned, flip sign bits before comparison
       if constexpr (is_unsigned) {
-        __m256i flip_mask = _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
+        __m256i flip_mask =
+            _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
         keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
       }
 
@@ -841,14 +845,16 @@ template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename K>
   requires(sizeof(K) == 8)
-auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_lower_bound_8byte(const K& key) const {
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_8byte(const K& key) const {
   static_assert(SimdPrimitive<K> || SimdByteArray<K>,
-                "8-byte SIMD search requires primitive type (int64_t, uint64_t, long, unsigned long, double) or byte array");
+                "8-byte SIMD search requires primitive type (int64_t, "
+                "uint64_t, long, unsigned long, double) or byte array");
 
   // Byte array types use lexicographic byte comparison
   if constexpr (SimdByteArray<K>) {
-    // For byte arrays, use byte-swap to convert to big-endian for lexicographic comparison
+    // For byte arrays, use byte-swap to convert to big-endian for lexicographic
+    // comparison
     uint64_t key_be;
     std::memcpy(&key_be, &key, sizeof(K));
     key_be = __builtin_bswap64(key_be);  // Convert to big-endian
@@ -864,9 +870,9 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
       // Byte-swap each 8-byte array to big-endian for lexicographic comparison
       // Shuffle bytes within each 64-bit value
-      const __m256i shuffle_mask = _mm256_set_epi8(
-          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
-          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+      const __m256i shuffle_mask =
+          _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7,
+                          8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
       keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
 
       // Compare as unsigned integers (lexicographic order is preserved)
@@ -889,8 +895,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
           _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
 
       // Byte-swap for big-endian
-      const __m128i shuffle_mask = _mm_set_epi8(
-          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+      const __m128i shuffle_mask =
+          _mm_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
       keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
 
       __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
@@ -916,7 +922,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     size_type i = 0;
     // Process 4 doubles at a time with AVX2
     for (; i + 4 <= size_; i += 4) {
-      __m256d keys_vec = _mm256_load_pd(reinterpret_cast<const double*>(&keys_[i]));
+      __m256d keys_vec =
+          _mm256_load_pd(reinterpret_cast<const double*>(&keys_[i]));
 
       // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
       // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
@@ -934,7 +941,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     // Process 2 doubles at a time with SSE
     if (i + 2 <= size_) {
       __m128d search_vec_128 = _mm_set1_pd(key);
-      __m128d keys_vec = _mm_load_pd(reinterpret_cast<const double*>(&keys_[i]));
+      __m128d keys_vec =
+          _mm_load_pd(reinterpret_cast<const double*>(&keys_[i]));
       __m128d cmp_lt = _mm_cmp_pd(keys_vec, search_vec_128, _CMP_LT_OQ);
 
       int mask = _mm_movemask_pd(cmp_lt);
@@ -1031,11 +1039,12 @@ template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename K>
   requires(sizeof(K) == 16)
-auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_lower_bound_16byte(const K& key) const {
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_16byte(const K& key) const {
   // Byte arrays use SIMD chunked comparison for best performance
   if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic ordering)
+    // Prepare search chunks (byte-swap to big-endian for lexicographic
+    // ordering)
     uint64_t search_chunks[2];
     std::memcpy(search_chunks, &key, sizeof(K));
     search_chunks[0] = __builtin_bswap64(search_chunks[0]);
@@ -1044,19 +1053,19 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
     __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
 
-    const __m256i shuffle_mask = _mm256_set_epi8(
-        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
-        8, 9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+    const __m256i shuffle_mask =
+        _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8,
+                        9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
 
     size_type i = 0;
     // Process 4 keys at a time with SIMD chunk comparison (4 × 16 = 64 bytes)
     for (; i + 4 <= size_; i += 4) {
       // Load 4 keys: keys01 = [k0.c0|k0.c1|k1.c0|k1.c1]
       //              keys23 = [k2.c0|k2.c1|k3.c0|k3.c1]
-      __m256i keys01 = _mm256_loadu_si256(
-          reinterpret_cast<const __m256i*>(&keys_[i]));
-      __m256i keys23 = _mm256_loadu_si256(
-          reinterpret_cast<const __m256i*>(&keys_[i + 2]));
+      __m256i keys01 =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+      __m256i keys23 =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i + 2]));
 
       // Byte-swap to big-endian
       keys01 = _mm256_shuffle_epi8(keys01, shuffle_mask);
@@ -1122,11 +1131,13 @@ template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename K>
   requires(sizeof(K) == 32)
-auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_lower_bound_32byte(const K& key) const {
-  // Byte arrays use scalar chunked comparison with hierarchical early termination
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_32byte(const K& key) const {
+  // Byte arrays use scalar chunked comparison with hierarchical early
+  // termination
   if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic ordering)
+    // Prepare search chunks (byte-swap to big-endian for lexicographic
+    // ordering)
     uint64_t search_chunks[4];
     std::memcpy(search_chunks, &key, sizeof(K));
     search_chunks[0] = __builtin_bswap64(search_chunks[0]);
@@ -1196,8 +1207,9 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename T>
-void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_move_backward(T* first, T* last, T* dest_last) {
+void ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_move_backward(T* first, T* last,
+                                                  T* dest_last) {
   if constexpr (MoveModeT == MoveMode::Standard) {
     // Use standard library move
     std::move_backward(first, last, dest_last);
@@ -1263,8 +1275,9 @@ void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 template <typename T>
-void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
-    simd_move_forward(T* first, T* last, T* dest_first) {
+void ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_move_forward(T* first, T* last,
+                                                 T* dest_first) {
   if constexpr (MoveModeT == MoveMode::Standard) {
     // Use standard library move
     std::move(first, last, dest_first);
