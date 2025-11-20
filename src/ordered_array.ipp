@@ -631,11 +631,76 @@ template <typename K>
   requires(sizeof(K) == 4)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_4byte(const K& key) const {
-  static_assert(SimdPrimitive<K>,
-                "4-byte SIMD search requires primitive type (int32_t, uint32_t, int, unsigned int, or float)");
+  static_assert(SimdPrimitive<K> || SimdByteArray<K>,
+                "4-byte SIMD search requires primitive type (int32_t, uint32_t, int, unsigned int, float) or byte array");
 
-  // Float types use different SIMD instructions
-  if constexpr (std::is_same_v<K, float>) {
+  // Byte array types use lexicographic byte comparison
+  if constexpr (SimdByteArray<K>) {
+    // For byte arrays, use byte-swap to convert to big-endian for lexicographic comparison
+    uint32_t key_be;
+    std::memcpy(&key_be, &key, sizeof(K));
+    key_be = __builtin_bswap32(key_be);  // Convert to big-endian
+
+    __m256i search_vec_256 = _mm256_set1_epi32(key_be);
+
+    size_type i = 0;
+    // Process 8 byte arrays at a time with AVX2
+    for (; i + 8 <= size_; i += 8) {
+      // Load 8 arrays (32 bytes total)
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Byte-swap each 4-byte array to big-endian for lexicographic comparison
+      // Shuffle bytes: [3,2,1,0, 7,6,5,4, ...] -> [0,1,2,3, 4,5,6,7, ...]
+      const __m256i shuffle_mask = _mm256_set_epi8(
+          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3,
+          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+      keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
+
+      // Compare as unsigned integers (lexicographic order is preserved)
+      // Use subtraction with saturation to detect less-than
+      __m256i cmp_result = _mm256_cmpeq_epi32(keys_vec, search_vec_256);
+      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+
+      // Combine: we want keys_vec < search_vec
+      int mask = _mm256_movemask_epi8(cmp_lt);
+
+      // Check if all comparisons are true (all keys < search_key)
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Each 4-byte element contributes 4 bits to the mask
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+    }
+
+    // Process 4 byte arrays at a time with SSE
+    if (i + 4 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi32(key_be);
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+      // Byte-swap for big-endian
+      const __m128i shuffle_mask = _mm_set_epi8(
+          12, 13, 14, 15,  8,  9, 10, 11,  4,  5,  6,  7,  0,  1,  2,  3);
+      keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
+
+      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      int mask = _mm_movemask_epi8(cmp_lt);
+
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
+        return keys_.begin() + i + offset;
+      }
+      i += 4;
+    }
+
+    // Handle remaining 0-3 arrays with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
+
+  } else if constexpr (std::is_same_v<K, float>) {
     // Use floating-point comparison instructions
     __m256 search_vec_256 = _mm256_set1_ps(key);
 
@@ -778,11 +843,73 @@ template <typename K>
   requires(sizeof(K) == 8)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_8byte(const K& key) const {
-  static_assert(SimdPrimitive<K>,
-                "8-byte SIMD search requires primitive type (int64_t, uint64_t, long, unsigned long, or double)");
+  static_assert(SimdPrimitive<K> || SimdByteArray<K>,
+                "8-byte SIMD search requires primitive type (int64_t, uint64_t, long, unsigned long, double) or byte array");
 
-  // Double types use different SIMD instructions
-  if constexpr (std::is_same_v<K, double>) {
+  // Byte array types use lexicographic byte comparison
+  if constexpr (SimdByteArray<K>) {
+    // For byte arrays, use byte-swap to convert to big-endian for lexicographic comparison
+    uint64_t key_be;
+    std::memcpy(&key_be, &key, sizeof(K));
+    key_be = __builtin_bswap64(key_be);  // Convert to big-endian
+
+    __m256i search_vec_256 = _mm256_set1_epi64x(key_be);
+
+    size_type i = 0;
+    // Process 4 byte arrays at a time with AVX2
+    for (; i + 4 <= size_; i += 4) {
+      // Load 4 arrays (32 bytes total)
+      __m256i keys_vec =
+          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Byte-swap each 8-byte array to big-endian for lexicographic comparison
+      // Shuffle bytes within each 64-bit value
+      const __m256i shuffle_mask = _mm256_set_epi8(
+          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7,
+          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+      keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
+
+      // Compare as unsigned integers (lexicographic order is preserved)
+      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+
+      int mask = _mm256_movemask_epi8(cmp_lt);
+
+      // Check if all comparisons are true (all keys < search_key)
+      if (mask != static_cast<int>(0xFFFFFFFF)) {
+        // Each 8-byte element contributes 8 bits to the mask
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+    }
+
+    // Process 2 byte arrays at a time with SSE
+    if (i + 2 <= size_) {
+      __m128i search_vec_128 = _mm_set1_epi64x(key_be);
+      __m128i keys_vec =
+          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+      // Byte-swap for big-endian
+      const __m128i shuffle_mask = _mm_set_epi8(
+          8,  9, 10, 11, 12, 13, 14, 15,  0,  1,  2,  3,  4,  5,  6,  7);
+      keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
+
+      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+      int mask = _mm_movemask_epi8(cmp_lt);
+
+      if (mask != static_cast<int>(0xFFFF)) {
+        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+        return keys_.begin() + i + offset;
+      }
+      i += 2;
+    }
+
+    // Handle remaining 0-1 arrays with scalar
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
+
+  } else if constexpr (std::is_same_v<K, double>) {
     // Use floating-point comparison instructions
     __m256d search_vec_256 = _mm256_set1_pd(key);
 
@@ -897,9 +1024,8 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
 /**
  * SIMD-accelerated linear search for 16-byte keys
- * Note: Uses scalar comparison with operator< to match key semantics
- * For keys like std::array<int64_t, 2>, this respects element-wise comparison
- * rather than doing byte-level lexicographic comparison which would be incorrect.
+ * For byte arrays: Uses lexicographic byte comparison with SIMD
+ * For other types: Falls back to scalar comparison
  */
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
@@ -907,21 +1033,85 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_16byte(const K& key) const {
-  // For 16-byte keys, fall back to scalar comparison to respect the key's
-  // operator< semantics. Byte-level SIMD comparison doesn't work correctly
-  // for structured types like std::array<int64_t, 2>.
-  size_type i = 0;
-  while (i < size_ && keys_[i] < key) {
-    ++i;
+  // Byte arrays use lexicographic SIMD comparison
+  if constexpr (SimdByteArray<K>) {
+    // Load search key into 128-bit register
+    __m128i search_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&key));
+
+    size_type i = 0;
+    // Process 2 keys at a time (2 × 16 = 32 bytes per AVX2 register)
+    for (; i + 2 <= size_; i += 2) {
+      // Load 2 keys (32 bytes) from array
+      __m256i keys_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Extract first 16-byte key (low 128 bits)
+      __m128i key0 = _mm256_castsi256_si128(keys_vec);
+
+      // Compare first key with search key (lexicographic byte comparison)
+      __m128i eq0 = _mm_cmpeq_epi8(key0, search_vec);
+      __m128i lt0 = _mm_cmpgt_epi8(search_vec, key0);  // search_vec > key0
+
+      uint32_t eq_mask0 = _mm_movemask_epi8(eq0);
+      uint32_t lt_mask0 = _mm_movemask_epi8(lt0);
+
+      // Find first differing byte
+      uint32_t first_diff0 = std::countr_one(eq_mask0);
+      if (first_diff0 < 16) {
+        // Keys differ at byte first_diff0
+        // If key0 >= search_vec at first difference, we found our position
+        if ((lt_mask0 & (1u << first_diff0)) == 0) {
+          return keys_.begin() + i;
+        }
+      } else {
+        // key0 == search_vec, found exact match
+        return keys_.begin() + i;
+      }
+
+      // Extract second 16-byte key (high 128 bits)
+      __m128i key1 = _mm256_extracti128_si256(keys_vec, 1);
+
+      // Compare second key with search key
+      __m128i eq1 = _mm_cmpeq_epi8(key1, search_vec);
+      __m128i lt1 = _mm_cmpgt_epi8(search_vec, key1);
+
+      uint32_t eq_mask1 = _mm_movemask_epi8(eq1);
+      uint32_t lt_mask1 = _mm_movemask_epi8(lt1);
+
+      uint32_t first_diff1 = std::countr_one(eq_mask1);
+      if (first_diff1 < 16) {
+        if ((lt_mask1 & (1u << first_diff1)) == 0) {
+          return keys_.begin() + i + 1;
+        }
+      } else {
+        // key1 == search_vec, found exact match
+        return keys_.begin() + i + 1;
+      }
+    }
+
+    // Handle remaining 0-1 keys with scalar comparison
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+
+    return keys_.begin() + i;
+
+  } else {
+    // For non-byte-array types, fall back to scalar comparison to respect
+    // the key's operator< semantics. Byte-level SIMD comparison doesn't work
+    // correctly for structured types like std::array<int64_t, 2>.
+    size_type i = 0;
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
   }
-  return keys_.begin() + i;
 }
 
 /**
  * SIMD-accelerated linear search for 32-byte keys
- * Note: Uses scalar comparison with operator< to match key semantics
- * For keys like std::array<int64_t, 4>, this respects element-wise comparison
- * rather than doing byte-level lexicographic comparison which would be incorrect.
+ * For byte arrays: Uses lexicographic byte comparison with SIMD
+ * For other types: Falls back to scalar comparison
  */
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
@@ -929,14 +1119,53 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_32byte(const K& key) const {
-  // For 32-byte keys, fall back to scalar comparison to respect the key's
-  // operator< semantics. Byte-level SIMD comparison doesn't work correctly
-  // for structured types like std::array<int64_t, 4>.
-  size_type i = 0;
-  while (i < size_ && keys_[i] < key) {
-    ++i;
+  // Byte arrays use lexicographic SIMD comparison
+  if constexpr (SimdByteArray<K>) {
+    // Load search key into 256-bit register
+    __m256i search_vec =
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
+
+    size_type i = 0;
+    // Process 1 key at a time (1 × 32 = 32 bytes per AVX2 register)
+    for (; i < size_; ++i) {
+      // Load 1 key (32 bytes) from array
+      __m256i key_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+      // Compare with search key (lexicographic byte comparison)
+      __m256i eq = _mm256_cmpeq_epi8(key_vec, search_vec);
+      __m256i lt = _mm256_cmpgt_epi8(search_vec, key_vec);  // search_vec > key_vec
+
+      uint32_t eq_mask = _mm256_movemask_epi8(eq);
+      uint32_t lt_mask = _mm256_movemask_epi8(lt);
+
+      // Find first byte where they differ (count trailing 1s in eq_mask)
+      uint32_t first_diff = std::countr_one(eq_mask);
+      if (first_diff >= 32) {
+        // All bytes equal, found exact match
+        return keys_.begin() + i;
+      }
+
+      // Check if key_vec >= search_vec at first difference
+      // If lt_mask bit is 0 at first_diff, then key_vec >= search_vec
+      if ((lt_mask & (1u << first_diff)) == 0) {
+        return keys_.begin() + i;
+      }
+      // Otherwise key_vec < search_vec, continue to next key
+    }
+
+    return keys_.begin() + i;
+
+  } else {
+    // For non-byte-array types, fall back to scalar comparison to respect
+    // the key's operator< semantics. Byte-level SIMD comparison doesn't work
+    // correctly for structured types like std::array<int64_t, 4>.
+    size_type i = 0;
+    while (i < size_ && keys_[i] < key) {
+      ++i;
+    }
+    return keys_.begin() + i;
   }
-  return keys_.begin() + i;
 }
 #endif
 
