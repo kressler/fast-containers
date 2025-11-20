@@ -1024,7 +1024,7 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
 /**
  * SIMD-accelerated linear search for 16-byte keys
- * For byte arrays: Uses lexicographic byte comparison with SIMD
+ * For byte arrays: Uses chunked 64-bit comparison (2x uint64_t chunks)
  * For other types: Falls back to scalar comparison
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -1033,65 +1033,33 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_16byte(const K& key) const {
-  // Byte arrays use lexicographic SIMD comparison
+  // Byte arrays use chunked 64-bit comparison for better performance
   if constexpr (SimdByteArray<K>) {
-    // Load search key into 128-bit register
-    __m128i search_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&key));
+    // Load search key and byte-swap to big-endian for lexicographic comparison
+    uint64_t search_chunks[2];
+    std::memcpy(search_chunks, &key, sizeof(K));
+    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
+    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
 
     size_type i = 0;
-    // Process 2 keys at a time (2 × 16 = 32 bytes per AVX2 register)
-    for (; i + 2 <= size_; i += 2) {
-      // Load 2 keys (32 bytes) from array
-      __m256i keys_vec =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+    // Process keys one at a time with hierarchical chunk comparison
+    for (; i < size_; ++i) {
+      // Load key as 2 chunks
+      uint64_t key_chunks[2];
+      std::memcpy(key_chunks, &keys_[i], sizeof(K));
 
-      // Extract first 16-byte key (low 128 bits)
-      __m128i key0 = _mm256_castsi256_si128(keys_vec);
+      // Byte-swap to big-endian
+      key_chunks[0] = __builtin_bswap64(key_chunks[0]);
+      key_chunks[1] = __builtin_bswap64(key_chunks[1]);
 
-      // Compare first key with search key (lexicographic byte comparison)
-      __m128i eq0 = _mm_cmpeq_epi8(key0, search_vec);
-      __m128i lt0 = _mm_cmpgt_epi8(search_vec, key0);  // search_vec > key0
-
-      uint32_t eq_mask0 = _mm_movemask_epi8(eq0);
-      uint32_t lt_mask0 = _mm_movemask_epi8(lt0);
-
-      // Find first differing byte
-      uint32_t first_diff0 = std::countr_one(eq_mask0);
-      if (first_diff0 < 16) {
-        // Keys differ at byte first_diff0
-        // If key0 >= search_vec at first difference, we found our position
-        if ((lt_mask0 & (1u << first_diff0)) == 0) {
+      // Hierarchical comparison: check chunk0 first, then chunk1 if needed
+      if (key_chunks[0] > search_chunks[0]) {
+        return keys_.begin() + i;
+      } else if (key_chunks[0] == search_chunks[0]) {
+        if (key_chunks[1] >= search_chunks[1]) {
           return keys_.begin() + i;
         }
-      } else {
-        // key0 == search_vec, found exact match
-        return keys_.begin() + i;
       }
-
-      // Extract second 16-byte key (high 128 bits)
-      __m128i key1 = _mm256_extracti128_si256(keys_vec, 1);
-
-      // Compare second key with search key
-      __m128i eq1 = _mm_cmpeq_epi8(key1, search_vec);
-      __m128i lt1 = _mm_cmpgt_epi8(search_vec, key1);
-
-      uint32_t eq_mask1 = _mm_movemask_epi8(eq1);
-      uint32_t lt_mask1 = _mm_movemask_epi8(lt1);
-
-      uint32_t first_diff1 = std::countr_one(eq_mask1);
-      if (first_diff1 < 16) {
-        if ((lt_mask1 & (1u << first_diff1)) == 0) {
-          return keys_.begin() + i + 1;
-        }
-      } else {
-        // key1 == search_vec, found exact match
-        return keys_.begin() + i + 1;
-      }
-    }
-
-    // Handle remaining 0-1 keys with scalar comparison
-    while (i < size_ && keys_[i] < key) {
-      ++i;
     }
 
     return keys_.begin() + i;
@@ -1110,7 +1078,7 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
 /**
  * SIMD-accelerated linear search for 32-byte keys
- * For byte arrays: Uses lexicographic byte comparison with SIMD
+ * For byte arrays: Uses chunked 64-bit comparison (4x uint64_t chunks)
  * For other types: Falls back to scalar comparison
  */
 template <Comparable Key, typename Value, std::size_t Length,
@@ -1119,39 +1087,45 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
     simd_lower_bound_32byte(const K& key) const {
-  // Byte arrays use lexicographic SIMD comparison
+  // Byte arrays use chunked 64-bit comparison for better performance
   if constexpr (SimdByteArray<K>) {
-    // Load search key into 256-bit register
-    __m256i search_vec =
-        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
+    // Load search key and byte-swap to big-endian for lexicographic comparison
+    uint64_t search_chunks[4];
+    std::memcpy(search_chunks, &key, sizeof(K));
+    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
+    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
+    search_chunks[2] = __builtin_bswap64(search_chunks[2]);
+    search_chunks[3] = __builtin_bswap64(search_chunks[3]);
 
     size_type i = 0;
-    // Process 1 key at a time (1 × 32 = 32 bytes per AVX2 register)
+    // Process keys one at a time with hierarchical chunk comparison
     for (; i < size_; ++i) {
-      // Load 1 key (32 bytes) from array
-      __m256i key_vec =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+      // Load key as 4 chunks
+      uint64_t key_chunks[4];
+      std::memcpy(key_chunks, &keys_[i], sizeof(K));
 
-      // Compare with search key (lexicographic byte comparison)
-      __m256i eq = _mm256_cmpeq_epi8(key_vec, search_vec);
-      __m256i lt = _mm256_cmpgt_epi8(search_vec, key_vec);  // search_vec > key_vec
+      // Byte-swap to big-endian
+      key_chunks[0] = __builtin_bswap64(key_chunks[0]);
+      key_chunks[1] = __builtin_bswap64(key_chunks[1]);
+      key_chunks[2] = __builtin_bswap64(key_chunks[2]);
+      key_chunks[3] = __builtin_bswap64(key_chunks[3]);
 
-      uint32_t eq_mask = _mm256_movemask_epi8(eq);
-      uint32_t lt_mask = _mm256_movemask_epi8(lt);
-
-      // Find first byte where they differ (count trailing 1s in eq_mask)
-      uint32_t first_diff = std::countr_one(eq_mask);
-      if (first_diff >= 32) {
-        // All bytes equal, found exact match
+      // Hierarchical comparison with early termination
+      if (key_chunks[0] > search_chunks[0]) {
         return keys_.begin() + i;
+      } else if (key_chunks[0] == search_chunks[0]) {
+        if (key_chunks[1] > search_chunks[1]) {
+          return keys_.begin() + i;
+        } else if (key_chunks[1] == search_chunks[1]) {
+          if (key_chunks[2] > search_chunks[2]) {
+            return keys_.begin() + i;
+          } else if (key_chunks[2] == search_chunks[2]) {
+            if (key_chunks[3] >= search_chunks[3]) {
+              return keys_.begin() + i;
+            }
+          }
+        }
       }
-
-      // Check if key_vec >= search_vec at first difference
-      // If lt_mask bit is 0 at first_diff, then key_vec >= search_vec
-      if ((lt_mask & (1u << first_diff)) == 0) {
-        return keys_.begin() + i;
-      }
-      // Otherwise key_vec < search_vec, continue to next key
     }
 
     return keys_.begin() + i;
