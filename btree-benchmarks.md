@@ -15,18 +15,16 @@ btree:
 btree_K_V_L_I_S_M --> btree::btree_map<std::array<int64_t, K/8>, std::array<std::byte, V>, L, I, S, M>
 ````
 
-## 16 and 32 byte keys, 256 byte values
-
-Build trees with 100,000 values, then run batches of 99,990 removes followed by 99,990 inserts. Finds and inserts run on full sized trees.
+## 16 and 32 byte keys, 32 byte values
 
 ```
-$  ./cmake-build-release/src/binary/btree_benchmark -i 25 -t 100000 --batch-size 99990 --batches 10 absl_16_256 btree_16_256_16_128_binary_simd btree_16_256_16_128_linear_simd  btree_16_256_16_128_simd_simd absl_32_256 btree_32_256_16_128_binary_simd btree_32_256_16_128_linear_simd btree_32_256_16_128_simd_simd
-absl_16_256: Insert: 78091619730, Find: 19511726540, Erase: 16025873888, Iterate: 2527129050
-btree_16_256_16_128_binary_simd: Insert: 47548089956, Find: 12410790296, Erase: 9093463574, Iterate: 804665250
-btree_16_256_16_128_linear_simd: Insert: 47194102356, Find: 9641649586, Erase: 7959959572, Iterate: 795893488
-btree_16_256_16_128_simd_simd: Insert: 47244747736, Find: 9653775788, Erase: 8177831062, Iterate: 843055976
-absl_32_256: Insert: 80034290344, Find: 20349390762, Erase: 16833290146, Iterate: 2480644046
-btree_32_256_16_128_binary_simd: Insert: 51080827350, Find: 14125602702, Erase: 11336285202, Iterate: 798221944
-btree_32_256_16_128_linear_simd: Insert: 51687647314, Find: 10784933212, Erase: 8948799456, Iterate: 854953562
-btree_32_256_16_128_simd_simd: Insert: 50787068676, Find: 10697185026, Erase: 8844211410, Iterate: 853905070
+./cmake-build-release/src/binary/btree_benchmark -i 25 -t 100000 --batch-size 99990 --batches 10 absl_16_32 btree_16_32_16_128_binary_simd btree_16_32_16_128_linear_simd btree_16_32_16_128_simd_simd absl_32_32 btree_32_32_16_128_binary_simd btree_32_32_16_128_linear_simd btree_32_32_16_128_simd_simd
+absl_16_32: Insert: 31652663902, Find: 11675265848, Erase: 9970921702, Iterate: 1756619078
+btree_16_32_16_128_binary_simd: Insert: 24067689888, Find: 10151067506, Erase: 8095617634, Iterate: 730247308
+btree_16_32_16_128_linear_simd: Insert: 23595979090, Find: 8517859384, Erase: 7244591854, Iterate: 810650678
+btree_16_32_16_128_simd_simd: Insert: 28902533306, Find: 15923929512, Erase: 13148176856, Iterate: 466678458
+absl_32_32: Insert: 37839225770, Find: 14165502926, Erase: 11950825988, Iterate: 2321378458
+btree_32_32_16_128_binary_simd: Insert: 28278379904, Find: 12528030082, Erase: 10436633642, Iterate: 780486524
+btree_32_32_16_128_linear_simd: Insert: 26766678840, Find: 9927642660, Erase: 8654050430, Iterate: 813429702
+btree_32_32_16_128_simd_simd: Insert: 46870897710, Find: 29279189488, Erase: 26019907090, Iterate: 834288294
 ```
