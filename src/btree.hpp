@@ -40,6 +40,14 @@ class btree {
   using allocator_type = std::allocator<value_type>;
   using key_compare = std::less<Key>;
 
+  // Compile-time check: SIMD search mode requires a SIMD-searchable key type
+  static_assert(
+      SearchModeT != SearchMode::SIMD || SIMDSearchable<Key>,
+      "SIMD search mode requires a key type that satisfies SIMDSearchable. "
+      "Supported types: int32_t, uint32_t, int64_t, uint64_t, float, double, "
+      "and std::array<std::byte/unsigned char, N> where N is 4, 8, 16, or 32. "
+      "For other types, use SearchMode::Binary or SearchMode::Linear.");
+
   /**
    * Compares value_type (pairs) by their keys.
    * Used by value_comp() to provide pair comparison.
