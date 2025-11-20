@@ -5,6 +5,7 @@
 #include <bit>
 #include <cassert>
 #include <concepts>
+#include <cstdint>
 #include <cstring>
 #include <iterator>
 #include <stdexcept>
