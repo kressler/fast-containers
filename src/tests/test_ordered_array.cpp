@@ -1382,3 +1382,217 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
     REQUIRE(node3.find(8)->second == "h");
   }
 }
+
+// Test SIMD search for 16-byte keys
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-byte keys",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  using Key16 = std::array<uint8_t, 16>;
+
+  ordered_array<Key16, int, 10, Mode> arr;
+
+  // Create test keys with distinct values
+  Key16 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+  Key16 key2 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2};
+  Key16 key3 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3};
+  Key16 key4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4};
+  Key16 key5 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5};
+
+  SECTION("Insert and find 16-byte keys") {
+    arr.insert(key3, 300);
+    arr.insert(key1, 100);
+    arr.insert(key5, 500);
+    arr.insert(key2, 200);
+    arr.insert(key4, 400);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify all keys can be found
+    auto it1 = arr.find(key1);
+    REQUIRE(it1 != arr.end());
+    REQUIRE(it1->second == 100);
+
+    auto it2 = arr.find(key2);
+    REQUIRE(it2 != arr.end());
+    REQUIRE(it2->second == 200);
+
+    auto it3 = arr.find(key3);
+    REQUIRE(it3 != arr.end());
+    REQUIRE(it3->second == 300);
+
+    auto it4 = arr.find(key4);
+    REQUIRE(it4 != arr.end());
+    REQUIRE(it4->second == 400);
+
+    auto it5 = arr.find(key5);
+    REQUIRE(it5 != arr.end());
+    REQUIRE(it5->second == 500);
+
+    // Verify keys are in sorted order
+    auto it = arr.begin();
+    REQUIRE(it->first == key1);
+    ++it;
+    REQUIRE(it->first == key2);
+    ++it;
+    REQUIRE(it->first == key3);
+    ++it;
+    REQUIRE(it->first == key4);
+    ++it;
+    REQUIRE(it->first == key5);
+  }
+
+  SECTION("Find non-existent 16-byte key") {
+    arr.insert(key1, 100);
+    arr.insert(key3, 300);
+    arr.insert(key5, 500);
+
+    Key16 key_not_found = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10};
+    auto it = arr.find(key_not_found);
+    REQUIRE(it == arr.end());
+  }
+
+  SECTION("Lower bound with 16-byte keys") {
+    arr.insert(key1, 100);
+    arr.insert(key3, 300);
+    arr.insert(key5, 500);
+
+    // Lower bound of key2 should point to key3
+    auto it = arr.lower_bound(key2);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->first == key3);
+
+    // Lower bound of key4 should point to key5
+    auto it2 = arr.lower_bound(key4);
+    REQUIRE(it2 != arr.end());
+    REQUIRE(it2->first == key5);
+
+    // Lower bound of key beyond all should be end()
+    Key16 key_large = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    auto it3 = arr.lower_bound(key_large);
+    REQUIRE(it3 == arr.end());
+  }
+}
+
+// Test SIMD search for 32-byte keys
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 32-byte keys",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  using Key32 = std::array<uint8_t, 32>;
+
+  ordered_array<Key32, int, 10, Mode> arr;
+
+  // Create test keys with distinct values
+  Key32 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+  Key32 key2 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2};
+  Key32 key3 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3};
+  Key32 key4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4};
+  Key32 key5 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5};
+
+  SECTION("Insert and find 32-byte keys") {
+    arr.insert(key3, 300);
+    arr.insert(key1, 100);
+    arr.insert(key5, 500);
+    arr.insert(key2, 200);
+    arr.insert(key4, 400);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify all keys can be found
+    auto it1 = arr.find(key1);
+    REQUIRE(it1 != arr.end());
+    REQUIRE(it1->second == 100);
+
+    auto it2 = arr.find(key2);
+    REQUIRE(it2 != arr.end());
+    REQUIRE(it2->second == 200);
+
+    auto it3 = arr.find(key3);
+    REQUIRE(it3 != arr.end());
+    REQUIRE(it3->second == 300);
+
+    auto it4 = arr.find(key4);
+    REQUIRE(it4 != arr.end());
+    REQUIRE(it4->second == 400);
+
+    auto it5 = arr.find(key5);
+    REQUIRE(it5 != arr.end());
+    REQUIRE(it5->second == 500);
+
+    // Verify keys are in sorted order
+    auto it = arr.begin();
+    REQUIRE(it->first == key1);
+    ++it;
+    REQUIRE(it->first == key2);
+    ++it;
+    REQUIRE(it->first == key3);
+    ++it;
+    REQUIRE(it->first == key4);
+    ++it;
+    REQUIRE(it->first == key5);
+  }
+
+  SECTION("Find non-existent 32-byte key") {
+    arr.insert(key1, 100);
+    arr.insert(key3, 300);
+    arr.insert(key5, 500);
+
+    Key32 key_not_found = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10};
+    auto it = arr.find(key_not_found);
+    REQUIRE(it == arr.end());
+  }
+
+  SECTION("Lower bound with 32-byte keys") {
+    arr.insert(key1, 100);
+    arr.insert(key3, 300);
+    arr.insert(key5, 500);
+
+    // Lower bound of key2 should point to key3
+    auto it = arr.lower_bound(key2);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->first == key3);
+
+    // Lower bound of key4 should point to key5
+    auto it2 = arr.lower_bound(key4);
+    REQUIRE(it2 != arr.end());
+    REQUIRE(it2->first == key5);
+
+    // Lower bound of key beyond all should be end()
+    Key32 key_large = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    auto it3 = arr.lower_bound(key_large);
+    REQUIRE(it3 == arr.end());
+  }
+
+  SECTION("Test lexicographic comparison with 32-byte keys") {
+    // Test keys that differ in different byte positions
+    Key32 key_a = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    Key32 key_b = {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    Key32 key_c = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    arr.insert(key_b, 2);
+    arr.insert(key_a, 1);
+    arr.insert(key_c, 3);
+
+    REQUIRE(arr.size() == 3);
+
+    // Verify sorted order: key_a < key_b < key_c
+    auto it = arr.begin();
+    REQUIRE(it->first == key_a);
+    REQUIRE(it->second == 1);
+    ++it;
+    REQUIRE(it->first == key_b);
+    REQUIRE(it->second == 2);
+    ++it;
+    REQUIRE(it->first == key_c);
+    REQUIRE(it->second == 3);
+  }
+}

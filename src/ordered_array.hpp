@@ -39,8 +39,9 @@ concept Comparable = requires(T a, T b) {
 
 // Concept for types that can use SIMD-accelerated search
 template <typename T>
-concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
-                         (sizeof(T) == 4 || sizeof(T) == 8);
+concept SIMDSearchable =
+    Comparable<T> && std::is_trivially_copyable_v<T> &&
+    (sizeof(T) == 4 || sizeof(T) == 8 || sizeof(T) == 16 || sizeof(T) == 32);
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
@@ -353,6 +354,22 @@ class ordered_array {
   template <typename K>
     requires(sizeof(K) == 8)
   auto simd_lower_bound_8byte(const K& key) const;
+
+  /**
+   * SIMD-accelerated linear search for 16-byte keys
+   * Compares 2 keys at a time using AVX2 with lexicographic byte comparison
+   */
+  template <typename K>
+    requires(sizeof(K) == 16)
+  auto simd_lower_bound_16byte(const K& key) const;
+
+  /**
+   * SIMD-accelerated linear search for 32-byte keys
+   * Compares 1 key at a time using AVX2 with lexicographic byte comparison
+   */
+  template <typename K>
+    requires(sizeof(K) == 32)
+  auto simd_lower_bound_32byte(const K& key) const;
 #endif
 
   /**
