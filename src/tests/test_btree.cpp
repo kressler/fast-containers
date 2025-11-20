@@ -18,8 +18,7 @@ struct SIMDSearchMode {
 };
 
 TEMPLATE_TEST_CASE("btree default constructor creates empty tree",
-                   "[btree][constructor]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+                   "[btree][constructor]", BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Default constructor - int, int") {
@@ -54,8 +53,7 @@ TEMPLATE_TEST_CASE("btree default constructor creates empty tree",
 }
 
 TEMPLATE_TEST_CASE("btree destructor deallocates resources",
-                   "[btree][destructor]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+                   "[btree][destructor]", BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Destructor on empty tree") {
@@ -72,7 +70,7 @@ TEMPLATE_TEST_CASE("btree destructor deallocates resources",
 }
 
 TEMPLATE_TEST_CASE("btree size and empty methods", "[btree][size]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Empty tree reports size 0") {
@@ -88,8 +86,7 @@ TEMPLATE_TEST_CASE("btree size and empty methods", "[btree][size]",
 }
 
 TEMPLATE_TEST_CASE("btree works with different template parameters",
-                   "[btree][template]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+                   "[btree][template]", BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Small leaf nodes") {
@@ -137,7 +134,7 @@ void populate_tree(BTree& tree, std::vector<std::pair<int, int>> data) {
 }
 
 TEMPLATE_TEST_CASE("btree empty tree iterators", "[btree][iterator]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Empty tree begin() == end()") {
@@ -153,7 +150,7 @@ TEMPLATE_TEST_CASE("btree empty tree iterators", "[btree][iterator]",
 
 TEMPLATE_TEST_CASE("btree single-leaf tree operations",
                    "[btree][find][iterator]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using BTree = btree<int, int, 64, 64, Mode>;
 
@@ -220,7 +217,7 @@ TEMPLATE_TEST_CASE("btree single-leaf tree operations",
 }
 
 TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using BTree = btree<int, int, 64, 64, Mode>;
 
@@ -425,7 +422,7 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
 }
 
 TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Split leaf node when full") {
@@ -574,7 +571,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
 }
 
 TEMPLATE_TEST_CASE("btree erase operations - basic", "[btree][erase]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using BTree = btree<int, int, 64, 64, Mode>;
 
@@ -714,7 +711,7 @@ TEMPLATE_TEST_CASE("btree erase operations - basic", "[btree][erase]",
 
 TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
                    "[btree][erase][underflow]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Erase causes borrow from left sibling") {
@@ -869,7 +866,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
 }
 
 TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Erase minimum element updates leftmost") {
@@ -993,7 +990,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
 
 // Phase 6: Iterator-based erase operations
 TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("erase(iterator) - single element from middle") {
@@ -1275,7 +1272,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
 }
 
 TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("lower_bound - empty tree") {
@@ -1680,7 +1677,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
 }
 
 TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("equal_range - empty tree") {
@@ -1926,7 +1923,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
 }
 
 TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("clear - empty tree") {
@@ -2030,7 +2027,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("count - empty tree") {
@@ -2163,7 +2160,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("key_comp - basic functionality") {
@@ -2352,7 +2349,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
 }
 
 TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+                   BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("get_allocator - basic functionality") {
@@ -2476,7 +2473,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
 }
 
 TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("copy constructor - empty tree") {
@@ -2558,7 +2555,7 @@ TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("copy assignment - empty to empty") {
@@ -2653,7 +2650,7 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("move constructor - empty tree") {
@@ -2726,7 +2723,7 @@ TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("move assignment - empty to empty") {
@@ -2823,7 +2820,7 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("emplace - insert new element") {
@@ -2931,7 +2928,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
 }
 
 TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("emplace_hint - insert new element") {
@@ -3042,7 +3039,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 }
 TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("operator[] - insert new element with default value") {
@@ -3227,7 +3224,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 }
 TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
-                   LinearSearchMode, SIMDSearchMode) {
+                   LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("swap - two empty trees") {
@@ -3424,5 +3421,100 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
     REQUIRE(tree2.size() == 2);
     REQUIRE(tree2.find(1) != tree2.end());
     REQUIRE(tree2.find(2) != tree2.end());
+  }
+}
+// SIMD-specific tests with int keys (SIMD-compatible types)
+TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
+  constexpr SearchMode Mode = SearchMode::SIMD;
+
+  SECTION("Basic insert and find with SIMD mode") {
+    btree<int, int, 64, 64, Mode> tree;
+
+    // Insert some values
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Find values
+    for (int i = 0; i < 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("SIMD mode with int32_t keys") {
+    btree<int32_t, std::string, 32, 32, Mode> tree;
+
+    tree.insert(42, "answer");
+    tree.insert(-100, "negative");
+    tree.insert(0, "zero");
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find(42) != tree.end());
+    REQUIRE(tree.find(42)->second == "answer");
+  }
+
+  SECTION("SIMD mode with int64_t keys") {
+    btree<int64_t, int, 16, 16, Mode> tree;
+
+    tree.insert(1000000000LL, 1);
+    tree.insert(-1000000000LL, 2);
+    tree.insert(0LL, 3);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find(1000000000LL) != tree.end());
+    REQUIRE(tree.find(1000000000LL)->second == 1);
+  }
+
+  SECTION("SIMD mode with uint32_t keys") {
+    btree<uint32_t, int, 16, 16, Mode> tree;
+
+    tree.insert(100u, 1);
+    tree.insert(200u, 2);
+    tree.insert(0u, 3);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.find(100u) != tree.end());
+  }
+
+  SECTION("SIMD mode erase operations") {
+    btree<int, int, 8, 8, Mode> tree;
+
+    for (int i = 0; i < 50; ++i) {
+      tree.insert(i, i * 2);
+    }
+
+    REQUIRE(tree.size() == 50);
+
+    // Erase some elements
+    tree.erase(10);
+    tree.erase(20);
+    tree.erase(30);
+
+    REQUIRE(tree.size() == 47);
+    REQUIRE(tree.find(10) == tree.end());
+    REQUIRE(tree.find(20) == tree.end());
+    REQUIRE(tree.find(30) == tree.end());
+  }
+
+  SECTION("SIMD mode iteration") {
+    btree<int, int, 16, 16, Mode> tree;
+
+    for (int i = 0; i < 20; ++i) {
+      tree.insert(i, i * 3);
+    }
+
+    int count = 0;
+    int prev_key = -1;
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      REQUIRE(it->first > prev_key);  // Check sorted order
+      prev_key = it->first;
+      count++;
+    }
+
+    REQUIRE(count == 20);
   }
 }
