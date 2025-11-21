@@ -454,16 +454,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   auto next_in_leaf = leaf->data.erase(leaf_it);
   size_--;
 
-  // Update leftmost_leaf_ if we removed from it and it's now empty
-  if (leftmost_leaf_ == leaf && leaf->data.empty()) {
-    leftmost_leaf_ = leaf->next_leaf;
-  }
-
-  // Update rightmost_leaf_ if we removed from it and it's now empty
-  if (rightmost_leaf_ == leaf && leaf->data.empty()) {
-    rightmost_leaf_ = leaf->prev_leaf;
-  }
-
   // Check if leaf underflowed (but root can have any size)
   if (root_is_leaf_ && leaf == leaf_root_) {
     // Root can have any size, no underflow handling needed
@@ -482,11 +472,16 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     update_parent_key_recursive(leaf, new_min);
   }
 
-  // Handle underflow if necessary
+  // Handle underflow or empty leaf
+  // Empty non-root leaves must ALWAYS be merged/deleted to avoid memory leaks
+  // Regular underflow uses threshold to avoid thrashing
   const size_type underflow_threshold =
       min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
                                           : 0;
-  if (leaf->data.size() < underflow_threshold) {
+  const bool needs_rebalancing =
+      leaf->data.empty() || leaf->data.size() < underflow_threshold;
+
+  if (needs_rebalancing) {
     // handle_underflow returns pointer to leaf where data ended up
     LeafNode* result_leaf = handle_underflow(leaf);
 
