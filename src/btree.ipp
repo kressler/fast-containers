@@ -379,48 +379,15 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return 0;
   }
 
-  // Find the leaf containing the key
-  LeafNode* leaf = find_leaf_for_key(key);
-
-  // Remove from leaf (returns 0 if not found, 1 if removed)
-  const size_type removed = leaf->data.erase(key);
-  if (removed == 0) {
+  // Find the key and delegate to iterator-based erase
+  // This ensures consistent behavior and avoids code duplication
+  auto it = find(key);
+  if (it == end()) {
     return 0;  // Key not found
   }
-  size_--;
 
-  // Update leftmost_leaf_ if we removed from it and it's now empty
-  if (leftmost_leaf_ == leaf && leaf->data.empty()) {
-    leftmost_leaf_ = leaf->next_leaf;
-  }
-
-  // Update rightmost_leaf_ if we removed from it and it's now empty
-  if (rightmost_leaf_ == leaf && leaf->data.empty()) {
-    rightmost_leaf_ = leaf->prev_leaf;
-  }
-
-  // Check if leaf underflowed (but root can have any size)
-  // Use hysteresis: only rebalance when size drops below min - hysteresis
-  if (root_is_leaf_ && leaf == leaf_root_) {
-    // Root can have any size, no underflow handling needed
-    // But still check if minimum key changed (though root has no parent)
-    return 1;
-  }
-
-  // Update parent key if minimum changed (do this BEFORE checking underflow)
-  // This ensures parent keys are always correct before any rebalancing
-  if (!leaf->data.empty() && leaf->parent != nullptr) {
-    const Key& new_min = leaf->data.begin()->first;
-    update_parent_key_recursive(leaf, new_min);
-  }
-
-  const size_type underflow_threshold =
-      min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
-                                          : 0;
-  if (leaf->data.size() < underflow_threshold) {
-    handle_underflow(leaf);
-  }
-
+  // Delegate to iterator erase (handles all rebalancing logic)
+  erase(it);
   return 1;
 }
 
