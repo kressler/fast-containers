@@ -316,7 +316,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", "BenName",
+  std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", "Benchmark Name",
                "Insert cycles", "Find cycles", "Erase cycles",
                "Iterate cycles");
   for (const auto& name : names) {
