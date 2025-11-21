@@ -70,6 +70,23 @@ int main(int argc, char** argv) {
       seen.insert(key);
     };
 
+    auto find = [&]() -> void {
+      for (auto key : seen) {
+        auto it = btree.find(key);
+        auto ordered_it = ordered_map.find(key);
+        if (it != btree.end() && ordered_it != ordered_map.end()) {
+          if (it->second != ordered_it->second) {
+            std::cout << "Mismatch at key " << it->first
+                      << " != " << ordered_it->second << std::endl;
+            exit(1);
+          }
+        } else {
+          std::cout << "Key " << key << " not found!" << std::endl;
+          exit(1);
+        }
+      }
+    };
+
     auto remove = [&]() -> void {
       auto key = *seen.begin();
       seen.erase(key);
@@ -106,6 +123,7 @@ int main(int argc, char** argv) {
     while (ordered_map.size() < num_keys) {
       insert();
     }
+    find();
     validate();
 
     // Run erase/insert batches
@@ -116,6 +134,7 @@ int main(int argc, char** argv) {
       for (size_t i = 0; i < batch_size; ++i) {
         insert();
       }
+      find();
       validate();
     }
 
