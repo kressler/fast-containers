@@ -828,18 +828,18 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     // Found it at lower_bound position
     is_leftmost = (it == children.begin());
     if (it->first != new_min) {
-      children.erase(it->first);
-      auto [new_it, ins] = children.insert(new_min, child);
-      assert(ins && "Re-inserting child with new minimum key should succeed");
+      // Update key in place - position doesn't change since new_min is still
+      // within this child's range (between left and right sibling mins)
+      children.unsafe_update_key(it, new_min);
     }
   } else if (it != children.begin()) {
     // Check the previous entry
     --it;
     if (it->second == child && it->first != new_min) {
       is_leftmost = (it == children.begin());
-      children.erase(it->first);
-      auto [new_it, ins] = children.insert(new_min, child);
-      assert(ins && "Re-inserting child with new minimum key should succeed");
+      // Update key in place - position doesn't change since new_min is still
+      // within this child's range (between left and right sibling mins)
+      children.unsafe_update_key(it, new_min);
     }
   }
 

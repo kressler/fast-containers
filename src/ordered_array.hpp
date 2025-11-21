@@ -225,6 +225,40 @@ class ordered_array {
   size_type erase(const Key& key);
 
   /**
+   * Updates the key at the given position without maintaining sorted order.
+   * UNSAFE: Caller MUST guarantee that the new key maintains sorted order:
+   *   - new_key >= key at (position - 1), if it exists
+   *   - new_key <= key at (position + 1), if it exists
+   *
+   * This is an optimization to avoid array shifts when the caller knows
+   * the new key will remain at the same position in sorted order.
+   *
+   * Debug builds assert that sorted order is maintained.
+   *
+   * @param it Iterator to the element whose key should be updated
+   * @param new_key The new key value
+   */
+  void unsafe_update_key(iterator it, const Key& new_key) {
+    assert(it.index() < size_ && "Iterator out of bounds");
+
+    const size_type index = it.index();
+
+    // Debug assertions: verify sorted order is maintained
+    // If not first element: new_key >= previous key
+    assert(index == 0 || !(new_key < keys_[index - 1]) &&
+                             "New key violates sorted order (less than "
+                             "previous key)");
+
+    // If not last element: new_key <= next key
+    assert(index == size_ - 1 || !(keys_[index + 1] < new_key) &&
+                                     "New key violates sorted order (greater "
+                                     "than next key)");
+
+    // Update key in place
+    keys_[index] = new_key;
+  }
+
+  /**
    * Access or insert an element using subscript operator.
    * If the key exists, returns a reference to its value.
    * If the key doesn't exist, inserts it with a default-constructed value.
