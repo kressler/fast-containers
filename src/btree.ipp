@@ -318,12 +318,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
       update_parent_key_recursive(leaf, key);
     }
-
-    // Update leftmost_leaf_ if we inserted at the beginning of the leftmost leaf
-    // Avoids key comparison by checking leaf position in linked list
-    if (leaf_it == leaf->data.begin() && leaf->prev_leaf == nullptr) {
-      leftmost_leaf_ = leaf;
-    }
   }
 
   return {iterator(leaf, leaf_it), inserted};
