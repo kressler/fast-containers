@@ -526,35 +526,26 @@ class btree {
     // Traverse down the tree
     InternalNode* node = internal_root_;
     while (!node->children_are_leaves) {
-      // Find the child to follow
-      // In a B+ tree, we use lower_bound to find the right subtree
-      // The key in internal nodes represents the minimum key in the subtree
-      auto it = node->internal_children.begin();
-      auto end = node->internal_children.end();
+      // Find the child to follow using optimized lower_bound
+      // In a B+ tree, keys represent minimum key in each subtree
+      // We want the rightmost child whose minimum <= search key
+      auto it = node->internal_children.lower_bound(key);
 
-      // Find first child whose key is > search key
-      while (it != end && it->first < key) {
-        ++it;
-      }
-
-      // If we found such a child and it's not the first, go to previous
+      // If lower_bound found exact match or went past, back up one
+      // (unless we're at the beginning)
       if (it != node->internal_children.begin() &&
-          (it == end || it->first != key)) {
+          (it == node->internal_children.end() || it->first != key)) {
         --it;
       }
 
       node = it->second;
     }
 
-    // Now node has leaf children - find the appropriate leaf
-    auto it = node->leaf_children.begin();
-    auto end = node->leaf_children.end();
+    // Now node has leaf children - find the appropriate leaf using lower_bound
+    auto it = node->leaf_children.lower_bound(key);
 
-    while (it != end && it->first < key) {
-      ++it;
-    }
-
-    if (it != node->leaf_children.begin() && (it == end || it->first != key)) {
+    if (it != node->leaf_children.begin() &&
+        (it == node->leaf_children.end() || it->first != key)) {
       --it;
     }
 
