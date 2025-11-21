@@ -438,7 +438,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   LeafNode* leaf = pos.leaf_node_;
   auto leaf_it = *pos.leaf_it_;  // Dereference optional
 
-  // Save next key before erasing (needed for reconstruction after underflow)
+  // Check if we're erasing from beginning (will need parent update)
+  const bool erasing_from_beginning = (leaf_it == leaf->data.begin());
+
+  // Save next key (only needed if underflow might occur)
   iterator next = pos;
   ++next;
   std::optional<Key> next_key;
@@ -447,7 +450,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   }
 
   // Erase from leaf using iterator (no search needed!)
-  leaf->data.erase(leaf_it);
+  // Returns iterator to next element in this leaf
+  auto next_in_leaf = leaf->data.erase(leaf_it);
   size_--;
 
   // Update leftmost_leaf_ if we removed from it and it's now empty
@@ -463,15 +467,17 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Check if leaf underflowed (but root can have any size)
   if (root_is_leaf_ && leaf == leaf_root_) {
     // Root can have any size, no underflow handling needed
-    // Reconstruct iterator if next element exists
-    if (next_key.has_value()) {
-      return find(*next_key);
+    // Return iterator to next element (no search needed!)
+    if (next_in_leaf != leaf->data.end()) {
+      return iterator(leaf, next_in_leaf);
     }
     return end();
   }
 
-  // Update parent key if minimum changed (do this BEFORE checking underflow)
-  if (!leaf->data.empty() && leaf->parent != nullptr) {
+  // Update parent key if minimum changed (only if erased from beginning)
+  // Do this BEFORE checking underflow to ensure parent keys are correct
+  if (erasing_from_beginning && !leaf->data.empty() &&
+      leaf->parent != nullptr) {
     const Key& new_min = leaf->data.begin()->first;
     update_parent_key_recursive(leaf, new_min);
   }
@@ -482,12 +488,21 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
                                           : 0;
   if (leaf->data.size() < underflow_threshold) {
     handle_underflow(leaf);
+    // After underflow handling, leaf may have been merged/rebalanced
+    // Must search for next element
+    if (next_key.has_value()) {
+      return find(*next_key);
+    }
+    return end();
   }
 
-  // Reconstruct iterator to next element
-  // If the next element existed, find it; otherwise return end()
-  if (next_key.has_value()) {
-    return find(*next_key);
+  // No underflow - can use next_in_leaf directly (no search needed!)
+  if (next_in_leaf != leaf->data.end()) {
+    // Next element is in same leaf
+    return iterator(leaf, next_in_leaf);
+  } else if (leaf->next_leaf != nullptr) {
+    // Erased last element in leaf - move to next leaf
+    return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
   }
   return end();
 }
