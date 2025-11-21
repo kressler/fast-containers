@@ -429,11 +429,12 @@ class btree {
 
   /**
    * Removes all elements from the tree, leaving it empty.
+   * Root node remains allocated.
    * All iterators are invalidated.
    *
    * Complexity: O(n)
    */
-  void clear() { deallocate_tree(); }
+  void clear();
 
   /**
    * Returns the number of elements with the specified key.
