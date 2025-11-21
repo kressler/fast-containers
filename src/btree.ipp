@@ -9,11 +9,12 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::btree()
-    : root_is_leaf_(true),
-      leaf_root_(nullptr),
-      size_(0),
-      leftmost_leaf_(nullptr),
-      rightmost_leaf_(nullptr) {}
+    : root_is_leaf_(true), size_(0) {
+  // Always allocate an empty root leaf to simplify insert/erase logic
+  leaf_root_ = allocate_leaf_node();
+  leftmost_leaf_ = leaf_root_;
+  rightmost_leaf_ = leaf_root_;
+}
 
 // Destructor
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
@@ -21,6 +22,7 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::~btree() {
+  // Unconditionally deallocate all nodes including root
   deallocate_tree();
 }
 
@@ -30,11 +32,12 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           MoveMode MoveModeT>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::btree(const btree& other)
-    : root_is_leaf_(true),
-      leaf_root_(nullptr),
-      size_(0),
-      leftmost_leaf_(nullptr),
-      rightmost_leaf_(nullptr) {
+    : root_is_leaf_(true), size_(0) {
+  // Always allocate an empty root leaf
+  leaf_root_ = allocate_leaf_node();
+  leftmost_leaf_ = leaf_root_;
+  rightmost_leaf_ = leaf_root_;
+
   // Copy all elements using insert (use const iterators)
   for (const_iterator it = other.begin(); it != other.end(); ++it) {
     insert(it->first, it->second);
@@ -49,8 +52,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::operator=(const btree& other) {
   if (this != &other) {
-    // Clear existing contents
-    deallocate_tree();
+    // Clear existing contents (keeps root allocated)
+    clear();
 
     // Copy all elements from other (use const iterators)
     for (const_iterator it = other.begin(); it != other.end(); ++it) {
@@ -77,12 +80,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     internal_root_ = other.internal_root_;
   }
 
-  // Leave other in a valid empty state
+  // Leave other in a valid empty state with a new empty root
   other.root_is_leaf_ = true;
-  other.leaf_root_ = nullptr;
+  other.leaf_root_ = other.allocate_leaf_node();
   other.size_ = 0;
-  other.leftmost_leaf_ = nullptr;
-  other.rightmost_leaf_ = nullptr;
+  other.leftmost_leaf_ = other.leaf_root_;
+  other.rightmost_leaf_ = other.leaf_root_;
 }
 
 // Move assignment operator
@@ -93,7 +96,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::operator=(btree&& other) noexcept {
   if (this != &other) {
-    // Deallocate existing tree
+    // Deallocate existing tree (including root)
     deallocate_tree();
 
     // Move other's resources to this
@@ -107,12 +110,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     leftmost_leaf_ = other.leftmost_leaf_;
     rightmost_leaf_ = other.rightmost_leaf_;
 
-    // Leave other in a valid empty state
+    // Leave other in a valid empty state with a new empty root
     other.root_is_leaf_ = true;
-    other.leaf_root_ = nullptr;
+    other.leaf_root_ = other.allocate_leaf_node();
     other.size_ = 0;
-    other.leftmost_leaf_ = nullptr;
-    other.rightmost_leaf_ = nullptr;
+    other.leftmost_leaf_ = other.leaf_root_;
+    other.rightmost_leaf_ = other.leaf_root_;
   }
   return *this;
 }
@@ -276,22 +279,7 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::insert(const Key& key, const Value& value) {
-  // Case 1: Empty tree - create first leaf
-  if (size_ == 0) {
-    LeafNode* leaf = allocate_leaf_node();
-    auto [leaf_it, inserted] = leaf->data.insert(key, value);
-    assert(inserted && "First insert into empty leaf should always succeed");
-
-    root_is_leaf_ = true;
-    leaf_root_ = leaf;
-    leftmost_leaf_ = leaf;
-    rightmost_leaf_ = leaf;
-    size_ = 1;
-
-    return {iterator(leaf, leaf_it), true};
-  }
-
-  // Case 2: Tree has elements - find appropriate leaf
+  // Find the appropriate leaf for the key (root on first insert)
   LeafNode* leaf = find_leaf_for_key(key);
 
   // Use lower_bound to find position - single search for both existence check
@@ -400,17 +388,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return 0;  // Key not found
   }
   size_--;
-
-  // Special case: tree is now empty
-  if (size_ == 0) {
-    // Tree had only one element in root leaf
-    assert(root_is_leaf_ && "Empty tree should have leaf root");
-    deallocate_leaf_node(leaf_root_);
-    leaf_root_ = nullptr;
-    leftmost_leaf_ = nullptr;
-    rightmost_leaf_ = nullptr;
-    return 1;
-  }
 
   // Update leftmost_leaf_ if we removed from it and it's now empty
   if (leftmost_leaf_ == leaf && leaf->data.empty()) {
@@ -554,25 +531,48 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   delete node;
 }
 
-// deallocate_tree
+// clear - removes all elements but keeps root allocated
+template <Comparable Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          MoveMode MoveModeT>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+           MoveModeT>::clear() {
+  if (size_ == 0) {
+    return;  // Already empty
+  }
+
+  if (root_is_leaf_) {
+    // Just clear the root leaf's data
+    leaf_root_->data.clear();
+  } else {
+    // Deallocate internal tree and reset to empty leaf root
+    deallocate_internal_subtree(internal_root_);
+
+    // Allocate new empty leaf root
+    leaf_root_ = allocate_leaf_node();
+    root_is_leaf_ = true;
+    leftmost_leaf_ = leaf_root_;
+    rightmost_leaf_ = leaf_root_;
+  }
+
+  size_ = 0;
+}
+
+// deallocate_tree - deallocates entire tree including root (for destructor)
 template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
            MoveModeT>::deallocate_tree() {
-  if (size_ == 0) {
-    return;  // Empty tree
-  }
-
   if (root_is_leaf_) {
-    // Tree has only one node (leaf root)
+    // Tree has only one node (leaf root) - deallocate it
     deallocate_leaf_node(leaf_root_);
   } else {
     // Tree has internal nodes - use recursive deallocation
     deallocate_internal_subtree(internal_root_);
   }
 
-  // Reset state
+  // Reset state to nullptr (for destructor)
   root_is_leaf_ = true;
   leaf_root_ = nullptr;
   size_ = 0;
