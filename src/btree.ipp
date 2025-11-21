@@ -408,21 +408,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Check if we're erasing from beginning (will need parent update)
   const bool erasing_from_beginning = (leaf_it == leaf->data.begin());
 
-  // Save next key (only needed if underflow might occur)
-  iterator next = pos;
-  ++next;
-  std::optional<Key> next_key;
-  if (next != end()) {
-    next_key = (*next).first;
-  }
-
-  // Erase from leaf using iterator (no search needed!)
-  // Returns iterator to next element in this leaf
-  auto next_in_leaf = leaf->data.erase(leaf_it);
-  size_--;
-
-  // Check if leaf underflowed (but root can have any size)
+  // Check if rebalancing will be needed BEFORE erasing
+  // This allows us to avoid saving next_key when not needed (important for large keys)
+  // Early return if root is leaf (no rebalancing ever needed)
   if (root_is_leaf_ && leaf == leaf_root_) {
+    auto next_in_leaf = leaf->data.erase(leaf_it);
+    size_--;
     // Root can have any size, no underflow handling needed
     // Return iterator to next element (no search needed!)
     if (next_in_leaf != leaf->data.end()) {
@@ -431,22 +422,36 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     return end();
   }
 
+  // Predict if rebalancing will be needed after erase (size - 1)
+  const size_type underflow_threshold =
+      min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
+                                          : 0;
+  const size_type size_after_erase = leaf->data.size() - 1;
+  const bool needs_rebalancing =
+      size_after_erase == 0 || size_after_erase < underflow_threshold;
+
+  // Save next key ONLY if rebalancing will occur (avoids copy for large keys)
+  std::optional<Key> next_key;
+  if (needs_rebalancing) {
+    iterator next = pos;
+    ++next;
+    if (next != end()) {
+      next_key = (*next).first;
+    }
+  }
+
+  // Erase from leaf using iterator (no search needed!)
+  // Returns iterator to next element in this leaf
+  auto next_in_leaf = leaf->data.erase(leaf_it);
+  size_--;
+
   // Update parent key if minimum changed (only if erased from beginning)
-  // Do this BEFORE checking underflow to ensure parent keys are correct
+  // Do this BEFORE rebalancing to ensure parent keys are correct
   if (erasing_from_beginning && !leaf->data.empty() &&
       leaf->parent != nullptr) {
     const Key& new_min = leaf->data.begin()->first;
     update_parent_key_recursive(leaf, new_min);
   }
-
-  // Handle underflow or empty leaf
-  // Empty non-root leaves must ALWAYS be merged/deleted to avoid memory leaks
-  // Regular underflow uses threshold to avoid thrashing
-  const size_type underflow_threshold =
-      min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
-                                          : 0;
-  const bool needs_rebalancing =
-      leaf->data.empty() || leaf->data.size() < underflow_threshold;
 
   if (needs_rebalancing) {
     // handle_underflow returns pointer to leaf where data ended up
