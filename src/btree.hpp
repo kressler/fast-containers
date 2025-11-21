@@ -44,8 +44,8 @@ class btree {
   static_assert(
       SearchModeT != SearchMode::SIMD || SIMDSearchable<Key>,
       "SIMD search mode requires a key type that satisfies SIMDSearchable. "
-      "Supported types: int32_t, uint32_t, int64_t, uint64_t, float, double, "
-      "and std::array<std::byte/unsigned char, N> where N is 4, 8, 16, or 32. "
+      "Supported types: int32_t, uint32_t, int64_t, uint64_t, float, double. "
+      "For composite keys, define a struct with operator<=> instead. "
       "For other types, use SearchMode::Binary or SearchMode::Linear.");
 
   /**

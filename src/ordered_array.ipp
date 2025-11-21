@@ -631,91 +631,11 @@ template <typename K>
   requires(sizeof(K) == 4)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_4byte(const K& key) const {
-  static_assert(SimdPrimitive<K> || SimdByteArray<K>,
+  static_assert(SimdPrimitive<K>,
                 "4-byte SIMD search requires primitive type (int32_t, "
-                "uint32_t, int, unsigned int, float) or byte array");
+                "uint32_t, int, unsigned int, float)");
 
-  // Byte array types use lexicographic byte comparison
-  if constexpr (SimdByteArray<K>) {
-    // For byte arrays, use byte-swap to convert to big-endian for lexicographic
-    // comparison
-    uint32_t key_be;
-    std::memcpy(&key_be, &key, sizeof(K));
-    key_be = __builtin_bswap32(key_be);  // Convert to big-endian
-
-    __m256i search_vec_256 = _mm256_set1_epi32(key_be);
-
-    // Sign flip constant for unsigned comparison
-    // AVX2 only has signed comparison, so we XOR with 0x8000... to convert
-    // unsigned comparison to signed comparison
-    const __m256i sign_flip = _mm256_set1_epi32(0x80000000);
-
-    size_type i = 0;
-    // Process 8 byte arrays at a time with AVX2
-    for (; i + 8 <= size_; i += 8) {
-      // Load 8 arrays (32 bytes total)
-      __m256i keys_vec =
-          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
-
-      // Byte-swap each 4-byte array to big-endian for lexicographic comparison
-      // Shuffle bytes: [3,2,1,0, 7,6,5,4, ...] -> [0,1,2,3, 4,5,6,7, ...]
-      const __m256i shuffle_mask =
-          _mm256_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3,
-                          12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
-      keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
-
-      // Flip sign bits for unsigned comparison
-      keys_vec = _mm256_xor_si256(keys_vec, sign_flip);
-      __m256i search_vec_flipped = _mm256_xor_si256(search_vec_256, sign_flip);
-
-      // Compare as unsigned integers (via sign flip)
-      __m256i cmp_result = _mm256_cmpeq_epi32(keys_vec, search_vec_flipped);
-      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_flipped, keys_vec);
-
-      // Combine: we want keys_vec < search_vec
-      int mask = _mm256_movemask_epi8(cmp_lt);
-
-      // Check if all comparisons are true (all keys < search_key)
-      if (mask != static_cast<int>(0xFFFFFFFF)) {
-        // Each 4-byte element contributes 4 bits to the mask
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
-        return keys_.begin() + i + offset;
-      }
-    }
-
-    // Process 4 byte arrays at a time with SSE
-    if (i + 4 <= size_) {
-      __m128i search_vec_128 = _mm_set1_epi32(key_be);
-      __m128i keys_vec =
-          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
-
-      // Byte-swap for big-endian
-      const __m128i shuffle_mask =
-          _mm_set_epi8(12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3);
-      keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
-
-      // Flip sign bits for unsigned comparison
-      const __m128i sign_flip_128 = _mm_set1_epi32(0x80000000);
-      keys_vec = _mm_xor_si128(keys_vec, sign_flip_128);
-      __m128i search_vec_flipped = _mm_xor_si128(search_vec_128, sign_flip_128);
-
-      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_flipped, keys_vec);
-      int mask = _mm_movemask_epi8(cmp_lt);
-
-      if (mask != static_cast<int>(0xFFFF)) {
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
-        return keys_.begin() + i + offset;
-      }
-      i += 4;
-    }
-
-    // Handle remaining 0-3 arrays with scalar
-    while (i < size_ && keys_[i] < key) {
-      ++i;
-    }
-    return keys_.begin() + i;
-
-  } else if constexpr (std::is_same_v<K, float>) {
+  if constexpr (std::is_same_v<K, float>) {
     // Use floating-point comparison instructions
     __m256 search_vec_256 = _mm256_set1_ps(key);
 
@@ -860,87 +780,11 @@ template <typename K>
   requires(sizeof(K) == 8)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_8byte(const K& key) const {
-  static_assert(SimdPrimitive<K> || SimdByteArray<K>,
+  static_assert(SimdPrimitive<K>,
                 "8-byte SIMD search requires primitive type (int64_t, "
-                "uint64_t, long, unsigned long, double) or byte array");
+                "uint64_t, long, unsigned long, double)");
 
-  // Byte array types use lexicographic byte comparison
-  if constexpr (SimdByteArray<K>) {
-    // For byte arrays, use byte-swap to convert to big-endian for lexicographic
-    // comparison
-    uint64_t key_be;
-    std::memcpy(&key_be, &key, sizeof(K));
-    key_be = __builtin_bswap64(key_be);  // Convert to big-endian
-
-    __m256i search_vec_256 = _mm256_set1_epi64x(key_be);
-
-    // Sign flip constant for unsigned comparison
-    const __m256i sign_flip = _mm256_set1_epi64x(0x8000000000000000ULL);
-
-    size_type i = 0;
-    // Process 4 byte arrays at a time with AVX2
-    for (; i + 4 <= size_; i += 4) {
-      // Load 4 arrays (32 bytes total)
-      __m256i keys_vec =
-          _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
-
-      // Byte-swap each 8-byte array to big-endian for lexicographic comparison
-      // Shuffle bytes within each 64-bit value
-      const __m256i shuffle_mask =
-          _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7,
-                          8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
-      keys_vec = _mm256_shuffle_epi8(keys_vec, shuffle_mask);
-
-      // Flip sign bits for unsigned comparison
-      keys_vec = _mm256_xor_si256(keys_vec, sign_flip);
-      __m256i search_vec_flipped = _mm256_xor_si256(search_vec_256, sign_flip);
-
-      // Compare as unsigned integers (via sign flip)
-      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_flipped, keys_vec);
-
-      int mask = _mm256_movemask_epi8(cmp_lt);
-
-      // Check if all comparisons are true (all keys < search_key)
-      if (mask != static_cast<int>(0xFFFFFFFF)) {
-        // Each 8-byte element contributes 8 bits to the mask
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-        return keys_.begin() + i + offset;
-      }
-    }
-
-    // Process 2 byte arrays at a time with SSE
-    if (i + 2 <= size_) {
-      __m128i search_vec_128 = _mm_set1_epi64x(key_be);
-      __m128i keys_vec =
-          _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
-
-      // Byte-swap for big-endian
-      const __m128i shuffle_mask =
-          _mm_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
-      keys_vec = _mm_shuffle_epi8(keys_vec, shuffle_mask);
-
-      // Flip sign bits for unsigned comparison
-      const __m128i sign_flip_128 = _mm_set1_epi64x(0x8000000000000000ULL);
-      keys_vec = _mm_xor_si128(keys_vec, sign_flip_128);
-      __m128i search_vec_flipped = _mm_xor_si128(search_vec_128, sign_flip_128);
-
-      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_flipped, keys_vec);
-      int mask = _mm_movemask_epi8(cmp_lt);
-
-      if (mask != static_cast<int>(0xFFFF)) {
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-        return keys_.begin() + i + offset;
-      }
-      i += 2;
-    }
-
-    // Handle remaining 0-1 arrays with scalar
-    while (i < size_ && keys_[i] < key) {
-      ++i;
-    }
-    return keys_.begin() + i;
-
-  } else if constexpr (std::is_same_v<K, double>) {
+  if constexpr (std::is_same_v<K, double>) {
     // Use floating-point comparison instructions
     __m256d search_vec_256 = _mm256_set1_pd(key);
 
@@ -1066,96 +910,13 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_16byte(const K& key) const {
-  // Byte arrays use SIMD chunked comparison for best performance
-  if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic
-    // ordering)
-    uint64_t search_chunks[2];
-    std::memcpy(search_chunks, &key, sizeof(K));
-    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
-    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
-
-    __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
-    __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
-
-    // Sign flip constant for unsigned comparison
-    // AVX2 only has signed comparison, so we XOR with 0x8000... to convert
-    // unsigned comparison to signed comparison
-    const __m256i sign_flip = _mm256_set1_epi64x(0x8000000000000000ULL);
-
-    const __m256i shuffle_mask =
-        _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8,
-                        9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
-
-    size_type i = 0;
-    // Process 4 keys at a time with SIMD chunk comparison (4 × 16 = 64 bytes)
-    for (; i + 4 <= size_; i += 4) {
-      // Load 4 keys: keys01 = [k0.c0|k0.c1|k1.c0|k1.c1]
-      //              keys23 = [k2.c0|k2.c1|k3.c0|k3.c1]
-      __m256i keys01 =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
-      __m256i keys23 =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i + 2]));
-
-      // Byte-swap to big-endian
-      keys01 = _mm256_shuffle_epi8(keys01, shuffle_mask);
-      keys23 = _mm256_shuffle_epi8(keys23, shuffle_mask);
-
-      // Separate interleaved chunks:
-      // unpacklo: [k0.c0|k2.c0|k1.c0|k3.c0]
-      // unpackhi: [k0.c1|k2.c1|k1.c1|k3.c1]
-      __m256i temp_c0 = _mm256_unpacklo_epi64(keys01, keys23);
-      __m256i temp_c1 = _mm256_unpackhi_epi64(keys01, keys23);
-
-      // Permute to get correct order:
-      // 0xD8 = 11011000 binary = select [0,2,1,3] = [k0,k1,k2,k3]
-      __m256i keys_chunk0 = _mm256_permute4x64_epi64(temp_c0, 0xD8);
-      __m256i keys_chunk1 = _mm256_permute4x64_epi64(temp_c1, 0xD8);
-
-      // Flip sign bits for unsigned comparison
-      keys_chunk0 = _mm256_xor_si256(keys_chunk0, sign_flip);
-      keys_chunk1 = _mm256_xor_si256(keys_chunk1, sign_flip);
-      __m256i search_vec0_flipped = _mm256_xor_si256(search_vec0, sign_flip);
-      __m256i search_vec1_flipped = _mm256_xor_si256(search_vec1, sign_flip);
-
-      // Compare first chunks (unsigned via sign flip)
-      __m256i cmp_eq0 = _mm256_cmpeq_epi64(keys_chunk0, search_vec0_flipped);
-      __m256i cmp_lt0 = _mm256_cmpgt_epi64(search_vec0_flipped, keys_chunk0);
-
-      // Compare second chunks (unsigned via sign flip)
-      __m256i cmp_eq1 = _mm256_cmpeq_epi64(keys_chunk1, search_vec1_flipped);
-      __m256i cmp_lt1 = _mm256_cmpgt_epi64(search_vec1_flipped, keys_chunk1);
-
-      // Hierarchical: key < search if (chunk0 < search0) OR
-      //                               (chunk0 == search0 AND chunk1 < search1)
-      __m256i lt_combined =
-          _mm256_or_si256(cmp_lt0, _mm256_and_si256(cmp_eq0, cmp_lt1));
-
-      int mask = _mm256_movemask_epi8(lt_combined);
-
-      if (mask != static_cast<int>(0xFFFFFFFF)) {
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-        return keys_.begin() + i + offset;
-      }
-    }
-
-    // Handle remaining 0-3 keys with scalar comparison
-    while (i < size_ && keys_[i] < key) {
-      ++i;
-    }
-
-    return keys_.begin() + i;
-
-  } else {
-    // For non-byte-array types, fall back to scalar comparison to respect
-    // the key's operator< semantics. Byte-level SIMD comparison doesn't work
-    // correctly for structured types like std::array<int64_t, 2>.
-    size_type i = 0;
-    while (i < size_ && keys_[i] < key) {
-      ++i;
-    }
-    return keys_.begin() + i;
+  // Fall back to scalar comparison
+  // 16-byte keys don't have SIMD primitive types, use operator< instead
+  size_type i = 0;
+  while (i < size_ && keys_[i] < key) {
+    ++i;
   }
+  return keys_.begin() + i;
 }
 
 /**
@@ -1169,61 +930,13 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_32byte(const K& key) const {
-  // Byte arrays use scalar chunked comparison with hierarchical early
-  // termination
-  if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic
-    // ordering)
-    uint64_t search_chunks[4];
-    std::memcpy(search_chunks, &key, sizeof(K));
-    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
-    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
-    search_chunks[2] = __builtin_bswap64(search_chunks[2]);
-    search_chunks[3] = __builtin_bswap64(search_chunks[3]);
-
-    size_type i = 0;
-    // Process keys one at a time with hierarchical chunk comparison
-    for (; i < size_; ++i) {
-      // Load one 32-byte key = [c0|c1|c2|c3]
-      uint64_t key_chunks[4];
-      std::memcpy(key_chunks, &keys_[i], sizeof(K));
-
-      // Byte-swap to big-endian
-      key_chunks[0] = __builtin_bswap64(key_chunks[0]);
-      key_chunks[1] = __builtin_bswap64(key_chunks[1]);
-      key_chunks[2] = __builtin_bswap64(key_chunks[2]);
-      key_chunks[3] = __builtin_bswap64(key_chunks[3]);
-
-      // Hierarchical comparison with early termination
-      if (key_chunks[0] > search_chunks[0]) {
-        return keys_.begin() + i;
-      } else if (key_chunks[0] == search_chunks[0]) {
-        if (key_chunks[1] > search_chunks[1]) {
-          return keys_.begin() + i;
-        } else if (key_chunks[1] == search_chunks[1]) {
-          if (key_chunks[2] > search_chunks[2]) {
-            return keys_.begin() + i;
-          } else if (key_chunks[2] == search_chunks[2]) {
-            if (key_chunks[3] >= search_chunks[3]) {
-              return keys_.begin() + i;
-            }
-          }
-        }
-      }
-    }
-
-    return keys_.begin() + i;
-
-  } else {
-    // For non-byte-array types, fall back to scalar comparison to respect
-    // the key's operator< semantics. Byte-level SIMD comparison doesn't work
-    // correctly for structured types like std::array<int64_t, 4>.
-    size_type i = 0;
-    while (i < size_ && keys_[i] < key) {
-      ++i;
-    }
-    return keys_.begin() + i;
+  // Fall back to scalar comparison
+  // 32-byte keys don't have SIMD primitive types, use operator< instead
+  size_type i = 0;
+  while (i < size_ && keys_[i] < key) {
+    ++i;
   }
+  return keys_.begin() + i;
 }
 #endif
 
