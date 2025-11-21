@@ -25,7 +25,7 @@ struct TimingStats {
   }
 };
 
-template <typename T, bool convert_keys>
+template <typename T>
 TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
                           size_t tree_size, size_t batches, size_t batch_size) {
   std::mt19937 rng(seed);
@@ -37,13 +37,7 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
 
   auto insert = [&]() -> void {
     typename T::key_type key;
-    if constexpr (convert_keys) {
-      constexpr size_t keysize = sizeof(typename T::key_type);
-      for (size_t i = 0; i < keysize; i += 8) {
-        auto t = fast_containers::encode_int64(dist(rng));
-        memcpy(&key[i], &t, sizeof(t));
-      }
-    } else if constexpr (std::is_same_v<typename T::key_type, int64_t>) {
+    if constexpr (std::is_same_v<typename T::key_type, int64_t>) {
       key = dist(rng);
     } else {
       for (int i = 0; i < key.size(); ++i) {
@@ -121,13 +115,8 @@ int main(int argc, char** argv) {
   std::unordered_map<std::string, TimingStats> results;
 
   auto benchmarker = [&](auto tree) -> TimingStats {
-    return run_benchmark<decltype(tree), false>(tree, seed, target_iterations,
-                                                tree_size, batches, batch_size);
-  };
-
-  auto converting_benchmarker = [&](auto tree) -> TimingStats {
-    return run_benchmark<decltype(tree), true>(tree, seed, target_iterations,
-                                               tree_size, batches, batch_size);
+    return run_benchmark(tree, seed, target_iterations, tree_size, batches,
+                         batch_size);
   };
 
   std::map<std::string, LambdaType> benchmarkers{
@@ -171,13 +160,6 @@ int main(int argc, char** argv) {
                                     std::array<std::byte, 256>, 16, 128,
                                     fast_containers::SearchMode::Linear>{});
        }},
-      {"btree_16_256_16_128_simd_simd",
-       [&]() -> TimingStats {
-         return converting_benchmarker(
-             fast_containers::btree<std::array<std::byte, 16>,
-                                    std::array<std::byte, 256>, 16, 128,
-                                    fast_containers::SearchMode::SIMD>{});
-       }},
       {"btree_16_256_16_128_binary_simd",
        [&]() -> TimingStats {
          return benchmarker(
@@ -197,13 +179,6 @@ int main(int argc, char** argv) {
              fast_containers::btree<std::array<int64_t, 4>,
                                     std::array<std::byte, 256>, 16, 128,
                                     fast_containers::SearchMode::Linear>{});
-       }},
-      {"btree_32_256_16_128_simd_simd",
-       [&]() -> TimingStats {
-         return converting_benchmarker(
-             fast_containers::btree<std::array<std::byte, 32>,
-                                    std::array<std::byte, 256>, 16, 128,
-                                    fast_containers::SearchMode::SIMD>{});
        }},
       {"btree_32_256_16_128_binary_simd",
        [&]() -> TimingStats {
@@ -226,13 +201,6 @@ int main(int argc, char** argv) {
                                     std::array<std::byte, 32>, 16, 128,
                                     fast_containers::SearchMode::Linear>{});
        }},
-      {"btree_16_32_16_128_simd_simd",
-       [&]() -> TimingStats {
-         return converting_benchmarker(
-             fast_containers::btree<std::array<std::byte, 16>,
-                                    std::array<std::byte, 32>, 16, 128,
-                                    fast_containers::SearchMode::SIMD>{});
-       }},
       {"btree_16_32_16_128_binary_simd",
        [&]() -> TimingStats {
          return benchmarker(
@@ -252,13 +220,6 @@ int main(int argc, char** argv) {
                                     std::array<std::byte, 32>, 16, 128,
                                     fast_containers::SearchMode::Linear>{});
        }},
-      {"btree_32_32_16_128_simd_simd",
-       [&]() -> TimingStats {
-         return converting_benchmarker(
-             fast_containers::btree<std::array<std::byte, 32>,
-                                    std::array<std::byte, 32>, 16, 128,
-                                    fast_containers::SearchMode::SIMD>{});
-       }},
       {"btree_32_32_16_128_binary_simd",
        [&]() -> TimingStats {
          return benchmarker(
@@ -271,6 +232,13 @@ int main(int argc, char** argv) {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
                                             std::array<std::byte, 32>>{});
        }},
+  };
+
+  auto print_valid_benchmarks = [&]() {
+    std::cout << "Valid benchmark names:" << std::endl;
+    for (const auto& name : benchmarkers) {
+      std::cout << "  " << name.first << std::endl;
+    }
   };
 
   // Define command line interface
@@ -297,12 +265,14 @@ int main(int argc, char** argv) {
   // Show help if requested
   if (show_help) {
     std::cout << cli << std::endl;
+    print_valid_benchmarks();
     return 0;
   }
 
   for (const auto& name : names) {
     if (!benchmarkers.count(name)) {
       std::cerr << "Unknown benchmark: " << name << std::endl;
+      print_valid_benchmarks();
       exit(1);
     }
   }
