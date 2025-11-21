@@ -499,8 +499,17 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         return iterator(result_leaf, leaf_it);
       }
 
-      // Not in result_leaf - fall back to tree-wide search
-      // This can happen if next_key ended up in a different leaf during rebalancing
+      // Check result_leaf->next_leaf (next_key may have moved there during merge)
+      if (result_leaf->next_leaf != nullptr) {
+        leaf_it = result_leaf->next_leaf->data.find(*next_key);
+        if (leaf_it != result_leaf->next_leaf->data.end()) {
+          return iterator(result_leaf->next_leaf, leaf_it);
+        }
+      }
+
+      // Should never reach here - next_key must be in result_leaf or its next
+      // But keep as safety fallback in case of unexpected edge cases
+      assert(false && "next_key not found in expected leaves after underflow");
       return find(*next_key);
     }
     return end();
