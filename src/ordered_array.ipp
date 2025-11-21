@@ -928,45 +928,91 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_16byte(const K& key) const {
-  // Use AVX2 byte-level lexicographic comparison for 16-byte arrays
-  // Keys from encode_int64_pair() are already in big-endian byte order
+  // Treat 16-byte array as 2×uint64_t chunks for parallel SIMD comparison
+  // Keys are in big-endian format - load, byte-swap, and compare as uint64_t
+  // Process 4 keys at a time using AVX2 (similar to int64_t SIMD)
 
-  // Load search key once (128-bit SSE)
-  __m128i search_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&key));
+  // Extract and prepare search key chunks
+  uint64_t search_c0, search_c1;
+  std::memcpy(&search_c0, &key, 8);
+  std::memcpy(&search_c1, reinterpret_cast<const char*>(&key) + 8, 8);
 
-  // For unsigned byte comparison, flip sign bit to convert to signed comparison
-  const __m128i sign_flip = _mm_set1_epi8(static_cast<char>(0x80));
-  __m128i search_signed = _mm_xor_si128(search_vec, sign_flip);
+  // Byte-swap from big-endian to native, flip sign bit for unsigned comparison
+  search_c0 = __builtin_bswap64(search_c0) ^ 0x8000000000000000ULL;
+  search_c1 = __builtin_bswap64(search_c1) ^ 0x8000000000000000ULL;
+
+  // Broadcast search chunks across AVX2 lanes
+  __m256i search_c0_vec =
+      _mm256_set1_epi64x(static_cast<int64_t>(search_c0));
+  __m256i search_c1_vec =
+      _mm256_set1_epi64x(static_cast<int64_t>(search_c1));
 
   size_type i = 0;
-  for (; i < size_; ++i) {
-    // Load candidate key
-    __m128i key_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
 
-    // Convert to signed comparison space for unsigned byte comparison
-    __m128i key_signed = _mm_xor_si128(key_vec, sign_flip);
+  // Process 4 keys at a time with AVX2
+  for (; i + 4 <= size_; i += 4) {
+    // Load chunk 0 (bytes 0-7) from 4 keys
+    uint64_t k0_c0, k1_c0, k2_c0, k3_c0;
+    std::memcpy(&k0_c0, &keys_[i], 8);
+    std::memcpy(&k1_c0, &keys_[i + 1], 8);
+    std::memcpy(&k2_c0, &keys_[i + 2], 8);
+    std::memcpy(&k3_c0, &keys_[i + 3], 8);
 
-    // Compare all 16 bytes for equality and greater-than (unsigned)
-    __m128i eq_mask = _mm_cmpeq_epi8(key_vec, search_vec);
-    __m128i gt_mask = _mm_cmpgt_epi8(key_signed, search_signed);
+    // Byte-swap and flip sign bit
+    k0_c0 = __builtin_bswap64(k0_c0) ^ 0x8000000000000000ULL;
+    k1_c0 = __builtin_bswap64(k1_c0) ^ 0x8000000000000000ULL;
+    k2_c0 = __builtin_bswap64(k2_c0) ^ 0x8000000000000000ULL;
+    k3_c0 = __builtin_bswap64(k3_c0) ^ 0x8000000000000000ULL;
 
-    // Convert masks to bitmasks for analysis
-    uint32_t eq_bits = _mm_movemask_epi8(eq_mask);
-    uint32_t gt_bits = _mm_movemask_epi8(gt_mask);
+    __m256i chunk0_vec = _mm256_set_epi64x(static_cast<int64_t>(k3_c0),
+                                           static_cast<int64_t>(k2_c0),
+                                           static_cast<int64_t>(k1_c0),
+                                           static_cast<int64_t>(k0_c0));
 
-    // If all bytes equal (eq_bits == 0xFFFF), keys are equal
-    if (eq_bits == 0xFFFF) {
-      return keys_.begin() + i;  // Found exact match
+    // Load chunk 1 (bytes 8-15) from 4 keys
+    uint64_t k0_c1, k1_c1, k2_c1, k3_c1;
+    std::memcpy(&k0_c1, reinterpret_cast<const char*>(&keys_[i]) + 8, 8);
+    std::memcpy(&k1_c1, reinterpret_cast<const char*>(&keys_[i + 1]) + 8, 8);
+    std::memcpy(&k2_c1, reinterpret_cast<const char*>(&keys_[i + 2]) + 8, 8);
+    std::memcpy(&k3_c1, reinterpret_cast<const char*>(&keys_[i + 3]) + 8, 8);
+
+    k0_c1 = __builtin_bswap64(k0_c1) ^ 0x8000000000000000ULL;
+    k1_c1 = __builtin_bswap64(k1_c1) ^ 0x8000000000000000ULL;
+    k2_c1 = __builtin_bswap64(k2_c1) ^ 0x8000000000000000ULL;
+    k3_c1 = __builtin_bswap64(k3_c1) ^ 0x8000000000000000ULL;
+
+    __m256i chunk1_vec = _mm256_set_epi64x(static_cast<int64_t>(k3_c1),
+                                           static_cast<int64_t>(k2_c1),
+                                           static_cast<int64_t>(k1_c1),
+                                           static_cast<int64_t>(k0_c1));
+
+    // Hierarchical comparison: key < search if (c0 < s0) OR (c0 == s0 AND c1 <
+    // s1) Compare chunk 0: search_c0 > chunk0 (i.e., chunk0 < search_c0)
+    __m256i c0_lt = _mm256_cmpgt_epi64(search_c0_vec, chunk0_vec);
+
+    // Compare chunk 0 for equality
+    __m256i c0_eq = _mm256_cmpeq_epi64(chunk0_vec, search_c0_vec);
+
+    // Compare chunk 1: search_c1 > chunk1 (i.e., chunk1 < search_c1)
+    __m256i c1_lt = _mm256_cmpgt_epi64(search_c1_vec, chunk1_vec);
+
+    // Combine: key < search if (c0 < s0) OR (c0 == s0 AND c1 < s1)
+    __m256i result_lt =
+        _mm256_or_si256(c0_lt, _mm256_and_si256(c0_eq, c1_lt));
+
+    // Get bitmask - each 64-bit element contributes 8 bits
+    int mask = _mm256_movemask_epi8(result_lt);
+
+    // If not all keys are < search, we found the first key >= search
+    if (mask != static_cast<int>(0xFFFFFFFF)) {
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
+      return keys_.begin() + i + offset;
     }
+  }
 
-    // Find first differing byte (lowest set bit in ~eq_bits)
-    uint32_t diff_mask = ~eq_bits & 0xFFFF;
-    uint32_t first_diff = __builtin_ctz(diff_mask);
-
-    // Check if key_vec > search_vec at first differing byte
-    if ((gt_bits >> first_diff) & 1) {
-      return keys_.begin() + i;  // key_vec >= search_vec
-    }
+  // Scalar fallback for remaining 0-3 keys
+  while (i < size_ && keys_[i] < key) {
+    ++i;
   }
 
   return keys_.begin() + i;
@@ -979,11 +1025,13 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_32byte(const K& key) const {
-  // Use AVX2 byte-level lexicographic comparison for 32-byte arrays
-  // Keys from encode_int64_quad() are already in big-endian byte order
+  // Use byte-level lexicographic comparison for 32-byte arrays
+  // Keys are in big-endian format - compare bytes directly
+  // Process 1 key at a time (chunked approach was slower due to overhead)
 
   // Load search key once (256-bit AVX2)
-  __m256i search_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
+  __m256i search_vec =
+      _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
 
   // For unsigned byte comparison, flip sign bit to convert to signed comparison
   const __m256i sign_flip = _mm256_set1_epi8(static_cast<char>(0x80));
@@ -992,7 +1040,8 @@ auto ordered_array<Key, Value, Length, SearchModeT,
   size_type i = 0;
   for (; i < size_; ++i) {
     // Load candidate key
-    __m256i key_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+    __m256i key_vec =
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
     // Convert to signed comparison space for unsigned byte comparison
     __m256i key_signed = _mm256_xor_si256(key_vec, sign_flip);
@@ -1005,12 +1054,12 @@ auto ordered_array<Key, Value, Length, SearchModeT,
     uint32_t eq_bits = _mm256_movemask_epi8(eq_mask);
     uint32_t gt_bits = _mm256_movemask_epi8(gt_mask);
 
-    // If all bytes equal (eq_bits == 0xFFFFFFFF), keys are equal
+    // If all bytes equal, keys are equal
     if (eq_bits == 0xFFFFFFFF) {
       return keys_.begin() + i;  // Found exact match
     }
 
-    // Find first differing byte (lowest set bit in ~eq_bits)
+    // Find first differing byte
     uint32_t diff_mask = ~eq_bits;
     uint32_t first_diff = __builtin_ctz(diff_mask);
 
