@@ -1066,80 +1066,72 @@ template <typename K>
   requires(sizeof(K) == 16)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_16byte(const K& key) const {
-  // Byte arrays use SIMD chunked comparison for best performance
+  // Byte arrays use byte-level SIMD comparison
+  // Keys from encode_int64() are already in big-endian format, so we can
+  // compare them directly as bytes without byte-swapping
   if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic
-    // ordering)
-    uint64_t search_chunks[2];
-    std::memcpy(search_chunks, &key, sizeof(K));
-    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
-    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
-
-    __m256i search_vec0 = _mm256_set1_epi64x(search_chunks[0]);
-    __m256i search_vec1 = _mm256_set1_epi64x(search_chunks[1]);
-
-    // Sign flip constant for unsigned comparison
-    // AVX2 only has signed comparison, so we XOR with 0x8000... to convert
-    // unsigned comparison to signed comparison
-    const __m256i sign_flip = _mm256_set1_epi64x(0x8000000000000000ULL);
-
-    const __m256i shuffle_mask =
-        _mm256_set_epi8(8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8,
-                        9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
+    // Broadcast search key to 256-bit register (holds 2 copies of 16-byte key)
+    __m256i search_vec =
+        _mm256_broadcastsi128_si256(*reinterpret_cast<const __m128i*>(&key));
 
     size_type i = 0;
-    // Process 4 keys at a time with SIMD chunk comparison (4 × 16 = 64 bytes)
-    for (; i + 4 <= size_; i += 4) {
-      // Load 4 keys: keys01 = [k0.c0|k0.c1|k1.c0|k1.c1]
-      //              keys23 = [k2.c0|k2.c1|k3.c0|k3.c1]
-      __m256i keys01 =
+    // Process 2 keys at a time with byte-level comparison (2 × 16 = 32 bytes)
+    for (; i + 2 <= size_; i += 2) {
+      // Load 2 consecutive 16-byte keys into one 256-bit register
+      __m256i keys_vec =
           _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
-      __m256i keys23 =
-          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i + 2]));
 
-      // Byte-swap to big-endian
-      keys01 = _mm256_shuffle_epi8(keys01, shuffle_mask);
-      keys23 = _mm256_shuffle_epi8(keys23, shuffle_mask);
+      // Byte-level comparison: find bytes that are equal or less than search
+      __m256i cmp_eq = _mm256_cmpeq_epi8(keys_vec, search_vec);
+      __m256i cmp_lt = _mm256_cmpgt_epi8(search_vec, keys_vec);
 
-      // Separate interleaved chunks:
-      // unpacklo: [k0.c0|k2.c0|k1.c0|k3.c0]
-      // unpackhi: [k0.c1|k2.c1|k1.c1|k3.c1]
-      __m256i temp_c0 = _mm256_unpacklo_epi64(keys01, keys23);
-      __m256i temp_c1 = _mm256_unpackhi_epi64(keys01, keys23);
+      // Get mask: 0xFF for bytes where key[i] < search[i], 0x00 otherwise
+      int mask_lt = _mm256_movemask_epi8(cmp_lt);
+      int mask_eq = _mm256_movemask_epi8(cmp_eq);
 
-      // Permute to get correct order:
-      // 0xD8 = 11011000 binary = select [0,2,1,3] = [k0,k1,k2,k3]
-      __m256i keys_chunk0 = _mm256_permute4x64_epi64(temp_c0, 0xD8);
-      __m256i keys_chunk1 = _mm256_permute4x64_epi64(temp_c1, 0xD8);
+      // For each 16-byte key, check if all bytes are < search (means key <
+      // search) We need to find the first key where NOT (key < search), i.e.,
+      // key >= search
+      //
+      // A key is < search if there exists a byte position where:
+      //   - All previous bytes are equal AND this byte is less than search byte
+      //
+      // To detect this, we use the mask pattern:
+      //   - Find first differing byte (where eq bit is 0)
+      //   - Check if that byte is less than (lt bit is 1)
 
-      // Flip sign bits for unsigned comparison
-      keys_chunk0 = _mm256_xor_si256(keys_chunk0, sign_flip);
-      keys_chunk1 = _mm256_xor_si256(keys_chunk1, sign_flip);
-      __m256i search_vec0_flipped = _mm256_xor_si256(search_vec0, sign_flip);
-      __m256i search_vec1_flipped = _mm256_xor_si256(search_vec1, sign_flip);
+      // Process first key (bytes 0-15)
+      // Find first differing byte by inverting eq mask and finding trailing
+      // zeros
+      unsigned int mask_ne_low = (~mask_eq) & 0xFFFF;  // First 16 bytes
+      if (mask_ne_low != 0) {
+        // There's a differing byte in first key
+        int first_diff = __builtin_ctz(mask_ne_low);
+        // Check if that byte is less than search byte
+        if ((mask_lt & (1 << first_diff)) == 0) {
+          // First differing byte is >= search byte, so key >= search
+          return keys_.begin() + i;
+        }
+        // Else first key < search, check second key
+      } else {
+        // All bytes equal in first key, so key == search
+        return keys_.begin() + i;
+      }
 
-      // Compare first chunks (unsigned via sign flip)
-      __m256i cmp_eq0 = _mm256_cmpeq_epi64(keys_chunk0, search_vec0_flipped);
-      __m256i cmp_lt0 = _mm256_cmpgt_epi64(search_vec0_flipped, keys_chunk0);
-
-      // Compare second chunks (unsigned via sign flip)
-      __m256i cmp_eq1 = _mm256_cmpeq_epi64(keys_chunk1, search_vec1_flipped);
-      __m256i cmp_lt1 = _mm256_cmpgt_epi64(search_vec1_flipped, keys_chunk1);
-
-      // Hierarchical: key < search if (chunk0 < search0) OR
-      //                               (chunk0 == search0 AND chunk1 < search1)
-      __m256i lt_combined =
-          _mm256_or_si256(cmp_lt0, _mm256_and_si256(cmp_eq0, cmp_lt1));
-
-      int mask = _mm256_movemask_epi8(lt_combined);
-
-      if (mask != static_cast<int>(0xFFFFFFFF)) {
-        size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
-        return keys_.begin() + i + offset;
+      // Process second key (bytes 16-31)
+      unsigned int mask_ne_high = (~mask_eq) >> 16;  // Second 16 bytes
+      if (mask_ne_high != 0) {
+        int first_diff = __builtin_ctz(mask_ne_high);
+        if ((mask_lt & (1 << (first_diff + 16))) == 0) {
+          return keys_.begin() + i + 1;
+        }
+      } else {
+        // All bytes equal in second key
+        return keys_.begin() + i + 1;
       }
     }
 
-    // Handle remaining 0-3 keys with scalar comparison
+    // Handle remaining 0-1 keys with scalar comparison
     while (i < size_ && keys_[i] < key) {
       ++i;
     }
@@ -1169,46 +1161,42 @@ template <typename K>
   requires(sizeof(K) == 32)
 auto ordered_array<Key, Value, Length, SearchModeT,
                    MoveModeT>::simd_lower_bound_32byte(const K& key) const {
-  // Byte arrays use scalar chunked comparison with hierarchical early
-  // termination
+  // Byte arrays use byte-level SIMD comparison
+  // Keys from encode_int64() are already in big-endian format, so we can
+  // compare them directly as bytes without byte-swapping
   if constexpr (SimdByteArray<K>) {
-    // Prepare search chunks (byte-swap to big-endian for lexicographic
-    // ordering)
-    uint64_t search_chunks[4];
-    std::memcpy(search_chunks, &key, sizeof(K));
-    search_chunks[0] = __builtin_bswap64(search_chunks[0]);
-    search_chunks[1] = __builtin_bswap64(search_chunks[1]);
-    search_chunks[2] = __builtin_bswap64(search_chunks[2]);
-    search_chunks[3] = __builtin_bswap64(search_chunks[3]);
+    // Load search key into 256-bit register
+    __m256i search_vec =
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
 
     size_type i = 0;
-    // Process keys one at a time with hierarchical chunk comparison
+    // Process 1 key at a time with byte-level comparison (32 bytes)
     for (; i < size_; ++i) {
-      // Load one 32-byte key = [c0|c1|c2|c3]
-      uint64_t key_chunks[4];
-      std::memcpy(key_chunks, &keys_[i], sizeof(K));
+      // Load one 32-byte key
+      __m256i key_vec =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
-      // Byte-swap to big-endian
-      key_chunks[0] = __builtin_bswap64(key_chunks[0]);
-      key_chunks[1] = __builtin_bswap64(key_chunks[1]);
-      key_chunks[2] = __builtin_bswap64(key_chunks[2]);
-      key_chunks[3] = __builtin_bswap64(key_chunks[3]);
+      // Byte-level comparison
+      __m256i cmp_eq = _mm256_cmpeq_epi8(key_vec, search_vec);
+      __m256i cmp_lt = _mm256_cmpgt_epi8(search_vec, key_vec);
 
-      // Hierarchical comparison with early termination
-      if (key_chunks[0] > search_chunks[0]) {
-        return keys_.begin() + i;
-      } else if (key_chunks[0] == search_chunks[0]) {
-        if (key_chunks[1] > search_chunks[1]) {
+      int mask_lt = _mm256_movemask_epi8(cmp_lt);
+      int mask_eq = _mm256_movemask_epi8(cmp_eq);
+
+      // Find first differing byte
+      unsigned int mask_ne = ~mask_eq;
+      if (mask_ne != 0) {
+        // There's a differing byte
+        int first_diff = __builtin_ctz(mask_ne);
+        // Check if that byte is >= search byte
+        if ((mask_lt & (1 << first_diff)) == 0) {
+          // First differing byte is >= search byte, so key >= search
           return keys_.begin() + i;
-        } else if (key_chunks[1] == search_chunks[1]) {
-          if (key_chunks[2] > search_chunks[2]) {
-            return keys_.begin() + i;
-          } else if (key_chunks[2] == search_chunks[2]) {
-            if (key_chunks[3] >= search_chunks[3]) {
-              return keys_.begin() + i;
-            }
-          }
         }
+        // Else key < search, continue to next key
+      } else {
+        // All bytes equal, key == search
+        return keys_.begin() + i;
       }
     }
 
