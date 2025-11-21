@@ -52,23 +52,11 @@ concept SimdPrimitive =
     (std::is_same_v<T, long> && sizeof(long) == 8) ||
     (std::is_same_v<T, unsigned long> && sizeof(unsigned long) == 8);
 
-// Concept for byte arrays suitable for lexicographic SIMD comparison
-template <typename T>
-concept SimdByteArray = std::is_same_v<T, std::array<std::byte, 4>> ||
-                        std::is_same_v<T, std::array<std::byte, 8>> ||
-                        std::is_same_v<T, std::array<std::byte, 16>> ||
-                        std::is_same_v<T, std::array<std::byte, 32>> ||
-                        std::is_same_v<T, std::array<unsigned char, 4>> ||
-                        std::is_same_v<T, std::array<unsigned char, 8>> ||
-                        std::is_same_v<T, std::array<unsigned char, 16>> ||
-                        std::is_same_v<T, std::array<unsigned char, 32>>;
-
 // Concept for types that can use SIMD-accelerated search
-// Supports primitive types and byte arrays suitable for lexicographic
-// comparison
+// Only supports primitive types with well-defined SIMD comparison semantics
 template <typename T>
-concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
-                         (SimdPrimitive<T> || SimdByteArray<T>);
+concept SIMDSearchable =
+    Comparable<T> && std::is_trivially_copyable_v<T> && SimdPrimitive<T>;
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
@@ -381,22 +369,6 @@ class ordered_array {
   template <typename K>
     requires(sizeof(K) == 8)
   auto simd_lower_bound_8byte(const K& key) const;
-
-  /**
-   * SIMD-accelerated linear search for 16-byte keys
-   * Compares 2 keys at a time using AVX2 with lexicographic byte comparison
-   */
-  template <typename K>
-    requires(sizeof(K) == 16)
-  auto simd_lower_bound_16byte(const K& key) const;
-
-  /**
-   * SIMD-accelerated linear search for 32-byte keys
-   * Compares 1 key at a time using AVX2 with lexicographic byte comparison
-   */
-  template <typename K>
-    requires(sizeof(K) == 32)
-  auto simd_lower_bound_32byte(const K& key) const;
 #endif
 
   /**

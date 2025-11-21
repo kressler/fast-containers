@@ -9,7 +9,6 @@
 #include <unordered_set>
 
 #include "../btree.hpp"
-#include "../simd_encoding.hpp"
 
 struct TimingStats {
   uint64_t insert_time{0};
