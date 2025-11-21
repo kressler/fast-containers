@@ -227,8 +227,10 @@ class ordered_array {
   /**
    * Updates the key at the given position without maintaining sorted order.
    * UNSAFE: Caller MUST guarantee that the new key maintains sorted order:
-   *   - new_key >= key at (position - 1), if it exists
-   *   - new_key <= key at (position + 1), if it exists
+   *   - key at (position - 1) < new_key, if it exists (strict inequality)
+   *   - new_key < key at (position + 1), if it exists (strict inequality)
+   *
+   * No duplicate keys are allowed (strict ordering enforced).
    *
    * This is an optimization to avoid array shifts when the caller knows
    * the new key will remain at the same position in sorted order.
@@ -243,15 +245,15 @@ class ordered_array {
 
     const size_type index = it.index();
 
-    // Debug assertions: verify sorted order is maintained
-    // If not first element: new_key >= previous key
-    assert(index == 0 || !(new_key < keys_[index - 1]) &&
-                             "New key violates sorted order (less than "
+    // Debug assertions: verify sorted order is maintained (no duplicates)
+    // If not first element: previous key < new_key (strict inequality)
+    assert(index == 0 || keys_[index - 1] < new_key &&
+                             "New key violates sorted order (not greater than "
                              "previous key)");
 
-    // If not last element: new_key <= next key
-    assert(index == size_ - 1 || !(keys_[index + 1] < new_key) &&
-                                     "New key violates sorted order (greater "
+    // If not last element: new_key < next key (strict inequality)
+    assert(index == size_ - 1 || new_key < keys_[index + 1] &&
+                                     "New key violates sorted order (not less "
                                      "than next key)");
 
     // Update key in place
