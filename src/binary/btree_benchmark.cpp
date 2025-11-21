@@ -213,6 +213,22 @@ int main(int argc, char** argv) {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 2>,
                                             std::array<std::byte, 32>>{});
        }},
+
+      {"btree_16_32_128_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 32>, 128, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_16_32_128_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 2>,
+                                    std::array<std::byte, 32>, 128, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+
       {"btree_32_32_16_128_linear_simd",
        [&]() -> TimingStats {
          return benchmarker(
@@ -231,6 +247,21 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
                                             std::array<std::byte, 32>>{});
+       }},
+
+      {"btree_32_32_128_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 32>, 128, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_32_32_128_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<std::array<int64_t, 4>,
+                                    std::array<std::byte, 32>, 128, 128,
+                                    fast_containers::SearchMode::Binary>{});
        }},
   };
 
