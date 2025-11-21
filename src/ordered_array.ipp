@@ -202,7 +202,33 @@ ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::insert_hint(
 }
 
 /**
+ * Erase an element by iterator.
+ * More efficient than key-based erase when you already have an iterator.
+ *
+ * @param pos Iterator to the element to erase
+ * @return Iterator to the element following the erased element
+ */
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+typename ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::iterator
+ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::erase(
+    iterator pos) {
+  assert(pos != end() && "Cannot erase end iterator");
+
+  size_type idx = pos.index();
+  // Shift elements to the left to fill the gap in both arrays
+  simd_move_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
+  simd_move_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
+  --size_;
+
+  // Return iterator to element following the erased element
+  // (same index, since everything shifted left)
+  return iterator(this, idx);
+}
+
+/**
  * Erase an element by key.
+ * Implemented as find() + iterator erase().
  * If the element does not exist, does nothing.
  *
  * @param key The key to erase
@@ -215,11 +241,7 @@ ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::erase(
     const Key& key) {
   auto it = find(key);
   if (it != end()) {
-    size_type idx = it.index();
-    // Shift elements to the left to fill the gap in both arrays
-    simd_move_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
-    simd_move_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
-    --size_;
+    erase(it);  // Call iterator-based erase
     return 1;
   }
   return 0;
