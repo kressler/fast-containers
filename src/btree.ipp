@@ -434,21 +434,55 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       MoveModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
-  // Get the next element before erasing
-  // We need to save the key because the iterator will be invalidated
+  // Extract leaf and leaf iterator from btree iterator
+  LeafNode* leaf = pos.leaf_node_;
+  auto leaf_it = *pos.leaf_it_;  // Dereference optional
+
+  // Save next key before erasing (needed for reconstruction after underflow)
   iterator next = pos;
   ++next;
-
   std::optional<Key> next_key;
   if (next != end()) {
     next_key = (*next).first;
   }
 
-  // Get the key to erase
-  const Key erase_key = (*pos).first;
+  // Erase from leaf using iterator (no search needed!)
+  leaf->data.erase(leaf_it);
+  size_--;
 
-  // Perform the erase operation
-  erase(erase_key);
+  // Update leftmost_leaf_ if we removed from it and it's now empty
+  if (leftmost_leaf_ == leaf && leaf->data.empty()) {
+    leftmost_leaf_ = leaf->next_leaf;
+  }
+
+  // Update rightmost_leaf_ if we removed from it and it's now empty
+  if (rightmost_leaf_ == leaf && leaf->data.empty()) {
+    rightmost_leaf_ = leaf->prev_leaf;
+  }
+
+  // Check if leaf underflowed (but root can have any size)
+  if (root_is_leaf_ && leaf == leaf_root_) {
+    // Root can have any size, no underflow handling needed
+    // Reconstruct iterator if next element exists
+    if (next_key.has_value()) {
+      return find(*next_key);
+    }
+    return end();
+  }
+
+  // Update parent key if minimum changed (do this BEFORE checking underflow)
+  if (!leaf->data.empty() && leaf->parent != nullptr) {
+    const Key& new_min = leaf->data.begin()->first;
+    update_parent_key_recursive(leaf, new_min);
+  }
+
+  // Handle underflow if necessary
+  const size_type underflow_threshold =
+      min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
+                                          : 0;
+  if (leaf->data.size() < underflow_threshold) {
+    handle_underflow(leaf);
+  }
 
   // Reconstruct iterator to next element
   // If the next element existed, find it; otherwise return end()

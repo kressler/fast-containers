@@ -216,7 +216,17 @@ class ordered_array {
   const_iterator upper_bound(const Key& key) const;
 
   /**
+   * Erase an element by iterator.
+   * More efficient than key-based erase when you already have an iterator.
+   *
+   * @param pos Iterator to the element to erase
+   * @return Iterator to the element following the erased element
+   */
+  iterator erase(iterator pos);
+
+  /**
    * Erase an element by key.
+   * Implemented as find() + iterator erase().
    * If the element does not exist, does nothing.
    *
    * @param key The key to erase
