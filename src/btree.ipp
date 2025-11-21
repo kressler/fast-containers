@@ -487,10 +487,20 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       min_leaf_size() > leaf_hysteresis() ? min_leaf_size() - leaf_hysteresis()
                                           : 0;
   if (leaf->data.size() < underflow_threshold) {
-    handle_underflow(leaf);
-    // After underflow handling, leaf may have been merged/rebalanced
-    // Must search for next element
+    // handle_underflow returns pointer to leaf where data ended up
+    LeafNode* result_leaf = handle_underflow(leaf);
+
+    // Search for next element
     if (next_key.has_value()) {
+      // Optimization: Search in result_leaf first (O(log m) where m ≈ 64-128)
+      // This is much faster than tree-wide search (O(log n))
+      auto leaf_it = result_leaf->data.find(*next_key);
+      if (leaf_it != result_leaf->data.end()) {
+        return iterator(result_leaf, leaf_it);
+      }
+
+      // Not in result_leaf - fall back to tree-wide search
+      // This can happen if next_key ended up in a different leaf during rebalancing
       return find(*next_key);
     }
     return end();
@@ -1044,13 +1054,13 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 template <typename NodeType>
-bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::borrow_from_left_sibling(NodeType* node) {
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::borrow_from_left_sibling(NodeType* node) {
   NodeType* left_sibling = find_left_sibling(node);
 
   // Can't borrow if no left sibling
   if (left_sibling == nullptr) {
-    return false;
+    return nullptr;
   }
 
   // Unified borrow implementation using templated lambda
@@ -1091,21 +1101,24 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Leaf node borrowing
     if (left_sibling->data.size() <= min_leaf_size()) {
-      return false;
+      return nullptr;
     }
-    return borrow_impl.template operator()<std::pair<Key, Value>, false>(
+    bool success = borrow_impl.template operator()<std::pair<Key, Value>, false>(
         node->data, left_sibling->data, min_leaf_size(), leaf_hysteresis());
+    return success ? node : nullptr;
   } else {
     // Internal node borrowing
+    bool success;
     if (node->children_are_leaves) {
-      return borrow_impl.template operator()<LeafNode*, true>(
+      success = borrow_impl.template operator()<LeafNode*, true>(
           node->leaf_children, left_sibling->leaf_children, min_internal_size(),
           internal_hysteresis());
     } else {
-      return borrow_impl.template operator()<InternalNode*, true>(
+      success = borrow_impl.template operator()<InternalNode*, true>(
           node->internal_children, left_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
+    return success ? node : nullptr;
   }
 }
 
@@ -1114,13 +1127,13 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 template <typename NodeType>
-bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::borrow_from_right_sibling(NodeType* node) {
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::borrow_from_right_sibling(NodeType* node) {
   NodeType* right_sibling = find_right_sibling(node);
 
   // Can't borrow if no right sibling
   if (right_sibling == nullptr) {
-    return false;
+    return nullptr;
   }
 
   // Unified borrow implementation using templated lambda
@@ -1163,21 +1176,24 @@ bool btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Leaf node borrowing
     if (right_sibling->data.size() <= min_leaf_size()) {
-      return false;
+      return nullptr;
     }
-    return borrow_impl.template operator()<std::pair<Key, Value>, false>(
+    bool success = borrow_impl.template operator()<std::pair<Key, Value>, false>(
         node->data, right_sibling->data, min_leaf_size(), leaf_hysteresis());
+    return success ? node : nullptr;
   } else {
     // Internal node borrowing
+    bool success;
     if (node->children_are_leaves) {
-      return borrow_impl.template operator()<LeafNode*, true>(
+      success = borrow_impl.template operator()<LeafNode*, true>(
           node->leaf_children, right_sibling->leaf_children,
           min_internal_size(), internal_hysteresis());
     } else {
-      return borrow_impl.template operator()<InternalNode*, true>(
+      success = borrow_impl.template operator()<InternalNode*, true>(
           node->internal_children, right_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
+    return success ? node : nullptr;
   }
 }
 
@@ -1186,8 +1202,8 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 template <typename NodeType>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_left_sibling(NodeType* node) {
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::merge_with_left_sibling(NodeType* node) {
   NodeType* left_sibling = find_left_sibling(node);
   assert(left_sibling != nullptr &&
          "merge_with_left_sibling requires left sibling");
@@ -1240,7 +1256,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         leaf_root_ = new_root;
         deallocate_internal_node(parent);
       }
-      return;
+      return left_sibling;
     }
 
     // Capture node's minimum key BEFORE transferring data
@@ -1353,6 +1369,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       deallocate_internal_node(parent);
     }
   }
+  return left_sibling;
 }
 
 // merge_with_right_sibling
@@ -1360,8 +1377,8 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 template <typename NodeType>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::merge_with_right_sibling(NodeType* node) {
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::merge_with_right_sibling(NodeType* node) {
   NodeType* right_sibling = find_right_sibling(node);
   assert(right_sibling != nullptr &&
          "merge_with_right_sibling requires right sibling");
@@ -1414,7 +1431,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         leaf_root_ = new_root;
         deallocate_internal_node(parent);
       }
-      return;
+      return right_sibling;
     }
 
     // Capture right sibling's minimum key BEFORE transferring data
@@ -1528,6 +1545,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
       deallocate_internal_node(parent);
     }
   }
+  return node;
 }
 
 // handle_underflow
@@ -1535,8 +1553,8 @@ template <Comparable Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, SearchMode SearchModeT,
           MoveMode MoveModeT>
 template <typename NodeType>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
-           MoveModeT>::handle_underflow(NodeType* node) {
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+                MoveModeT>::handle_underflow(NodeType* node) {
   // Compute node size and underflow threshold based on node type
   size_type node_size;
   size_type underflow_threshold;
@@ -1562,23 +1580,25 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   assert(node->parent != nullptr && "Root node cannot underflow");
 
   // Try to borrow from left sibling first
-  if (borrow_from_left_sibling(node)) {
-    return;
+  NodeType* result = borrow_from_left_sibling(node);
+  if (result != nullptr) {
+    return result;
   }
 
   // Try to borrow from right sibling
-  if (borrow_from_right_sibling(node)) {
-    return;
+  result = borrow_from_right_sibling(node);
+  if (result != nullptr) {
+    return result;
   }
 
   // Can't borrow - must merge
   // Prefer merging with left sibling if it exists
   NodeType* left_sibling = find_left_sibling(node);
   if (left_sibling != nullptr) {
-    merge_with_left_sibling(node);
+    return merge_with_left_sibling(node);
   } else {
     // No left sibling - merge with right
-    merge_with_right_sibling(node);
+    return merge_with_right_sibling(node);
   }
 }
 

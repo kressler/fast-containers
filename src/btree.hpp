@@ -599,42 +599,56 @@ class btree {
   /**
    * Handle underflow in a node after removal or merge.
    * Attempts to borrow from siblings or merge with them.
+   * Returns pointer to the node where the data ended up (may differ if merged).
    * Works for both LeafNode and InternalNode.
+   *
+   * @param node The node that underflowed
+   * @return Pointer to node containing the data after rebalancing
    */
   template <typename NodeType>
-  void handle_underflow(NodeType* node);
+  NodeType* handle_underflow(NodeType* node);
 
   /**
    * Try to borrow element(s) or child(ren) from the left sibling of a node.
    * Works for both LeafNode and InternalNode.
-   * Returns true if successful.
+   * Returns pointer to node if successful, nullptr if borrowing was not
+   * possible.
    */
   template <typename NodeType>
-  bool borrow_from_left_sibling(NodeType* node);
+  NodeType* borrow_from_left_sibling(NodeType* node);
 
   /**
    * Try to borrow element(s) or child(ren) from the right sibling of a node.
    * Works for both LeafNode and InternalNode.
-   * Returns true if successful.
+   * Returns pointer to node if successful, nullptr if borrowing was not
+   * possible.
    */
   template <typename NodeType>
-  bool borrow_from_right_sibling(NodeType* node);
+  NodeType* borrow_from_right_sibling(NodeType* node);
 
   /**
    * Merge a node with its left sibling.
    * The left sibling absorbs all elements/children from 'node'.
+   * Returns pointer to the left sibling (where data ended up).
    * Works for both LeafNode and InternalNode.
+   *
+   * @param node The node to merge (will be deleted)
+   * @return Pointer to left sibling containing the merged data
    */
   template <typename NodeType>
-  void merge_with_left_sibling(NodeType* node);
+  NodeType* merge_with_left_sibling(NodeType* node);
 
   /**
    * Merge a node with its right sibling.
    * 'node' absorbs all elements/children from its right sibling.
+   * Returns pointer to node (where data ended up).
    * Works for both LeafNode and InternalNode.
+   *
+   * @param node The node that absorbs right sibling's data
+   * @return Pointer to node containing the merged data
    */
   template <typename NodeType>
-  void merge_with_right_sibling(NodeType* node);
+  NodeType* merge_with_right_sibling(NodeType* node);
 
   /**
    * Template helper to find the left sibling of a node.
