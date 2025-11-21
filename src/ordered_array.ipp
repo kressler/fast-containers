@@ -898,46 +898,6 @@ auto ordered_array<Key, Value, Length, SearchModeT,
     return keys_.begin() + i;
   }
 }
-
-/**
- * SIMD-accelerated linear search for 16-byte keys
- * For byte arrays: Uses chunked 64-bit comparison (2x uint64_t chunks)
- * For other types: Falls back to scalar comparison
- */
-template <Comparable Key, typename Value, std::size_t Length,
-          SearchMode SearchModeT, MoveMode MoveModeT>
-template <typename K>
-  requires(sizeof(K) == 16)
-auto ordered_array<Key, Value, Length, SearchModeT,
-                   MoveModeT>::simd_lower_bound_16byte(const K& key) const {
-  // Fall back to scalar comparison
-  // 16-byte keys don't have SIMD primitive types, use operator< instead
-  size_type i = 0;
-  while (i < size_ && keys_[i] < key) {
-    ++i;
-  }
-  return keys_.begin() + i;
-}
-
-/**
- * SIMD-accelerated linear search for 32-byte keys
- * For byte arrays: Uses chunked 64-bit comparison (4x uint64_t chunks)
- * For other types: Falls back to scalar comparison
- */
-template <Comparable Key, typename Value, std::size_t Length,
-          SearchMode SearchModeT, MoveMode MoveModeT>
-template <typename K>
-  requires(sizeof(K) == 32)
-auto ordered_array<Key, Value, Length, SearchModeT,
-                   MoveModeT>::simd_lower_bound_32byte(const K& key) const {
-  // Fall back to scalar comparison
-  // 32-byte keys don't have SIMD primitive types, use operator< instead
-  size_type i = 0;
-  while (i < size_ && keys_[i] < key) {
-    ++i;
-  }
-  return keys_.begin() + i;
-}
 #endif
 
 // ============================================================================
@@ -1110,11 +1070,9 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::lower_bound_key(
         return simd_lower_bound_4byte(key);
       } else if constexpr (sizeof(Key) == 8) {
         return simd_lower_bound_8byte(key);
-      } else if constexpr (sizeof(Key) == 16) {
-        return simd_lower_bound_16byte(key);
-      } else if constexpr (sizeof(Key) == 32) {
-        return simd_lower_bound_32byte(key);
       }
+      // Note: SIMDSearchable only accepts primitive types (4 or 8 bytes)
+      // so we never reach here
     } else {
       // Fallback to regular linear search if type doesn't support SIMD
       auto it = keys_.begin();

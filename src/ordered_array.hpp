@@ -369,22 +369,6 @@ class ordered_array {
   template <typename K>
     requires(sizeof(K) == 8)
   auto simd_lower_bound_8byte(const K& key) const;
-
-  /**
-   * SIMD-accelerated linear search for 16-byte keys
-   * Compares 2 keys at a time using AVX2 with lexicographic byte comparison
-   */
-  template <typename K>
-    requires(sizeof(K) == 16)
-  auto simd_lower_bound_16byte(const K& key) const;
-
-  /**
-   * SIMD-accelerated linear search for 32-byte keys
-   * Compares 1 key at a time using AVX2 with lexicographic byte comparison
-   */
-  template <typename K>
-    requires(sizeof(K) == 32)
-  auto simd_lower_bound_32byte(const K& key) const;
 #endif
 
   /**
