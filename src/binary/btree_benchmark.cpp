@@ -5,6 +5,7 @@
 #include <iostream>
 #include <lyra/lyra.hpp>
 #include <map>
+#include <print>
 #include <random>
 #include <unordered_set>
 
@@ -315,11 +316,19 @@ int main(int argc, char** argv) {
     }
   }
 
+  std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", "BenName",
+               "Insert cycles", "Find cycles", "Erase cycles",
+               "Iterate cycles");
   for (const auto& name : names) {
     const auto& stats = results.at(name);
+#if 0
     std::cout << name << ": Insert: " << stats.insert_time
               << ", Find: " << stats.find_time
               << ", Erase: " << stats.erase_time
               << ", Iterate: " << stats.iterate_time << std::endl;
+#endif
+    std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", name,
+                 stats.insert_time, stats.find_time, stats.erase_time,
+                 stats.iterate_time);
   }
 }
