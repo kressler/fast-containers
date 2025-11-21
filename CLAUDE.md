@@ -142,6 +142,58 @@ while (num_bytes > 0) *dst++ = *src++;
 - Scans 8 int32 keys in parallel
 - Best on read-heavy, large arrays (>32 elements)
 
+## Byte Array SIMD: Why It Doesn't Work (PR #61 Investigation)
+
+**Context**: Attempted to re-add byte array SIMD support after PR #60's internal node traversal fix, hypothesizing that was the root cause of poor performance in PR #54/#55.
+
+### Approaches Tested
+
+| Approach | 16-byte Find | 32-byte Find | vs Binary |
+|----------|--------------|--------------|-----------|
+| Byte-level (1 key/iter) | 456B cycles | 467B cycles | 2.9-3.8× slower ❌ |
+| Parallel chunked (4 keys/iter, 2×uint64) | 56B cycles | - | 1.81× slower ❌ |
+| Parallel chunked (2 keys/iter, 4×uint64) | - | 93B cycles | 2.91× slower ❌ |
+| **Binary search** | **31B cycles** | **32B cycles** | **baseline** ✅ |
+
+**Micro-benchmark (misleading)**: Showed 36% improvement for 16-byte chunked vs Binary (114ms vs 177ms)
+
+**Real-world benchmark**: Showed 81-191% regression due to tree traversal, cache misses, realistic access patterns
+
+### Root Cause: Scalar Encoding Overhead
+
+**Per 4-key iteration (16-byte chunked approach):**
+```cpp
+// 8 chunks total (4 keys × 2 chunks each)
+8× std::memcpy()              // Extract chunks from byte arrays
+8× __builtin_bswap64()         // Big-endian → native endianness
+8× XOR with 0x8000000000000000 // Flip sign bit for unsigned comparison
+4× _mm256_set_epi64x()         // Build SIMD vectors
+// Finally: SIMD comparison
+```
+
+**Compare to native int64_t SIMD:**
+```cpp
+1× _mm256_load_si256(&keys[i]) // Aligned load
+1× _mm256_xor_si256()          // Optional: flip sign bit for unsigned
+// Done: ready to compare
+```
+
+**Impact**: 8 scalar operations per iteration completely negate parallelism benefits
+
+### Key Learnings
+
+- ✅ **Unsigned byte comparison**: XOR bytes with `0x80` before `_mm_cmpgt_epi8` to convert unsigned → signed comparison space
+- ✅ **-ffast-math incompatibility**: Breaks `std::isinf()` but not actual encoding/decoding
+- ❌ **Micro-benchmarks mislead**: Cache locality and simplified access patterns don't reflect real workloads
+- ❌ **Parallel SIMD can't overcome encoding overhead**: Even 4-keys-at-a-time loses to Binary search
+- ❌ **PR #60 wasn't the bottleneck**: Internal node traversal fix helped, but encoding cost is the real issue
+
+### Final Conclusion
+
+**Byte array SIMD is not viable.** The original decision in PR #54 → PR #55 to remove it was correct.
+
+**Recommendation**: Use `SearchMode::Binary` or `SearchMode::Linear` for encoded byte arrays. SIMD only benefits native primitive types (int32_t, uint32_t, int64_t, uint64_t, float, double) where no encoding overhead exists.
+
 ## btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchMode, MoveMode>
 
 ### Implementation Learnings (PR #35)
