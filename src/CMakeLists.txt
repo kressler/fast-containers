@@ -11,6 +11,10 @@ add_executable(test_btree tests/test_btree.cpp)
 target_link_libraries(test_btree PRIVATE Catch2::Catch2WithMain)
 add_test(NAME test_btree COMMAND test_btree)
 
+add_executable(test_simd_encoding tests/test_simd_encoding.cpp)
+target_link_libraries(test_simd_encoding PRIVATE Catch2::Catch2WithMain)
+add_test(NAME test_simd_encoding COMMAND test_simd_encoding)
+
 # Benchmarks
 add_executable(sample_benchmark benchmarks/sample_benchmark.cpp)
 target_link_libraries(sample_benchmark PRIVATE benchmark::benchmark)
