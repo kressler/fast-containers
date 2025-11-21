@@ -52,11 +52,27 @@ concept SimdPrimitive =
     (std::is_same_v<T, long> && sizeof(long) == 8) ||
     (std::is_same_v<T, unsigned long> && sizeof(unsigned long) == 8);
 
-// Concept for types that can use SIMD-accelerated search
-// Only supports primitive types with well-defined SIMD comparison semantics
+// Helper to check if T is std::array<std::byte, N> or std::array<unsigned char,
+// N>
 template <typename T>
-concept SIMDSearchable =
-    Comparable<T> && std::is_trivially_copyable_v<T> && SimdPrimitive<T>;
+struct is_byte_array : std::false_type {};
+
+template <std::size_t N>
+struct is_byte_array<std::array<std::byte, N>> : std::true_type {};
+
+template <std::size_t N>
+struct is_byte_array<std::array<unsigned char, N>> : std::true_type {};
+
+// Concept for byte arrays that can use SIMD comparison (16 or 32 bytes)
+template <typename T>
+concept SimdByteArray =
+    is_byte_array<T>::value && (sizeof(T) == 16 || sizeof(T) == 32);
+
+// Concept for types that can use SIMD-accelerated search
+// Supports primitive types and byte arrays
+template <typename T>
+concept SIMDSearchable = Comparable<T> && std::is_trivially_copyable_v<T> &&
+                         (SimdPrimitive<T> || SimdByteArray<T>);
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
@@ -415,6 +431,22 @@ class ordered_array {
   template <typename K>
     requires(sizeof(K) == 8)
   auto simd_lower_bound_8byte(const K& key) const;
+
+  /**
+   * SIMD-accelerated linear search for 16-byte byte arrays
+   * Uses byte-level lexicographic comparison
+   */
+  template <typename K>
+    requires(sizeof(K) == 16)
+  auto simd_lower_bound_16byte(const K& key) const;
+
+  /**
+   * SIMD-accelerated linear search for 32-byte byte arrays
+   * Uses byte-level lexicographic comparison
+   */
+  template <typename K>
+    requires(sizeof(K) == 32)
+  auto simd_lower_bound_32byte(const K& key) const;
 #endif
 
   /**

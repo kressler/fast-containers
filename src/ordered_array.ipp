@@ -920,6 +920,94 @@ auto ordered_array<Key, Value, Length, SearchModeT,
     return keys_.begin() + i;
   }
 }
+
+// simd_lower_bound_16byte - SIMD search for 16-byte byte arrays
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+template <typename K>
+  requires(sizeof(K) == 16)
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_16byte(const K& key) const {
+  // Use AVX2 byte-level lexicographic comparison for 16-byte arrays
+  // Keys from encode_int64_pair() are already in big-endian byte order
+
+  // Load search key once (128-bit SSE)
+  __m128i search_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&key));
+
+  size_type i = 0;
+  for (; i < size_; ++i) {
+    // Load candidate key
+    __m128i key_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+    // Compare all 16 bytes for equality and greater-than (unsigned)
+    __m128i eq_mask = _mm_cmpeq_epi8(key_vec, search_vec);
+    __m128i gt_mask = _mm_cmpgt_epi8(key_vec, search_vec);
+
+    // Convert masks to bitmasks for analysis
+    uint32_t eq_bits = _mm_movemask_epi8(eq_mask);
+    uint32_t gt_bits = _mm_movemask_epi8(gt_mask);
+
+    // If all bytes equal (eq_bits == 0xFFFF), keys are equal
+    if (eq_bits == 0xFFFF) {
+      return keys_.begin() + i;  // Found exact match
+    }
+
+    // Find first differing byte (lowest set bit in ~eq_bits)
+    uint32_t diff_mask = ~eq_bits & 0xFFFF;
+    uint32_t first_diff = __builtin_ctz(diff_mask);
+
+    // Check if key_vec > search_vec at first differing byte
+    if ((gt_bits >> first_diff) & 1) {
+      return keys_.begin() + i;  // key_vec >= search_vec
+    }
+  }
+
+  return keys_.begin() + i;
+}
+
+// simd_lower_bound_32byte - SIMD search for 32-byte byte arrays
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+template <typename K>
+  requires(sizeof(K) == 32)
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_32byte(const K& key) const {
+  // Use AVX2 byte-level lexicographic comparison for 32-byte arrays
+  // Keys from encode_int64_quad() are already in big-endian byte order
+
+  // Load search key once (256-bit AVX2)
+  __m256i search_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
+
+  size_type i = 0;
+  for (; i < size_; ++i) {
+    // Load candidate key
+    __m256i key_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+    // Compare all 32 bytes for equality and greater-than (unsigned)
+    __m256i eq_mask = _mm256_cmpeq_epi8(key_vec, search_vec);
+    __m256i gt_mask = _mm256_cmpgt_epi8(key_vec, search_vec);
+
+    // Convert masks to bitmasks for analysis
+    uint32_t eq_bits = _mm256_movemask_epi8(eq_mask);
+    uint32_t gt_bits = _mm256_movemask_epi8(gt_mask);
+
+    // If all bytes equal (eq_bits == 0xFFFFFFFF), keys are equal
+    if (eq_bits == 0xFFFFFFFF) {
+      return keys_.begin() + i;  // Found exact match
+    }
+
+    // Find first differing byte (lowest set bit in ~eq_bits)
+    uint32_t diff_mask = ~eq_bits;
+    uint32_t first_diff = __builtin_ctz(diff_mask);
+
+    // Check if key_vec > search_vec at first differing byte
+    if ((gt_bits >> first_diff) & 1) {
+      return keys_.begin() + i;  // key_vec >= search_vec
+    }
+  }
+
+  return keys_.begin() + i;
+}
 #endif
 
 // ============================================================================
@@ -1088,13 +1176,15 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::lower_bound_key(
     // SIMD-accelerated linear search
 #ifdef __AVX2__
     if constexpr (SIMDSearchable<Key>) {
-      if constexpr (sizeof(Key) == 4) {
+      if constexpr (sizeof(Key) == 4 && SimdPrimitive<Key>) {
         return simd_lower_bound_4byte(key);
-      } else if constexpr (sizeof(Key) == 8) {
+      } else if constexpr (sizeof(Key) == 8 && SimdPrimitive<Key>) {
         return simd_lower_bound_8byte(key);
+      } else if constexpr (sizeof(Key) == 16 && SimdByteArray<Key>) {
+        return simd_lower_bound_16byte(key);
+      } else if constexpr (sizeof(Key) == 32 && SimdByteArray<Key>) {
+        return simd_lower_bound_32byte(key);
       }
-      // Note: SIMDSearchable only accepts primitive types (4 or 8 bytes)
-      // so we never reach here
     } else {
       // Fallback to regular linear search if type doesn't support SIMD
       auto it = keys_.begin();

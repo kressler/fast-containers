@@ -20,4 +20,8 @@ add_executable(ordered_array_search_benchmark
 target_link_libraries(ordered_array_search_benchmark
                       PRIVATE benchmark::benchmark)
 
+add_executable(byte_array_simd_benchmark
+               benchmarks/byte_array_simd_benchmark.cpp)
+target_link_libraries(byte_array_simd_benchmark PRIVATE benchmark::benchmark)
+
 add_subdirectory(binary)
