@@ -934,14 +934,21 @@ auto ordered_array<Key, Value, Length, SearchModeT,
   // Load search key once (128-bit SSE)
   __m128i search_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&key));
 
+  // For unsigned byte comparison, flip sign bit to convert to signed comparison
+  const __m128i sign_flip = _mm_set1_epi8(static_cast<char>(0x80));
+  __m128i search_signed = _mm_xor_si128(search_vec, sign_flip);
+
   size_type i = 0;
   for (; i < size_; ++i) {
     // Load candidate key
     __m128i key_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
 
+    // Convert to signed comparison space for unsigned byte comparison
+    __m128i key_signed = _mm_xor_si128(key_vec, sign_flip);
+
     // Compare all 16 bytes for equality and greater-than (unsigned)
     __m128i eq_mask = _mm_cmpeq_epi8(key_vec, search_vec);
-    __m128i gt_mask = _mm_cmpgt_epi8(key_vec, search_vec);
+    __m128i gt_mask = _mm_cmpgt_epi8(key_signed, search_signed);
 
     // Convert masks to bitmasks for analysis
     uint32_t eq_bits = _mm_movemask_epi8(eq_mask);
@@ -978,14 +985,21 @@ auto ordered_array<Key, Value, Length, SearchModeT,
   // Load search key once (256-bit AVX2)
   __m256i search_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&key));
 
+  // For unsigned byte comparison, flip sign bit to convert to signed comparison
+  const __m256i sign_flip = _mm256_set1_epi8(static_cast<char>(0x80));
+  __m256i search_signed = _mm256_xor_si256(search_vec, sign_flip);
+
   size_type i = 0;
   for (; i < size_; ++i) {
     // Load candidate key
     __m256i key_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
 
+    // Convert to signed comparison space for unsigned byte comparison
+    __m256i key_signed = _mm256_xor_si256(key_vec, sign_flip);
+
     // Compare all 32 bytes for equality and greater-than (unsigned)
     __m256i eq_mask = _mm256_cmpeq_epi8(key_vec, search_vec);
-    __m256i gt_mask = _mm256_cmpgt_epi8(key_vec, search_vec);
+    __m256i gt_mask = _mm256_cmpgt_epi8(key_signed, search_signed);
 
     // Convert masks to bitmasks for analysis
     uint32_t eq_bits = _mm256_movemask_epi8(eq_mask);
