@@ -642,6 +642,191 @@ void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
 
 #ifdef __AVX2__
 /**
+ * SIMD-accelerated linear search for 8-bit keys
+ * Supports: int8_t (signed), uint8_t (unsigned), char, signed char, unsigned
+ * char Compares 32 keys at a time using AVX2
+ */
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+template <typename K>
+  requires(sizeof(K) == 1)
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_1byte(const K& key) const {
+  static_assert(SimdPrimitive<K>,
+                "1-byte SIMD search requires primitive type (int8_t, uint8_t, "
+                "char, signed char, unsigned char)");
+
+  // Convert key to int8_t for comparison
+  int8_t key_bits;
+  std::memcpy(&key_bits, &key, sizeof(K));
+
+  // Check if type is unsigned
+  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+
+  if constexpr (is_unsigned) {
+    // Flip sign bit: converts unsigned comparison to signed comparison
+    key_bits ^= static_cast<int8_t>(0x80);
+  }
+
+  __m256i search_vec_256 = _mm256_set1_epi8(key_bits);
+
+  size_type i = 0;
+  // Process 32 keys at a time with full AVX2
+  for (; i + 32 <= size_; i += 32) {
+    __m256i keys_vec =
+        _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+    // For unsigned, flip sign bits before comparison
+    if constexpr (is_unsigned) {
+      __m256i flip_mask = _mm256_set1_epi8(static_cast<int8_t>(0x80));
+      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+    }
+
+    // Compare: keys_vec < search_vec (returns 0xFF where true)
+    __m256i cmp_lt = _mm256_cmpgt_epi8(search_vec_256, keys_vec);
+
+    // Check if any key is >= search_key
+    int mask = _mm256_movemask_epi8(cmp_lt);
+    if (mask != static_cast<int>(0xFFFFFFFF)) {
+      // Each 1-byte element contributes 1 bit to the mask
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+      return keys_.begin() + i + offset;
+    }
+  }
+
+  // Process 16 keys at a time with half AVX2 (128-bit SSE)
+  if (i + 16 <= size_) {
+    __m128i search_vec_128 = _mm_set1_epi8(key_bits);
+    __m128i keys_vec =
+        _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask = _mm_set1_epi8(static_cast<int8_t>(0x80));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
+    __m128i cmp_lt = _mm_cmpgt_epi8(search_vec_128, keys_vec);
+
+    int mask = _mm_movemask_epi8(cmp_lt);
+    if (mask != static_cast<int>(0xFFFF)) {
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask));
+      return keys_.begin() + i + offset;
+    }
+    i += 16;
+  }
+
+  // Handle remaining 0-15 keys with scalar
+  while (i < size_ && keys_[i] < key) {
+    ++i;
+  }
+
+  return keys_.begin() + i;
+}
+
+/**
+ * SIMD-accelerated linear search for 16-bit keys
+ * Supports: int16_t (signed), uint16_t (unsigned), short, unsigned short
+ * Compares 16 keys at a time using AVX2
+ */
+template <Comparable Key, typename Value, std::size_t Length,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+template <typename K>
+  requires(sizeof(K) == 2)
+auto ordered_array<Key, Value, Length, SearchModeT,
+                   MoveModeT>::simd_lower_bound_2byte(const K& key) const {
+  static_assert(SimdPrimitive<K>,
+                "2-byte SIMD search requires primitive type (int16_t, "
+                "uint16_t, short, unsigned short)");
+
+  // Convert key to int16_t for comparison
+  int16_t key_bits;
+  std::memcpy(&key_bits, &key, sizeof(K));
+
+  // Check if type is unsigned
+  constexpr bool is_unsigned = std::is_unsigned_v<K>;
+
+  if constexpr (is_unsigned) {
+    // Flip sign bit: converts unsigned comparison to signed comparison
+    key_bits ^= static_cast<int16_t>(0x8000);
+  }
+
+  __m256i search_vec_256 = _mm256_set1_epi16(key_bits);
+
+  size_type i = 0;
+  // Process 16 keys at a time with full AVX2
+  for (; i + 16 <= size_; i += 16) {
+    __m256i keys_vec =
+        _mm256_load_si256(reinterpret_cast<const __m256i*>(&keys_[i]));
+
+    // For unsigned, flip sign bits before comparison
+    if constexpr (is_unsigned) {
+      __m256i flip_mask = _mm256_set1_epi16(static_cast<int16_t>(0x8000));
+      keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
+    }
+
+    // Compare: keys_vec < search_vec (returns 0xFFFF where true)
+    __m256i cmp_lt = _mm256_cmpgt_epi16(search_vec_256, keys_vec);
+
+    // Check if any key is >= search_key
+    int mask = _mm256_movemask_epi8(cmp_lt);
+    if (mask != static_cast<int>(0xFFFFFFFF)) {
+      // Each 2-byte element contributes 2 bits to the mask
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
+      return keys_.begin() + i + offset;
+    }
+  }
+
+  // Process 8 keys at a time with half AVX2 (128-bit SSE)
+  if (i + 8 <= size_) {
+    __m128i search_vec_128 = _mm_set1_epi16(key_bits);
+    __m128i keys_vec =
+        _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask = _mm_set1_epi16(static_cast<int16_t>(0x8000));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
+    __m128i cmp_lt = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+
+    int mask = _mm_movemask_epi8(cmp_lt);
+    if (mask != static_cast<int>(0xFFFF)) {
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
+      return keys_.begin() + i + offset;
+    }
+    i += 8;
+  }
+
+  // Process 4 keys at a time with 64-bit SIMD
+  if (i + 4 <= size_) {
+    __m128i search_vec_128 = _mm_set1_epi16(key_bits);
+    __m128i keys_vec = _mm_castpd_si128(
+        _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
+
+    if constexpr (is_unsigned) {
+      __m128i flip_mask = _mm_set1_epi16(static_cast<int16_t>(0x8000));
+      keys_vec = _mm_xor_si128(keys_vec, flip_mask);
+    }
+
+    __m128i cmp_lt = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+
+    int mask = _mm_movemask_epi8(cmp_lt);
+    if ((mask & 0xFF) != 0xFF) {
+      size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
+      return keys_.begin() + i + offset;
+    }
+    i += 4;
+  }
+
+  // Handle remaining 0-3 keys with scalar
+  while (i < size_ && keys_[i] < key) {
+    ++i;
+  }
+
+  return keys_.begin() + i;
+}
+
+/**
  * SIMD-accelerated linear search for 32-bit keys
  * Supports: int32_t (signed), uint32_t (unsigned), float
  * Compares 8 keys at a time using AVX2
@@ -1087,12 +1272,16 @@ auto ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::lower_bound_key(
     // SIMD-accelerated linear search
 #ifdef __AVX2__
     if constexpr (SIMDSearchable<Key>) {
-      if constexpr (sizeof(Key) == 4) {
+      if constexpr (sizeof(Key) == 1) {
+        return simd_lower_bound_1byte(key);
+      } else if constexpr (sizeof(Key) == 2) {
+        return simd_lower_bound_2byte(key);
+      } else if constexpr (sizeof(Key) == 4) {
         return simd_lower_bound_4byte(key);
       } else if constexpr (sizeof(Key) == 8) {
         return simd_lower_bound_8byte(key);
       }
-      // Note: SIMDSearchable only accepts primitive types (4 or 8 bytes)
+      // Note: SIMDSearchable only accepts primitive types (1, 2, 4, or 8 bytes)
       // so we never reach here
     } else {
       // Fallback to regular linear search if type doesn't support SIMD

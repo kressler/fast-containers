@@ -41,12 +41,22 @@ concept Comparable = requires(T a, T b) {
 // Concept for primitive types that have well-defined SIMD comparison semantics
 template <typename T>
 concept SimdPrimitive =
-    // Fixed-size integer types (preferred)
+    // 8-bit integer types
+    std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
+    // 16-bit integer types
+    std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
+    // 32-bit integer types
     std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+    // 64-bit integer types
     std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> ||
     // Floating point types
     std::is_same_v<T, float> || std::is_same_v<T, double> ||
-    // Common aliases that map to fixed-size types
+    // Common aliases that may map to standard types
+    (std::is_same_v<T, char> && sizeof(char) == 1) ||
+    (std::is_same_v<T, signed char> && sizeof(signed char) == 1) ||
+    (std::is_same_v<T, unsigned char> && sizeof(unsigned char) == 1) ||
+    (std::is_same_v<T, short> && sizeof(short) == 2) ||
+    (std::is_same_v<T, unsigned short> && sizeof(unsigned short) == 2) ||
     (std::is_same_v<T, int> && sizeof(int) == 4) ||
     (std::is_same_v<T, unsigned int> && sizeof(unsigned int) == 4) ||
     (std::is_same_v<T, long> && sizeof(long) == 8) ||
@@ -400,6 +410,22 @@ class ordered_array {
 
  private:
 #ifdef __AVX2__
+  /**
+   * SIMD-accelerated linear search for 8-bit keys (int8_t, uint8_t)
+   * Compares 32 keys at a time using AVX2
+   */
+  template <typename K>
+    requires(sizeof(K) == 1)
+  auto simd_lower_bound_1byte(const K& key) const;
+
+  /**
+   * SIMD-accelerated linear search for 16-bit keys (int16_t, uint16_t)
+   * Compares 16 keys at a time using AVX2
+   */
+  template <typename K>
+    requires(sizeof(K) == 2)
+  auto simd_lower_bound_2byte(const K& key) const;
+
   /**
    * SIMD-accelerated linear search for 32-bit keys (int32_t, uint32_t, float)
    * Compares 8 keys at a time using AVX2
