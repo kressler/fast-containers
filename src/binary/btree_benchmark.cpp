@@ -264,6 +264,48 @@ int main(int argc, char** argv) {
                                     std::array<std::byte, 32>, 128, 128,
                                     fast_containers::SearchMode::Binary>{});
        }},
+
+      {"btree_8_32_64_64_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_64_64_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_64_64_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"absl_8_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             absl::btree_map<std::int64_t, std::array<std::byte, 32>>{});
+       }},
   };
 
   auto print_valid_benchmarks = [&]() {
