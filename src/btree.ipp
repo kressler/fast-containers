@@ -409,8 +409,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   const bool erasing_from_beginning = (leaf_it == leaf->data.begin());
 
   // Check if rebalancing will be needed BEFORE erasing
-  // This allows us to avoid saving next_key when not needed (important for large keys)
-  // Early return if root is leaf (no rebalancing ever needed)
+  // This allows us to avoid saving next_key when not needed (important for
+  // large keys) Early return if root is leaf (no rebalancing ever needed)
   if (root_is_leaf_ && leaf == leaf_root_) {
     auto next_in_leaf = leaf->data.erase(leaf_it);
     size_--;
@@ -466,7 +466,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
         return iterator(result_leaf, leaf_it);
       }
 
-      // Check result_leaf->next_leaf (next_key may have moved there during merge)
+      // Check result_leaf->next_leaf (next_key may have moved there during
+      // merge)
       if (result_leaf->next_leaf != nullptr) {
         leaf_it = result_leaf->next_leaf->data.find(*next_key);
         if (leaf_it != result_leaf->next_leaf->data.end()) {
@@ -1079,8 +1080,9 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     if (left_sibling->data.size() <= min_leaf_size()) {
       return nullptr;
     }
-    bool success = borrow_impl.template operator()<std::pair<Key, Value>, false>(
-        node->data, left_sibling->data, min_leaf_size(), leaf_hysteresis());
+    bool success =
+        borrow_impl.template operator()<std::pair<Key, Value>, false>(
+            node->data, left_sibling->data, min_leaf_size(), leaf_hysteresis());
     return success ? node : nullptr;
   } else {
     // Internal node borrowing
@@ -1154,8 +1156,10 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     if (right_sibling->data.size() <= min_leaf_size()) {
       return nullptr;
     }
-    bool success = borrow_impl.template operator()<std::pair<Key, Value>, false>(
-        node->data, right_sibling->data, min_leaf_size(), leaf_hysteresis());
+    bool success =
+        borrow_impl.template operator()<std::pair<Key, Value>, false>(
+            node->data, right_sibling->data, min_leaf_size(),
+            leaf_hysteresis());
     return success ? node : nullptr;
   } else {
     // Internal node borrowing

@@ -211,8 +211,7 @@ ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::insert_hint(
 template <Comparable Key, typename Value, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT>
 typename ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::iterator
-ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::erase(
-    iterator pos) {
+ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
   size_type idx = pos.index();
