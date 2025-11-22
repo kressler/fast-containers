@@ -2,5 +2,9 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/abseil-cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/benchmark" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/catch2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/lyra" vcs="Git" />
   </component>
 </project>

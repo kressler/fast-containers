@@ -26,6 +26,19 @@ struct TimingStats {
   }
 };
 
+template <size_t N>
+struct std::hash<std::array<int64_t, N>> {
+  std::size_t operator()(const std::array<int64_t, N>& k) const {
+    using std::hash;
+    using std::size_t;
+    size_t h = 0;
+    for (size_t i = 0; i < N; ++i) {
+      h ^= hash<int64_t>()(k[i]);
+    }
+    return h;
+  }
+};
+
 template <typename T>
 TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
                           size_t tree_size, size_t batches, size_t batch_size) {
@@ -34,7 +47,7 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
                                           std::numeric_limits<int>::max());
   TimingStats stats;
   unsigned int dummy;
-  std::set<typename T::key_type> keys{};
+  std::unordered_set<typename T::key_type> keys{};
 
   auto insert = [&]() -> void {
     typename T::key_type key;
@@ -153,6 +166,16 @@ int main(int argc, char** argv) {
          return benchmarker(
              absl::btree_map<std::int64_t, std::array<std::byte, 256>>{});
        }},
+      {"map_8_256",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::map<std::int64_t, std::array<std::byte, 256>>{});
+       }},
+      {"unordered_map_8_256",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::unordered_map<std::int64_t, std::array<std::byte, 256>>{});
+       }},
 
       {"btree_16_256_16_128_linear_simd",
        [&]() -> TimingStats {
@@ -172,6 +195,16 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 2>,
                                             std::array<std::byte, 256>>{});
+       }},
+      {"map_16_256",
+       [&]() -> TimingStats {
+         return benchmarker(std::map<std::array<std::int64_t, 2>,
+                                     std::array<std::byte, 256>>{});
+       }},
+      {"unordered_map_16_256",
+       [&]() -> TimingStats {
+         return benchmarker(std::unordered_map<std::array<std::int64_t, 2>,
+                                               std::array<std::byte, 256>>{});
        }},
 
       {"btree_32_256_16_128_linear_simd",
@@ -193,6 +226,16 @@ int main(int argc, char** argv) {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
                                             std::array<std::byte, 256>>{});
        }},
+      {"map_32_256",
+       [&]() -> TimingStats {
+         return benchmarker(std::map<std::array<std::int64_t, 4>,
+                                     std::array<std::byte, 256>>{});
+       }},
+      {"unordered_map_32_256",
+       [&]() -> TimingStats {
+         return benchmarker(std::unordered_map<std::array<std::int64_t, 4>,
+                                               std::array<std::byte, 256>>{});
+       }},
 
       /* 32 byte values */
       {"btree_16_32_16_128_linear_simd",
@@ -213,6 +256,16 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 2>,
                                             std::array<std::byte, 32>>{});
+       }},
+      {"map_16_32",
+       [&]() -> TimingStats {
+         return benchmarker(std::map<std::array<std::int64_t, 2>,
+                                     std::array<std::byte, 32>>{});
+       }},
+      {"unordered_map_16_32",
+       [&]() -> TimingStats {
+         return benchmarker(std::unordered_map<std::array<std::int64_t, 2>,
+                                               std::array<std::byte, 32>>{});
        }},
 
       {"btree_16_32_128_128_linear_simd",
@@ -248,6 +301,16 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
                                             std::array<std::byte, 32>>{});
+       }},
+      {"map_32_32",
+       [&]() -> TimingStats {
+         return benchmarker(std::map<std::array<std::int64_t, 4>,
+                                     std::array<std::byte, 32>>{});
+       }},
+      {"unordered_map_32_32",
+       [&]() -> TimingStats {
+         return benchmarker(std::unordered_map<std::array<std::int64_t, 4>,
+                                               std::array<std::byte, 32>>{});
        }},
 
       {"btree_32_32_128_128_linear_simd",
@@ -305,6 +368,16 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(
              absl::btree_map<std::int64_t, std::array<std::byte, 32>>{});
+       }},
+      {"map_8_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::map<std::int64_t, std::array<std::byte, 32>>{});
+       }},
+      {"unordered_map_8_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::unordered_map<std::int64_t, std::array<std::byte, 32>>{});
        }},
   };
 
