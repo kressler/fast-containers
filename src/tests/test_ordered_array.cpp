@@ -1596,3 +1596,336 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 32-byte keys",
     REQUIRE(it->second == 3);
   }
 }
+
+// ============================================================================
+// SIMD Tests for 8-bit and 16-bit primitive types
+// ============================================================================
+
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("int8_t basic operations") {
+    ordered_array<int8_t, int, 64, Mode> arr;
+
+    // Test with positive values
+    arr.insert(10, 100);
+    arr.insert(5, 50);
+    arr.insert(20, 200);
+    arr.insert(-5, -50);
+    arr.insert(0, 0);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify find works
+    auto it = arr.find(10);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 100);
+
+    // Verify negative values
+    it = arr.find(-5);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == -50);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == -5);
+    REQUIRE((begin + 1)->first == 0);
+    REQUIRE((begin + 2)->first == 5);
+    REQUIRE((begin + 3)->first == 10);
+    REQUIRE((begin + 4)->first == 20);
+  }
+
+  SECTION("int8_t edge cases") {
+    ordered_array<int8_t, int, 64, Mode> arr;
+
+    // Test minimum and maximum values
+    arr.insert(127, 1);   // INT8_MAX
+    arr.insert(-128, 2);  // INT8_MIN
+    arr.insert(0, 3);
+
+    REQUIRE(arr.size() == 3);
+
+    auto it = arr.find(127);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 1);
+
+    it = arr.find(-128);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 2);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == -128);
+    REQUIRE((begin + 1)->first == 0);
+    REQUIRE((begin + 2)->first == 127);
+  }
+
+  SECTION("int8_t with many elements (32+)") {
+    ordered_array<int8_t, int, 64, Mode> arr;
+
+    // Insert 40 elements to test full AVX2 path (32 at a time)
+    for (int8_t i = 0; i < 40; ++i) {
+      arr.insert(i, i * 10);
+    }
+
+    REQUIRE(arr.size() == 40);
+
+    // Verify all can be found
+    for (int8_t i = 0; i < 40; ++i) {
+      auto it = arr.find(i);
+      REQUIRE(it != arr.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("uint8_t basic operations") {
+    ordered_array<uint8_t, int, 64, Mode> arr;
+
+    arr.insert(10, 100);
+    arr.insert(5, 50);
+    arr.insert(200, 2000);
+    arr.insert(255, 2550);
+    arr.insert(0, 0);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify find works
+    auto it = arr.find(200);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 2000);
+
+    // Verify max value
+    it = arr.find(255);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 2550);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == 0);
+    REQUIRE((begin + 1)->first == 5);
+    REQUIRE((begin + 2)->first == 10);
+    REQUIRE((begin + 3)->first == 200);
+    REQUIRE((begin + 4)->first == 255);
+  }
+
+  SECTION("uint8_t high values (tests sign bit handling)") {
+    ordered_array<uint8_t, int, 64, Mode> arr;
+
+    // Values > 127 have sign bit set in two's complement
+    arr.insert(128, 1);
+    arr.insert(200, 2);
+    arr.insert(255, 3);
+    arr.insert(127, 4);
+    arr.insert(100, 5);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify sorted order (must be unsigned comparison)
+    auto begin = arr.begin();
+    REQUIRE(begin->first == 100);
+    REQUIRE((begin + 1)->first == 127);
+    REQUIRE((begin + 2)->first == 128);
+    REQUIRE((begin + 3)->first == 200);
+    REQUIRE((begin + 4)->first == 255);
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("int16_t basic operations") {
+    ordered_array<int16_t, int, 64, Mode> arr;
+
+    arr.insert(1000, 100);
+    arr.insert(500, 50);
+    arr.insert(2000, 200);
+    arr.insert(-500, -50);
+    arr.insert(0, 0);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify find works
+    auto it = arr.find(1000);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 100);
+
+    // Verify negative values
+    it = arr.find(-500);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == -50);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == -500);
+    REQUIRE((begin + 1)->first == 0);
+    REQUIRE((begin + 2)->first == 500);
+    REQUIRE((begin + 3)->first == 1000);
+    REQUIRE((begin + 4)->first == 2000);
+  }
+
+  SECTION("int16_t edge cases") {
+    ordered_array<int16_t, int, 64, Mode> arr;
+
+    // Test minimum and maximum values
+    arr.insert(32767, 1);   // INT16_MAX
+    arr.insert(-32768, 2);  // INT16_MIN
+    arr.insert(0, 3);
+
+    REQUIRE(arr.size() == 3);
+
+    auto it = arr.find(32767);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 1);
+
+    it = arr.find(-32768);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 2);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == -32768);
+    REQUIRE((begin + 1)->first == 0);
+    REQUIRE((begin + 2)->first == 32767);
+  }
+
+  SECTION("int16_t with many elements (16+)") {
+    ordered_array<int16_t, int, 64, Mode> arr;
+
+    // Insert 20 elements to test full AVX2 path (16 at a time)
+    for (int16_t i = 0; i < 20; ++i) {
+      arr.insert(i * 100, i);
+    }
+
+    REQUIRE(arr.size() == 20);
+
+    // Verify all can be found
+    for (int16_t i = 0; i < 20; ++i) {
+      auto it = arr.find(i * 100);
+      REQUIRE(it != arr.end());
+      REQUIRE(it->second == i);
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("uint16_t basic operations") {
+    ordered_array<uint16_t, int, 64, Mode> arr;
+
+    arr.insert(1000, 100);
+    arr.insert(500, 50);
+    arr.insert(40000, 400);
+    arr.insert(65535, 655);
+    arr.insert(0, 0);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify find works
+    auto it = arr.find(40000);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 400);
+
+    // Verify max value
+    it = arr.find(65535);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 655);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == 0);
+    REQUIRE((begin + 1)->first == 500);
+    REQUIRE((begin + 2)->first == 1000);
+    REQUIRE((begin + 3)->first == 40000);
+    REQUIRE((begin + 4)->first == 65535);
+  }
+
+  SECTION("uint16_t high values (tests sign bit handling)") {
+    ordered_array<uint16_t, int, 64, Mode> arr;
+
+    // Values > 32767 have sign bit set in two's complement
+    arr.insert(32768, 1);
+    arr.insert(40000, 2);
+    arr.insert(65535, 3);
+    arr.insert(32767, 4);
+    arr.insert(10000, 5);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify sorted order (must be unsigned comparison)
+    auto begin = arr.begin();
+    REQUIRE(begin->first == 10000);
+    REQUIRE((begin + 1)->first == 32767);
+    REQUIRE((begin + 2)->first == 32768);
+    REQUIRE((begin + 3)->first == 40000);
+    REQUIRE((begin + 4)->first == 65535);
+  }
+}
+
+// Test with char types (may alias to int8_t or be separate type)
+TEMPLATE_TEST_CASE("ordered_array SIMD search with char types",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("unsigned char basic operations") {
+    ordered_array<unsigned char, int, 64, Mode> arr;
+
+    arr.insert('A', 65);
+    arr.insert('Z', 90);
+    arr.insert('a', 97);
+    arr.insert('z', 122);
+    arr.insert('0', 48);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify find works
+    auto it = arr.find('A');
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 65);
+
+    // Verify sorted order (ASCII)
+    auto begin = arr.begin();
+    REQUIRE(begin->first == '0');
+    REQUIRE((begin + 1)->first == 'A');
+    REQUIRE((begin + 2)->first == 'Z');
+    REQUIRE((begin + 3)->first == 'a');
+    REQUIRE((begin + 4)->first == 'z');
+  }
+}
+
+// Test with short types (may alias to int16_t or be separate type)
+TEMPLATE_TEST_CASE("ordered_array SIMD search with short types",
+                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("unsigned short basic operations") {
+    ordered_array<unsigned short, int, 64, Mode> arr;
+
+    arr.insert(1000, 100);
+    arr.insert(500, 50);
+    arr.insert(40000, 400);
+    arr.insert(0, 0);
+
+    REQUIRE(arr.size() == 4);
+
+    // Verify find works
+    auto it = arr.find(40000);
+    REQUIRE(it != arr.end());
+    REQUIRE(it->second == 400);
+
+    // Verify sorted order
+    auto begin = arr.begin();
+    REQUIRE(begin->first == 0);
+    REQUIRE((begin + 1)->first == 500);
+    REQUIRE((begin + 2)->first == 1000);
+    REQUIRE((begin + 3)->first == 40000);
+  }
+}
