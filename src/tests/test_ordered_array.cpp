@@ -2017,6 +2017,152 @@ TEST_CASE("ordered_array with std::greater (descending order)",
     REQUIRE(arr.find(100) == arr.end());
   }
 
-  // Note: SIMD mode only supports std::less (ascending order)
-  // For descending order, use Binary or Linear search modes
+  SECTION("SIMD search mode with 4-byte keys (int32_t)") {
+    ordered_array<int32_t, std::string, 64, std::greater<int32_t>,
+                  SearchMode::SIMD>
+        arr;
+
+    // Insert many elements to test SIMD paths
+    for (int32_t i = 0; i < 50; ++i) {
+      arr.insert(i, "value" + std::to_string(i));
+    }
+
+    REQUIRE(arr.size() == 50);
+
+    // Verify descending order
+    auto it = arr.begin();
+    for (int32_t i = 49; i >= 0; --i) {
+      REQUIRE(it->first == i);
+      ++it;
+    }
+
+    // Verify find works for various values
+    REQUIRE(arr.find(25) != arr.end());
+    REQUIRE(arr.find(25)->second == "value25");
+    REQUIRE(arr.find(0) != arr.end());
+    REQUIRE(arr.find(49) != arr.end());
+    REQUIRE(arr.find(100) == arr.end());
+
+    // Verify lower_bound finds correct position
+    auto lb = arr.lower_bound(26);
+    REQUIRE(lb != arr.end());
+    REQUIRE(lb->first == 26);
+
+    lb = arr.lower_bound(100);
+    REQUIRE(lb == arr.begin());  // 49 is first element >= 100
+
+    lb = arr.lower_bound(-10);
+    REQUIRE(lb == arr.end());  // No element >= -10 in descending order
+  }
+
+  SECTION("SIMD search mode with 8-byte keys (int64_t)") {
+    ordered_array<int64_t, int, 64, std::greater<int64_t>, SearchMode::SIMD>
+        arr;
+
+    // Insert values to test 8-byte SIMD implementation
+    for (int64_t i = 0; i < 40; ++i) {
+      arr.insert(i * 10, static_cast<int>(i));
+    }
+
+    REQUIRE(arr.size() == 40);
+
+    // Verify descending order
+    auto it = arr.begin();
+    REQUIRE(it->first == 390);
+    ++it;
+    REQUIRE(it->first == 380);
+
+    // Verify find
+    REQUIRE(arr.find(200) != arr.end());
+    REQUIRE(arr.find(200)->second == 20);
+    REQUIRE(arr.find(205) == arr.end());
+  }
+
+  SECTION("SIMD search mode with 4-byte keys (float)") {
+    ordered_array<float, int, 64, std::greater<float>, SearchMode::SIMD> arr;
+
+    // Insert float values
+    arr.insert(3.14f, 1);
+    arr.insert(2.71f, 2);
+    arr.insert(1.41f, 3);
+    arr.insert(9.99f, 4);
+    arr.insert(5.55f, 5);
+
+    REQUIRE(arr.size() == 5);
+
+    // Verify descending order
+    auto it = arr.begin();
+    REQUIRE(it->first == 9.99f);
+    ++it;
+    REQUIRE(it->first == 5.55f);
+    ++it;
+    REQUIRE(it->first == 3.14f);
+
+    // Verify find
+    REQUIRE(arr.find(3.14f) != arr.end());
+    REQUIRE(arr.find(3.14f)->second == 1);
+  }
+
+  SECTION("SIMD search mode with 8-byte keys (double)") {
+    ordered_array<double, int, 64, std::greater<double>, SearchMode::SIMD> arr;
+
+    // Insert double values
+    for (int i = 0; i < 30; ++i) {
+      arr.insert(i * 1.5, i);
+    }
+
+    REQUIRE(arr.size() == 30);
+
+    // Verify descending order
+    auto it = arr.begin();
+    REQUIRE(it->first == 29 * 1.5);
+
+    // Verify find
+    REQUIRE(arr.find(15.0) != arr.end());
+    REQUIRE(arr.find(15.0)->second == 10);
+  }
+
+  SECTION("SIMD search mode with 2-byte keys (int16_t)") {
+    ordered_array<int16_t, int, 64, std::greater<int16_t>, SearchMode::SIMD>
+        arr;
+
+    // Insert int16_t values
+    for (int16_t i = 0; i < 50; ++i) {
+      arr.insert(i, static_cast<int>(i * 2));
+    }
+
+    REQUIRE(arr.size() == 50);
+
+    // Verify descending order
+    auto it = arr.begin();
+    REQUIRE(it->first == 49);
+    ++it;
+    REQUIRE(it->first == 48);
+
+    // Verify find
+    REQUIRE(arr.find(25) != arr.end());
+    REQUIRE(arr.find(25)->second == 50);
+  }
+
+  SECTION("SIMD search mode with 1-byte keys (int8_t)") {
+    ordered_array<int8_t, int, 64, std::greater<int8_t>, SearchMode::SIMD> arr;
+
+    // Insert int8_t values
+    for (int8_t i = 0; i < 50; ++i) {
+      arr.insert(i, static_cast<int>(i));
+    }
+
+    REQUIRE(arr.size() == 50);
+
+    // Verify descending order
+    auto it = arr.begin();
+    REQUIRE(it->first == 49);
+    ++it;
+    REQUIRE(it->first == 48);
+
+    // Verify find
+    REQUIRE(arr.find(25) != arr.end());
+    REQUIRE(arr.find(25)->second == 25);
+    REQUIRE(arr.find(100) == arr.end());
+  }
 }
