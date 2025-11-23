@@ -28,7 +28,7 @@ TEST_CASE("ordered_array basic construction", "[ordered_array]") {
 TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 5, Mode> arr;
+  ordered_array<int, std::string, std::less<int>, 5, Mode> arr;
 
   SECTION("Insert single element") {
     arr.insert(5, "five");
@@ -92,7 +92,7 @@ TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
 TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, Mode> arr;
+  ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -134,7 +134,7 @@ TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
 TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, Mode> arr;
+  ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -201,7 +201,7 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
 TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, Mode> arr;
+  ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
 
   SECTION("Access non-existing element inserts with default value") {
     auto& val = arr[5];
@@ -454,8 +454,8 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy empty array") {
-    ordered_array<int, std::string, 10, Mode> original;
-    ordered_array<int, std::string, 10, Mode> copy(original);
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> copy(original);
 
     REQUIRE(copy.size() == 0);
     REQUIRE(copy.empty());
@@ -463,12 +463,12 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   }
 
   SECTION("Copy array with elements") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(3, "three");
     original.insert(1, "one");
     original.insert(5, "five");
 
-    ordered_array<int, std::string, 10, Mode> copy(original);
+    ordered_array<int, std::string, std::less<int>, 10, Mode> copy(original);
 
     REQUIRE(copy.size() == 3);
     REQUIRE(!copy.empty());
@@ -486,11 +486,11 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   }
 
   SECTION("Copy is independent from original") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> copy(original);
+    ordered_array<int, std::string, std::less<int>, 10, Mode> copy(original);
 
     // Modify original
     original.insert(3, "three");
@@ -514,11 +514,11 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy assign to empty array") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest = original;
 
     REQUIRE(dest.size() == 2);
@@ -527,11 +527,11 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Copy assign overwrites existing elements") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(5, "five");
     original.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
     dest.insert(3, "three");
@@ -545,7 +545,7 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Self-assignment is safe") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
@@ -557,10 +557,10 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Copy assignment creates independent copy") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest = original;
 
     // Modify original
@@ -576,8 +576,9 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Move empty array") {
-    ordered_array<int, std::string, 10, Mode> original;
-    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> moved(
+        std::move(original));
 
     REQUIRE(moved.size() == 0);
     REQUIRE(moved.empty());
@@ -586,12 +587,13 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   }
 
   SECTION("Move array with elements") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(3, "three");
     original.insert(1, "one");
     original.insert(5, "five");
 
-    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+    ordered_array<int, std::string, std::less<int>, 10, Mode> moved(
+        std::move(original));
 
     // Verify moved-to array has all elements
     REQUIRE(moved.size() == 3);
@@ -611,10 +613,11 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   }
 
   SECTION("Moved-from array is reusable") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
 
-    ordered_array<int, std::string, 10, Mode> moved(std::move(original));
+    ordered_array<int, std::string, std::less<int>, 10, Mode> moved(
+        std::move(original));
 
     // Reuse moved-from array
     original.insert(2, "two");
@@ -631,11 +634,11 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Move assign to empty array") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest = std::move(original);
 
     REQUIRE(dest.size() == 2);
@@ -647,11 +650,11 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Move assign overwrites existing elements") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(5, "five");
     original.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
     dest.insert(3, "three");
@@ -667,7 +670,7 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Self-move-assignment is safe") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
@@ -679,11 +682,11 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Moved-from array is reusable") {
-    ordered_array<int, std::string, 10, Mode> original;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest = std::move(original);
 
     // Reuse moved-from array
@@ -702,11 +705,11 @@ TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy with int keys and int values") {
-    ordered_array<int, int, 10, Mode> original;
+    ordered_array<int, int, std::less<int>, 10, Mode> original;
     original.insert(5, 50);
     original.insert(3, 30);
 
-    ordered_array<int, int, 10, Mode> copy(original);
+    ordered_array<int, int, std::less<int>, 10, Mode> copy(original);
 
     REQUIRE(copy.size() == 2);
     REQUIRE(copy.find(3)->second == 30);
@@ -714,11 +717,12 @@ TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
   }
 
   SECTION("Move with double keys and string values") {
-    ordered_array<double, std::string, 10, Mode> original;
+    ordered_array<double, std::string, std::less<double>, 10, Mode> original;
     original.insert(3.14, "pi");
     original.insert(2.71, "e");
 
-    ordered_array<double, std::string, 10, Mode> moved(std::move(original));
+    ordered_array<double, std::string, std::less<double>, 10, Mode> moved(
+        std::move(original));
 
     REQUIRE(moved.size() == 2);
     REQUIRE(moved.find(2.71)->second == "e");
@@ -732,8 +736,8 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Split empty array") {
-    ordered_array<int, std::string, 10, Mode> arr;
-    ordered_array<int, std::string, 10, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> output;
 
     arr.split_at(arr.begin(), output);
 
@@ -742,12 +746,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split at beginning (move all elements)") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
 
-    ordered_array<int, std::string, 10, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> output;
     arr.split_at(arr.begin(), output);
 
     REQUIRE(arr.size() == 0);
@@ -764,12 +768,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split at end (move no elements)") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
 
-    ordered_array<int, std::string, 10, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> output;
     arr.split_at(arr.end(), output);
 
     REQUIRE(arr.size() == 3);
@@ -778,14 +782,14 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split in middle") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
     arr.insert(4, "four");
     arr.insert(5, "five");
 
-    ordered_array<int, std::string, 10, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> output;
     auto it = arr.begin();
     ++it;
     ++it;  // Points to element with key 3
@@ -810,23 +814,23 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split throws if output is not empty") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> output;
     output.insert(10, "ten");
 
     REQUIRE_THROWS_AS(arr.split_at(arr.begin(), output), std::runtime_error);
   }
 
   SECTION("Split throws if output has insufficient capacity") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     for (int i = 0; i < 10; ++i) {
       arr.insert(i, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, Mode> small_output;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> small_output;
 
     // Trying to move 10 elements to capacity-5 array should throw
     REQUIRE_THROWS_AS(arr.split_at(arr.begin(), small_output),
@@ -834,12 +838,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split maintains element order and values") {
-    ordered_array<int, std::string, 20, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> arr;
     for (int i = 1; i <= 10; ++i) {
       arr.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, Mode> output;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> output;
     auto split_pos = arr.begin();
     std::advance(split_pos, 6);  // Split at key 7
 
@@ -868,9 +872,9 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Append to empty array") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
 
-    ordered_array<int, std::string, 10, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> other;
     other.insert(1, "one");
     other.insert(2, "two");
 
@@ -885,11 +889,11 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   }
 
   SECTION("Append empty array to non-empty array") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> other;
 
     arr.append(std::move(other));
 
@@ -899,11 +903,11 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   }
 
   SECTION("Append maintains sorted order") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> other;
     other.insert(5, "five");
     other.insert(6, "six");
 
@@ -925,12 +929,12 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   }
 
   SECTION("Append throws if combined size exceeds capacity") {
-    ordered_array<int, std::string, 5, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
 
-    ordered_array<int, std::string, 5, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> other;
     other.insert(4, "four");
     other.insert(5, "five");
     other.insert(6, "six");
@@ -940,11 +944,11 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   }
 
   SECTION("Append preserves all values") {
-    ordered_array<int, std::string, 20, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> arr;
     arr.insert(1, "value1");
     arr.insert(3, "value3");
 
-    ordered_array<int, std::string, 20, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> other;
     other.insert(10, "value10");
     other.insert(15, "value15");
     other.insert(20, "value20");
@@ -960,10 +964,10 @@ TEMPLATE_TEST_CASE("ordered_array append operation", "[ordered_array]",
   }
 
   SECTION("Moved-from array is reusable after append") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
 
-    ordered_array<int, std::string, 10, Mode> other;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> other;
     other.insert(5, "five");
 
     arr.append(std::move(other));
@@ -983,13 +987,13 @@ TEMPLATE_TEST_CASE("ordered_array split and append together", "[ordered_array]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Split then append to reconstruct") {
-    ordered_array<int, std::string, 10, Mode> arr;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
     arr.insert(4, "four");
 
-    ordered_array<int, std::string, 10, Mode> upper;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> upper;
     auto mid = arr.begin();
     ++mid;
     ++mid;  // Split at key 3
@@ -1015,7 +1019,7 @@ TEMPLATE_TEST_CASE("ordered_array split and append together", "[ordered_array]",
 
   SECTION("Multiple splits and appends (simulating B+ tree operations)") {
     // Simulate splitting a node and merging with siblings
-    ordered_array<int, int, 10, Mode> node1, node2, node3;
+    ordered_array<int, int, std::less<int>, 10, Mode> node1, node2, node3;
 
     // Fill node1 with [1..5]
     for (int i = 1; i <= 5; ++i) {
@@ -1059,8 +1063,8 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer prefix to empty array") {
-    ordered_array<int, std::string, 10, Mode> dest;
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -1076,11 +1080,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer prefix to non-empty array") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(5, "five");
     source.insert(6, "six");
     source.insert(7, "seven");
@@ -1107,10 +1111,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer zero elements") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(5, "five");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
 
     dest.transfer_prefix_from(source, 0);
@@ -1120,10 +1124,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer all elements from source") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(1, "one");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(10, "ten");
     source.insert(11, "eleven");
 
@@ -1135,20 +1139,20 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer throws if count exceeds source size") {
-    ordered_array<int, std::string, 10, Mode> dest;
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
 
     REQUIRE_THROWS_AS(dest.transfer_prefix_from(source, 2), std::runtime_error);
   }
 
   SECTION("Transfer throws if destination has insufficient capacity") {
-    ordered_array<int, std::string, 5, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> dest;
     for (int i = 0; i < 4; ++i) {
       dest.insert(i + 10, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
 
@@ -1157,12 +1161,12 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer maintains element order and values") {
-    ordered_array<int, std::string, 20, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> dest;
     for (int i = 1; i <= 6; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> source;
     for (int i = 10; i <= 14; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
@@ -1190,8 +1194,8 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer suffix to empty array") {
-    ordered_array<int, std::string, 10, Mode> dest;
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -1207,11 +1211,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer suffix to non-empty array") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(5, "five");
     dest.insert(6, "six");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -1237,10 +1241,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer zero elements") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(1, "one");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(5, "five");
 
     dest.transfer_suffix_from(source, 0);
@@ -1250,10 +1254,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer all elements from source") {
-    ordered_array<int, std::string, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
     dest.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
 
@@ -1265,20 +1269,20 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer throws if count exceeds source size") {
-    ordered_array<int, std::string, 10, Mode> dest;
-    ordered_array<int, std::string, 10, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 10, Mode> source;
     source.insert(5, "five");
 
     REQUIRE_THROWS_AS(dest.transfer_suffix_from(source, 2), std::runtime_error);
   }
 
   SECTION("Transfer throws if destination has insufficient capacity") {
-    ordered_array<int, std::string, 5, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> dest;
     for (int i = 0; i < 4; ++i) {
       dest.insert(i, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 5, Mode> source;
     source.insert(10, "ten");
     source.insert(11, "eleven");
 
@@ -1287,12 +1291,12 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer maintains element order and values") {
-    ordered_array<int, std::string, 20, Mode> dest;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> dest;
     for (int i = 10; i <= 14; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, Mode> source;
+    ordered_array<int, std::string, std::less<int>, 20, Mode> source;
     for (int i = 1; i <= 6; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
@@ -1321,7 +1325,7 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
 
   SECTION("Rebalancing simulation: transfer from overfull to underfull node") {
     // Simulate B+ tree rebalancing
-    ordered_array<int, int, 10, Mode> left, right;
+    ordered_array<int, int, std::less<int>, 10, Mode> left, right;
 
     // Left node is underfull
     left.insert(1, 10);
@@ -1351,7 +1355,8 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
   }
 
   SECTION("Multiple transfers in sequence") {
-    ordered_array<int, std::string, 15, Mode> node1, node2, node3;
+    ordered_array<int, std::string, std::less<int>, 15, Mode> node1, node2,
+        node3;
 
     // Setup initial nodes
     node1.insert(1, "a");
@@ -1389,7 +1394,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-byte keys",
   constexpr SearchMode Mode = TestType::value;
   using Key16 = std::array<uint8_t, 16>;
 
-  ordered_array<Key16, int, 10, Mode> arr;
+  ordered_array<Key16, int, std::less<Key16>, 10, Mode> arr;
 
   // Create test keys with distinct values
   Key16 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
@@ -1479,7 +1484,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 32-byte keys",
   constexpr SearchMode Mode = TestType::value;
   using Key32 = std::array<uint8_t, 32>;
 
-  ordered_array<Key32, int, 10, Mode> arr;
+  ordered_array<Key32, int, std::less<Key32>, 10, Mode> arr;
 
   // Create test keys with distinct values
   Key32 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1606,7 +1611,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("int8_t basic operations") {
-    ordered_array<int8_t, int, 64, Mode> arr;
+    ordered_array<int8_t, int, std::less<int8_t>, 64, Mode> arr;
 
     // Test with positive values
     arr.insert(10, 100);
@@ -1637,7 +1642,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   }
 
   SECTION("int8_t edge cases") {
-    ordered_array<int8_t, int, 64, Mode> arr;
+    ordered_array<int8_t, int, std::less<int8_t>, 64, Mode> arr;
 
     // Test minimum and maximum values
     arr.insert(127, 1);   // INT8_MAX
@@ -1662,7 +1667,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   }
 
   SECTION("int8_t with many elements (32+)") {
-    ordered_array<int8_t, int, 64, Mode> arr;
+    ordered_array<int8_t, int, std::less<int8_t>, 64, Mode> arr;
 
     // Insert 40 elements to test full AVX2 path (32 at a time)
     for (int8_t i = 0; i < 40; ++i) {
@@ -1685,7 +1690,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("uint8_t basic operations") {
-    ordered_array<uint8_t, int, 64, Mode> arr;
+    ordered_array<uint8_t, int, std::less<uint8_t>, 64, Mode> arr;
 
     arr.insert(10, 100);
     arr.insert(5, 50);
@@ -1715,7 +1720,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
   }
 
   SECTION("uint8_t high values (tests sign bit handling)") {
-    ordered_array<uint8_t, int, 64, Mode> arr;
+    ordered_array<uint8_t, int, std::less<uint8_t>, 64, Mode> arr;
 
     // Values > 127 have sign bit set in two's complement
     arr.insert(128, 1);
@@ -1741,7 +1746,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("int16_t basic operations") {
-    ordered_array<int16_t, int, 64, Mode> arr;
+    ordered_array<int16_t, int, std::less<int16_t>, 64, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);
@@ -1771,7 +1776,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   }
 
   SECTION("int16_t edge cases") {
-    ordered_array<int16_t, int, 64, Mode> arr;
+    ordered_array<int16_t, int, std::less<int16_t>, 64, Mode> arr;
 
     // Test minimum and maximum values
     arr.insert(32767, 1);   // INT16_MAX
@@ -1796,7 +1801,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   }
 
   SECTION("int16_t with many elements (16+)") {
-    ordered_array<int16_t, int, 64, Mode> arr;
+    ordered_array<int16_t, int, std::less<int16_t>, 64, Mode> arr;
 
     // Insert 20 elements to test full AVX2 path (16 at a time)
     for (int16_t i = 0; i < 20; ++i) {
@@ -1819,7 +1824,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("uint16_t basic operations") {
-    ordered_array<uint16_t, int, 64, Mode> arr;
+    ordered_array<uint16_t, int, std::less<uint16_t>, 64, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);
@@ -1849,7 +1854,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
   }
 
   SECTION("uint16_t high values (tests sign bit handling)") {
-    ordered_array<uint16_t, int, 64, Mode> arr;
+    ordered_array<uint16_t, int, std::less<uint16_t>, 64, Mode> arr;
 
     // Values > 32767 have sign bit set in two's complement
     arr.insert(32768, 1);
@@ -1876,7 +1881,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with char types",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("unsigned char basic operations") {
-    ordered_array<unsigned char, int, 64, Mode> arr;
+    ordered_array<unsigned char, int, std::less<unsigned char>, 64, Mode> arr;
 
     arr.insert('A', 65);
     arr.insert('Z', 90);
@@ -1907,7 +1912,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with short types",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("unsigned short basic operations") {
-    ordered_array<unsigned short, int, 64, Mode> arr;
+    ordered_array<unsigned short, int, std::less<unsigned short>, 64, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);

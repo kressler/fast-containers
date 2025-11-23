@@ -31,12 +31,11 @@ enum class MoveMode {
   SIMD       // Use SIMD-accelerated moves (default)
 };
 
-// Concept to enforce that Key type supports comparison operations
-template <typename T>
-concept Comparable = requires(T a, T b) {
-  { a < b } -> std::convertible_to<bool>;
-  { a == b } -> std::convertible_to<bool>;
-};
+// Concept to enforce that a comparator is compatible with a key type
+template <typename Key, typename Compare>
+concept ComparatorCompatible = requires(Compare comp, Key a, Key b) {
+  { comp(a, b) } -> std::convertible_to<bool>;
+} && std::is_default_constructible_v<Compare>;
 
 // Concept for primitive types that have well-defined SIMD comparison semantics
 template <typename T>
@@ -65,23 +64,25 @@ concept SimdPrimitive =
 // Concept for types that can use SIMD-accelerated search
 // Only supports primitive types with well-defined SIMD comparison semantics
 template <typename T>
-concept SIMDSearchable =
-    Comparable<T> && std::is_trivially_copyable_v<T> && SimdPrimitive<T>;
+concept SIMDSearchable = std::is_trivially_copyable_v<T> && SimdPrimitive<T>;
 
 /**
  * A fixed-size ordered array that maintains key-value pairs in sorted order.
  * Keys and values are stored in separate arrays for better cache locality
  * and to enable SIMD optimizations.
  *
- * @tparam Key The key type (must be Comparable)
+ * @tparam Key The key type
  * @tparam Value The value type
+ * @tparam Compare The comparison function object type (must be
+ * default-constructible)
  * @tparam Length The maximum number of elements
  * @tparam SearchModeT The search mode (Binary, Linear, or SIMD)
  * @tparam MoveModeT The data movement mode (Standard or SIMD, defaults to SIMD)
  */
-template <Comparable Key, typename Value, std::size_t Length,
-          SearchMode SearchModeT = SearchMode::Binary,
+template <typename Key, typename Value, typename Compare = std::less<Key>,
+          std::size_t Length, SearchMode SearchModeT = SearchMode::Binary,
           MoveMode MoveModeT = MoveMode::SIMD>
+  requires ComparatorCompatible<Key, Compare>
 class ordered_array {
  private:
   // Forward declare iterator classes
@@ -89,7 +90,7 @@ class ordered_array {
   class ordered_array_iterator;
 
   // Allow different instantiations to access each other's private members
-  template <Comparable, typename, std::size_t, SearchMode, MoveMode>
+  template <typename, typename, typename, std::size_t, SearchMode, MoveMode>
   friend class ordered_array;
 
  public:
@@ -98,6 +99,7 @@ class ordered_array {
   using mapped_type = Value;
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
+  using key_compare = Compare;
 
   // Iterator types
   using iterator = ordered_array_iterator<false>;
@@ -105,10 +107,22 @@ class ordered_array {
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+  // Static assertions for SIMD mode requirements
+  static_assert(
+      SearchModeT != SearchMode::SIMD ||
+          (SIMDSearchable<Key> && (std::is_same_v<Compare, std::less<Key>> ||
+                                   std::is_same_v<Compare, std::greater<Key>>)),
+      "SearchMode::SIMD requires:\n"
+      "  1. Key type must be a primitive type (int8_t, uint8_t, int16_t, "
+      "uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double)\n"
+      "  2. Compare must be std::less<Key> or std::greater<Key>\n"
+      "For other types or custom comparators, use SearchMode::Binary or "
+      "SearchMode::Linear");
+
   /**
    * Default constructor - initializes an empty ordered array
    */
-  ordered_array() : size_(0) {}
+  ordered_array() : size_(0), comp_() {}
 
   /**
    * Copy constructor - creates a deep copy of another ordered array
@@ -339,9 +353,8 @@ class ordered_array {
    * Complexity: O(n) where n is the number of elements moved
    */
   template <std::size_t OutputLength>
-  void split_at(
-      iterator pos,
-      ordered_array<Key, Value, OutputLength, SearchModeT, MoveModeT>& output);
+  void split_at(iterator pos, ordered_array<Key, Value, Compare, OutputLength,
+                                            SearchModeT, MoveModeT>& output);
 
   /**
    * Append all elements from another array to the end of this array.
@@ -359,8 +372,8 @@ class ordered_array {
    * Complexity: O(n) where n is the size of other
    */
   template <std::size_t OtherLength>
-  void append(
-      ordered_array<Key, Value, OtherLength, SearchModeT, MoveModeT>&& other);
+  void append(ordered_array<Key, Value, Compare, OtherLength, SearchModeT,
+                            MoveModeT>&& other);
 
   /**
    * Transfer elements from the beginning of source array to the end of
@@ -380,9 +393,9 @@ class ordered_array {
    * Complexity: O(m) where m is count
    */
   template <std::size_t SourceLength>
-  void transfer_prefix_from(
-      ordered_array<Key, Value, SourceLength, SearchModeT, MoveModeT>& source,
-      size_type count);
+  void transfer_prefix_from(ordered_array<Key, Value, Compare, SourceLength,
+                                          SearchModeT, MoveModeT>& source,
+                            size_type count);
 
   /**
    * Transfer elements from the end of source array to the beginning of this
@@ -404,9 +417,9 @@ class ordered_array {
    * count
    */
   template <std::size_t SourceLength>
-  void transfer_suffix_from(
-      ordered_array<Key, Value, SourceLength, SearchModeT, MoveModeT>& source,
-      size_type count);
+  void transfer_suffix_from(ordered_array<Key, Value, Compare, SourceLength,
+                                          SearchModeT, MoveModeT>& source,
+                            size_type count);
 
  private:
 #ifdef __AVX2__
@@ -481,6 +494,7 @@ class ordered_array {
   alignas(64) std::array<Key, Length> keys_;
   alignas(64) std::array<Value, Length> values_;
   size_type size_;
+  [[no_unique_address]] Compare comp_;
 
   // Proxy class to represent a key-value pair reference
   template <bool IsConst>
@@ -624,14 +638,15 @@ class ordered_array {
 };
 
 // Non-member operator+ for iterator + difference
-template <Comparable Key, typename Value, std::size_t Length,
+template <typename Key, typename Value, typename Compare, std::size_t Length,
           SearchMode SearchModeT, MoveMode MoveModeT, bool IsConst>
-typename ordered_array<Key, Value, Length, SearchModeT,
+typename ordered_array<Key, Value, Compare, Length, SearchModeT,
                        MoveModeT>::template ordered_array_iterator<IsConst>
-operator+(typename ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::
+operator+(typename ordered_array<Key, Value, Compare, Length, SearchModeT,
+                                 MoveModeT>::
               template ordered_array_iterator<IsConst>::difference_type n,
           const typename ordered_array<
-              Key, Value, Length, SearchModeT,
+              Key, Value, Compare, Length, SearchModeT,
               MoveModeT>::template ordered_array_iterator<IsConst>& it) {
   return it + n;
 }
