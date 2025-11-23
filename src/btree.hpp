@@ -19,18 +19,20 @@ namespace fast_containers {
  * efficient sequential traversal. Internal nodes store only keys and pointers
  * to guide searches.
  *
- * @tparam Key The key type (must be ComparatorCompatible with std::less)
+ * @tparam Key The key type (must be ComparatorCompatible with Compare)
  * @tparam Value The value type
  * @tparam LeafNodeSize Maximum number of key-value pairs in each leaf node
  * @tparam InternalNodeSize Maximum number of children in each internal node
+ * @tparam Compare The comparison function object type (defaults to
+ * std::less<Key>)
  * @tparam SearchModeT Search mode passed through to ordered_array
  * @tparam MoveModeT Move mode passed through to ordered_array
  */
 template <typename Key, typename Value, std::size_t LeafNodeSize = 64,
-          std::size_t InternalNodeSize = 64,
+          std::size_t InternalNodeSize = 64, typename Compare = std::less<Key>,
           SearchMode SearchModeT = SearchMode::Binary,
           MoveMode MoveModeT = MoveMode::SIMD>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 class btree {
  public:
   // Type aliases
@@ -39,7 +41,7 @@ class btree {
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
   using allocator_type = std::allocator<value_type>;
-  using key_compare = std::less<Key>;
+  using key_compare = Compare;
 
   // Compile-time check: SIMD search mode requires a SIMD-searchable key type
   static_assert(
@@ -68,8 +70,7 @@ class btree {
   struct InternalNode;
 
   struct LeafNode {
-    ordered_array<Key, Value, LeafNodeSize, std::less<Key>, SearchModeT,
-                  MoveModeT>
+    ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT, MoveModeT>
         data;
     LeafNode* next_leaf;
     LeafNode* prev_leaf;
@@ -85,11 +86,11 @@ class btree {
    */
   struct InternalNode {
     union {
-      ordered_array<Key, LeafNode*, InternalNodeSize, std::less<Key>,
-                    SearchModeT, MoveModeT>
+      ordered_array<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT,
+                    MoveModeT>
           leaf_children;
-      ordered_array<Key, InternalNode*, InternalNodeSize, std::less<Key>,
-                    SearchModeT, MoveModeT>
+      ordered_array<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT,
+                    MoveModeT>
           internal_children;
     };
     bool children_are_leaves;
@@ -169,7 +170,7 @@ class btree {
 
   /**
    * Returns the key comparison object.
-   * Uses std::less<Key> for key comparisons.
+   * Uses Compare for key comparisons.
    * Complexity: O(1)
    */
   key_compare key_comp() const { return key_compare(); }
@@ -200,8 +201,8 @@ class btree {
     using value_type = btree::value_type;
     using pointer = value_type*;
     using reference =
-        typename ordered_array<Key, Value, LeafNodeSize, std::less<Key>,
-                               SearchModeT, MoveModeT>::iterator::reference;
+        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                               MoveModeT>::iterator::reference;
 
     iterator() : leaf_node_(nullptr) {}
 
@@ -210,8 +211,8 @@ class btree {
       return *leaf_it_.value();
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, std::less<Key>,
-                           SearchModeT, MoveModeT>::iterator::arrow_proxy
+    typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                           MoveModeT>::iterator::arrow_proxy
     operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
       return leaf_it_.value().operator->();
@@ -257,14 +258,13 @@ class btree {
     friend class btree;
 
     iterator(LeafNode* node,
-             typename ordered_array<Key, Value, LeafNodeSize, std::less<Key>,
+             typename ordered_array<Key, Value, LeafNodeSize, Compare,
                                     SearchModeT, MoveModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it) {}
 
     LeafNode* leaf_node_;
-    std::optional<
-        typename ordered_array<Key, Value, LeafNodeSize, std::less<Key>,
-                               SearchModeT, MoveModeT>::iterator>
+    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                         SearchModeT, MoveModeT>::iterator>
         leaf_it_;
   };
 
@@ -492,6 +492,9 @@ class btree {
   // Cached pointers to first and last leaf for O(1) begin()/rbegin()
   LeafNode* leftmost_leaf_;
   LeafNode* rightmost_leaf_;
+
+  // Comparator instance
+  [[no_unique_address]] Compare comp_;
 
   /**
    * Recursively deallocate all nodes in the tree.

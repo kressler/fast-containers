@@ -282,13 +282,13 @@ class ordered_array {
     const size_type index = it.index();
 
     // Debug assertions: verify sorted order is maintained (no duplicates)
-    // If not first element: previous key < new_key (strict inequality)
-    assert(index == 0 || keys_[index - 1] < new_key &&
+    // If not first element: comp_(previous key, new_key) (strict inequality)
+    assert(index == 0 || comp_(keys_[index - 1], new_key) &&
                              "New key violates sorted order (not greater than "
                              "previous key)");
 
-    // If not last element: new_key < next key (strict inequality)
-    assert(index == size_ - 1 || new_key < keys_[index + 1] &&
+    // If not last element: comp_(new_key, next key) (strict inequality)
+    assert(index == size_ - 1 || comp_(new_key, keys_[index + 1]) &&
                                      "New key violates sorted order (not less "
                                      "than next key)");
 
