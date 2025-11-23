@@ -98,6 +98,10 @@ add_subdirectory(third_party/abseil-cpp)
 add_library(lyra INTERFACE)
 target_include_directories(lyra INTERFACE third_party/lyra/include)
 
+# Add ankerl::unordered_dense (header-only)
+add_library(unordered_dense INTERFACE)
+target_include_directories(unordered_dense INTERFACE third_party/unordered_dense/include)
+
 # Enable testing
 enable_testing()
 
