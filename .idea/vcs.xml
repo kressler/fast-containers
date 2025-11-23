@@ -6,5 +6,6 @@
     <mapping directory="$PROJECT_DIR$/third_party/benchmark" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/catch2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/lyra" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/unordered_dense" vcs="Git" />
   </component>
 </project>
