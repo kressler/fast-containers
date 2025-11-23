@@ -113,13 +113,13 @@ class ordered_array {
   // Static assertions for SIMD mode requirements
   static_assert(
       SearchModeT != SearchMode::SIMD ||
-          (SIMDSearchable<Key> && std::is_same_v<Compare, std::less<Key>>),
+          (SIMDSearchable<Key> && (std::is_same_v<Compare, std::less<Key>> ||
+                                   std::is_same_v<Compare, std::greater<Key>>)),
       "SearchMode::SIMD requires:\n"
       "  1. Key type must be a primitive type (int8_t, uint8_t, int16_t, "
       "uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double)\n"
-      "  2. Compare must be std::less<Key> (ascending order only)\n"
-      "For descending order (std::greater) or custom comparators, use "
-      "SearchMode::Binary or SearchMode::Linear");
+      "  2. Compare must be std::less<Key> or std::greater<Key>\n"
+      "For custom comparators, use SearchMode::Binary or SearchMode::Linear");
 
   /**
    * Default constructor - initializes an empty ordered array

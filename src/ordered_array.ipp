@@ -682,6 +682,7 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
 
   // Check if type is unsigned
   constexpr bool is_unsigned = std::is_unsigned_v<K>;
+  constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
 
   if constexpr (is_unsigned) {
     // Flip sign bit: converts unsigned comparison to signed comparison
@@ -702,11 +703,19 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
     }
 
-    // Compare: keys_vec < search_vec (returns 0xFF where true)
-    __m256i cmp_lt = _mm256_cmpgt_epi8(search_vec_256, keys_vec);
+    // For ascending (std::less): find first position where key >= search_key
+    //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
+    // For descending (std::greater): find first position where key <= search_key
+    //   Check: keys_vec > search_vec
+    __m256i cmp;
+    if constexpr (is_ascending) {
+      cmp = _mm256_cmpgt_epi8(search_vec_256, keys_vec);
+    } else {
+      cmp = _mm256_cmpgt_epi8(keys_vec, search_vec_256);
+    }
 
-    // Check if any key is >= search_key
-    int mask = _mm256_movemask_epi8(cmp_lt);
+    // Check if any key satisfies the termination condition
+    int mask = _mm256_movemask_epi8(cmp);
     if (mask != static_cast<int>(0xFFFFFFFF)) {
       // Each 1-byte element contributes 1 bit to the mask
       size_type offset = std::countr_one(static_cast<unsigned int>(mask));
@@ -725,9 +734,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       keys_vec = _mm_xor_si128(keys_vec, flip_mask);
     }
 
-    __m128i cmp_lt = _mm_cmpgt_epi8(search_vec_128, keys_vec);
+    __m128i cmp;
+    if constexpr (is_ascending) {
+      cmp = _mm_cmpgt_epi8(search_vec_128, keys_vec);
+    } else {
+      cmp = _mm_cmpgt_epi8(keys_vec, search_vec_128);
+    }
 
-    int mask = _mm_movemask_epi8(cmp_lt);
+    int mask = _mm_movemask_epi8(cmp);
     if (mask != static_cast<int>(0xFFFF)) {
       size_type offset = std::countr_one(static_cast<unsigned int>(mask));
       return keys_.begin() + i + offset;
@@ -765,6 +779,7 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
 
   // Check if type is unsigned
   constexpr bool is_unsigned = std::is_unsigned_v<K>;
+  constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
 
   if constexpr (is_unsigned) {
     // Flip sign bit: converts unsigned comparison to signed comparison
@@ -785,11 +800,19 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
     }
 
-    // Compare: keys_vec < search_vec (returns 0xFFFF where true)
-    __m256i cmp_lt = _mm256_cmpgt_epi16(search_vec_256, keys_vec);
+    // For ascending (std::less): find first position where key >= search_key
+    //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
+    // For descending (std::greater): find first position where key <= search_key
+    //   Check: keys_vec > search_vec
+    __m256i cmp;
+    if constexpr (is_ascending) {
+      cmp = _mm256_cmpgt_epi16(search_vec_256, keys_vec);
+    } else {
+      cmp = _mm256_cmpgt_epi16(keys_vec, search_vec_256);
+    }
 
-    // Check if any key is >= search_key
-    int mask = _mm256_movemask_epi8(cmp_lt);
+    // Check if any key satisfies the termination condition
+    int mask = _mm256_movemask_epi8(cmp);
     if (mask != static_cast<int>(0xFFFFFFFF)) {
       // Each 2-byte element contributes 2 bits to the mask
       size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
@@ -808,9 +831,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       keys_vec = _mm_xor_si128(keys_vec, flip_mask);
     }
 
-    __m128i cmp_lt = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+    __m128i cmp;
+    if constexpr (is_ascending) {
+      cmp = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+    } else {
+      cmp = _mm_cmpgt_epi16(keys_vec, search_vec_128);
+    }
 
-    int mask = _mm_movemask_epi8(cmp_lt);
+    int mask = _mm_movemask_epi8(cmp);
     if (mask != static_cast<int>(0xFFFF)) {
       size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
       return keys_.begin() + i + offset;
@@ -829,9 +857,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       keys_vec = _mm_xor_si128(keys_vec, flip_mask);
     }
 
-    __m128i cmp_lt = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+    __m128i cmp;
+    if constexpr (is_ascending) {
+      cmp = _mm_cmpgt_epi16(search_vec_128, keys_vec);
+    } else {
+      cmp = _mm_cmpgt_epi16(keys_vec, search_vec_128);
+    }
 
-    int mask = _mm_movemask_epi8(cmp_lt);
+    int mask = _mm_movemask_epi8(cmp);
     if ((mask & 0xFF) != 0xFF) {
       size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 2;
       return keys_.begin() + i + offset;
@@ -867,20 +900,32 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
     // Use floating-point comparison instructions
     __m256 search_vec_256 = _mm256_set1_ps(key);
 
+    // Detect comparator type at compile-time
+    constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
+
     size_type i = 0;
     // Process 8 floats at a time with AVX2
     for (; i + 8 <= size_; i += 8) {
       __m256 keys_vec =
           _mm256_load_ps(reinterpret_cast<const float*>(&keys_[i]));
 
-      // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
-      // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
-      __m256 cmp_lt = _mm256_cmp_ps(keys_vec, search_vec_256, _CMP_LT_OQ);
+      // For ascending (std::less): find first position where key >= search_key
+      //   Check: keys_vec < search_vec, find first false
+      // For descending (std::greater): find first position where key <= search_key
+      //   Check: keys_vec > search_vec, find first false
+      __m256 cmp;
+      if constexpr (is_ascending) {
+        // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
+        cmp = _mm256_cmp_ps(keys_vec, search_vec_256, _CMP_LT_OQ);
+      } else {
+        // _CMP_GT_OQ: greater-than, ordered, quiet (matches C++ operator>)
+        cmp = _mm256_cmp_ps(keys_vec, search_vec_256, _CMP_GT_OQ);
+      }
 
       // movemask_ps returns 8 bits (one per float)
-      int mask = _mm256_movemask_ps(cmp_lt);
+      int mask = _mm256_movemask_ps(cmp);
       if (mask != 0xFF) {
-        // Found first position where key >= search_key
+        // Found first position where comparison is false
         size_type offset = std::countr_one(static_cast<unsigned int>(mask));
         return keys_.begin() + i + offset;
       }
@@ -890,9 +935,15 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
     if (i + 4 <= size_) {
       __m128 search_vec_128 = _mm_set1_ps(key);
       __m128 keys_vec = _mm_load_ps(reinterpret_cast<const float*>(&keys_[i]));
-      __m128 cmp_lt = _mm_cmp_ps(keys_vec, search_vec_128, _CMP_LT_OQ);
 
-      int mask = _mm_movemask_ps(cmp_lt);
+      __m128 cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm_cmp_ps(keys_vec, search_vec_128, _CMP_LT_OQ);
+      } else {
+        cmp = _mm_cmp_ps(keys_vec, search_vec_128, _CMP_GT_OQ);
+      }
+
+      int mask = _mm_movemask_ps(cmp);
       if (mask != 0x0F) {
         size_type offset = std::countr_one(static_cast<unsigned int>(mask));
         return keys_.begin() + i + offset;
@@ -913,6 +964,7 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
 
     // Check if type is unsigned (uint32_t or unsigned int)
     constexpr bool is_unsigned = std::is_unsigned_v<K>;
+    constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
 
     if constexpr (is_unsigned) {
       // Flip sign bit: converts unsigned comparison to signed comparison
@@ -934,11 +986,19 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
         keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
       }
 
-      // Compare: keys_vec < search_vec (returns 0xFFFFFFFF where true)
-      __m256i cmp_lt = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+      // For ascending (std::less): find first position where key >= search_key
+      //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
+      // For descending (std::greater): find first position where key <= search_key
+      //   Check: keys_vec > search_vec
+      __m256i cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm256_cmpgt_epi32(search_vec_256, keys_vec);
+      } else {
+        cmp = _mm256_cmpgt_epi32(keys_vec, search_vec_256);
+      }
 
-      // Check if any key is >= search_key
-      int mask = _mm256_movemask_epi8(cmp_lt);
+      // Check if any key satisfies the termination condition
+      int mask = _mm256_movemask_epi8(cmp);
       if (mask != static_cast<int>(0xFFFFFFFF)) {
         // Each 4-byte element contributes 4 bits to the mask
         size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
@@ -957,9 +1017,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
         keys_vec = _mm_xor_si128(keys_vec, flip_mask);
       }
 
-      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      __m128i cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      } else {
+        cmp = _mm_cmpgt_epi32(keys_vec, search_vec_128);
+      }
 
-      int mask = _mm_movemask_epi8(cmp_lt);
+      int mask = _mm_movemask_epi8(cmp);
       if (mask != static_cast<int>(0xFFFF)) {
         size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
         return keys_.begin() + i + offset;
@@ -978,9 +1043,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
         keys_vec = _mm_xor_si128(keys_vec, flip_mask);
       }
 
-      __m128i cmp_lt = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      __m128i cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm_cmpgt_epi32(search_vec_128, keys_vec);
+      } else {
+        cmp = _mm_cmpgt_epi32(keys_vec, search_vec_128);
+      }
 
-      int mask = _mm_movemask_epi8(cmp_lt);
+      int mask = _mm_movemask_epi8(cmp);
       if ((mask & 0xFF) != 0xFF) {
         size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 4;
         return keys_.begin() + i + offset;
@@ -1017,20 +1087,32 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
     // Use floating-point comparison instructions
     __m256d search_vec_256 = _mm256_set1_pd(key);
 
+    // Detect comparator type at compile-time
+    constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
+
     size_type i = 0;
     // Process 4 doubles at a time with AVX2
     for (; i + 4 <= size_; i += 4) {
       __m256d keys_vec =
           _mm256_load_pd(reinterpret_cast<const double*>(&keys_[i]));
 
-      // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
-      // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
-      __m256d cmp_lt = _mm256_cmp_pd(keys_vec, search_vec_256, _CMP_LT_OQ);
+      // For ascending (std::less): find first position where key >= search_key
+      //   Check: keys_vec < search_vec, find first false
+      // For descending (std::greater): find first position where key <= search_key
+      //   Check: keys_vec > search_vec, find first false
+      __m256d cmp;
+      if constexpr (is_ascending) {
+        // _CMP_LT_OQ: less-than, ordered, quiet (matches C++ operator<)
+        cmp = _mm256_cmp_pd(keys_vec, search_vec_256, _CMP_LT_OQ);
+      } else {
+        // _CMP_GT_OQ: greater-than, ordered, quiet (matches C++ operator>)
+        cmp = _mm256_cmp_pd(keys_vec, search_vec_256, _CMP_GT_OQ);
+      }
 
       // movemask_pd returns 4 bits (one per double)
-      int mask = _mm256_movemask_pd(cmp_lt);
+      int mask = _mm256_movemask_pd(cmp);
       if (mask != 0x0F) {
-        // Found first position where key >= search_key
+        // Found first position where comparison is false
         size_type offset = std::countr_one(static_cast<unsigned int>(mask));
         return keys_.begin() + i + offset;
       }
@@ -1041,9 +1123,15 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
       __m128d search_vec_128 = _mm_set1_pd(key);
       __m128d keys_vec =
           _mm_load_pd(reinterpret_cast<const double*>(&keys_[i]));
-      __m128d cmp_lt = _mm_cmp_pd(keys_vec, search_vec_128, _CMP_LT_OQ);
 
-      int mask = _mm_movemask_pd(cmp_lt);
+      __m128d cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm_cmp_pd(keys_vec, search_vec_128, _CMP_LT_OQ);
+      } else {
+        cmp = _mm_cmp_pd(keys_vec, search_vec_128, _CMP_GT_OQ);
+      }
+
+      int mask = _mm_movemask_pd(cmp);
       if (mask != 0x03) {
         size_type offset = std::countr_one(static_cast<unsigned int>(mask));
         return keys_.begin() + i + offset;
@@ -1064,6 +1152,7 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
 
     // Check if type is unsigned (uint64_t or unsigned long)
     constexpr bool is_unsigned = std::is_unsigned_v<K>;
+    constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
 
     if constexpr (is_unsigned) {
       // Flip sign bit: converts unsigned comparison to signed comparison
@@ -1085,11 +1174,19 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
         keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
       }
 
-      // Compare: keys_vec < search_vec (returns 0xFFFFFFFFFFFFFFFF where true)
-      __m256i cmp_lt = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+      // For ascending (std::less): find first position where key >= search_key
+      //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
+      // For descending (std::greater): find first position where key <= search_key
+      //   Check: keys_vec > search_vec
+      __m256i cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm256_cmpgt_epi64(search_vec_256, keys_vec);
+      } else {
+        cmp = _mm256_cmpgt_epi64(keys_vec, search_vec_256);
+      }
 
-      // Check if any key is >= search_key
-      int mask = _mm256_movemask_epi8(cmp_lt);
+      // Check if any key satisfies the termination condition
+      int mask = _mm256_movemask_epi8(cmp);
       if (mask != static_cast<int>(0xFFFFFFFF)) {
         // Each 8-byte element contributes 8 bits to the mask
         size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
@@ -1109,9 +1206,14 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
         keys_vec = _mm_xor_si128(keys_vec, flip_mask);
       }
 
-      __m128i cmp_lt = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+      __m128i cmp;
+      if constexpr (is_ascending) {
+        cmp = _mm_cmpgt_epi64(search_vec_128, keys_vec);
+      } else {
+        cmp = _mm_cmpgt_epi64(keys_vec, search_vec_128);
+      }
 
-      int mask = _mm_movemask_epi8(cmp_lt);
+      int mask = _mm_movemask_epi8(cmp);
       if (mask != static_cast<int>(0xFFFF)) {
         size_type offset = std::countr_one(static_cast<unsigned int>(mask)) / 8;
         return keys_.begin() + i + offset;
