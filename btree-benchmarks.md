@@ -110,3 +110,146 @@ btree_K_V_L_I_S_M --> btree::btree_map<std::array<int64_t, K/8>, std::array<std:
             btree_8_32_64_64_linear_simd,     723355006228,     177645178800,      90626830612,       5722241072
               btree_8_32_64_64_simd_simd,     737940629168,     191643955314,     100248790560,       5644447848
 ```
+
+Adding in std::map and std::unordered_map:
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 absl_16_256 absl_16_32 absl_32_256 absl_32_32 absl_8_256 absl_8_32 btree_16_256_16_128_linear_simd btree_16_32_128_128_linear_simd btree_16_32_16_128_linear_simd btree_32_256_16_128_linear_simd btree_32_32_128_128_linear_simd btree_32_32_16_128_linear_simd btree_8_256_16_128_linear_simd btree_8_256_16_128_simd_simd btree_8_256_64_64_simd_simd btree_8_32_16_128_linear_simd btree_8_32_16_128_simd_simd btree_8_32_64_64_linear_simd btree_8_32_64_64_simd_simd map_16_256 map_16_32 map_32_256 map_32_32 map_8_256 map_8_32 unordered_map_16_256 unordered_map_16_32 unordered_map_32_256 unordered_map_32_32 unordered_map_8_256 unordered_map_8_32
+```
+
+```
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+                             absl_16_256,     114571107912,     145597000480,      58153973184,       3064704172
+                              absl_16_32,      57974943192,      98886829406,      37979872380,       2485753294
+                             absl_32_256,     116333610486,     145850589208,      57891330358,       3024381974
+                              absl_32_32,      62813691646,     110763603054,      43123359842,       2969809628
+                              absl_8_256,      92022364896,     103096716512,      39556127612,       3024733704
+                               absl_8_32,      41719089292,      75192411918,      26867544906,       2024429020
+         btree_16_256_16_128_linear_simd,      60785610346,      62361517996,      21162689428,       1025408822
+         btree_16_32_128_128_linear_simd,      45553933686,      53098247032,      17564404760,        184597152
+          btree_16_32_16_128_linear_simd,      41251462302,      57211942970,      19026783690,        958966702
+         btree_32_256_16_128_linear_simd,      65751015192,      71978648584,      25855660026,       1100732728
+         btree_32_32_128_128_linear_simd,      53766750510,      62382479846,      21461469800,        187935510
+          btree_32_32_16_128_linear_simd,      42838757232,      64422382130,      22363739666,        945363914
+          btree_8_256_16_128_linear_simd,      54561601558,      52777902194,      17326597030,        998225380
+            btree_8_256_16_128_simd_simd,      54333923550,      52850684226,      17232192392,        996037140
+             btree_8_256_64_64_simd_simd,      74894594732,      49721085104,      15886743848,        300861376
+           btree_8_32_16_128_linear_simd,      35006752954,      48365231268,      16131990336,        946641430
+             btree_8_32_16_128_simd_simd,      34530411832,      48761186598,      15803308528,        929974664
+            btree_8_32_64_64_linear_simd,      33576292102,      42480034860,      13140615902,        267032872
+              btree_8_32_64_64_simd_simd,      34629436594,      44701957606,      14241085436,        268589528
+                              map_16_256,      89769638660,     148853563184,      63004002362,      10778829124
+                               map_16_32,      79413173516,     139932461216,      60545189376,      10246450970
+                              map_32_256,      91745806618,     153359510288,      64266537112,      10742581860
+                               map_32_32,      80471839472,     143892023798,      60730572166,      10421776220
+                               map_8_256,      85073365676,     145100797408,      62324892244,      10599790734
+                                map_8_32,      76503876374,     135710381438,      59339316340,      10082704386
+                    unordered_map_16_256,      50213312590,      64311725118,      20146460572,       9508393828
+                     unordered_map_16_32,      39751688098,      54618885098,      14888196318,       7903253352
+                    unordered_map_32_256,      49932157410,      64672840886,      18717353498,       9577630986
+                     unordered_map_32_32,      41656469112,      56822600538,      15646458062,       8521191622
+                     unordered_map_8_256,      45078181546,      56435619236,      16076080532,       9452581298
+                      unordered_map_8_32,      38060633056,      50489346758,      14241422818,       7167687118
+```
+
+
+## Some work on tuning
+
+### Exploring 8 byte keys, 32 byte values
+
+**Varying internal node size, holding leaf node size at 16 elements:**
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 btree_8_32_16_128_binary_simd btree_8_32_16_128_linear_simd btree_8_32_16_128_simd_simd btree_8_32_16_160_binary_simd btree_8_32_16_160_linear_simd btree_8_32_16_160_simd_simd btree_8_32_16_256_binary_simd btree_8_32_16_256_linear_simd btree_8_32_16_256_simd_simd btree_8_32_16_64_binary_simd btree_8_32_16_64_linear_simd btree_8_32_16_64_simd_simd btree_8_32_16_96_binary_simd btree_8_32_16_96_linear_simd btree_8_32_16_96_simd_simd
+```
+
+```
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+           btree_8_32_16_128_binary_simd,      45478404046,      67161009336,      24066543510,        964550352
+           btree_8_32_16_128_linear_simd,      37053161138,      50553665408,      16727803616,        980837746
+             btree_8_32_16_128_simd_simd,      36084635880,      50926677266,      16592552330,        979435620
+           btree_8_32_16_160_binary_simd,      45276363840,      67537931092,      24501093158,        959849104
+           btree_8_32_16_160_linear_simd,      37164904926,      51371948168,      16834634812,        984089880
+             btree_8_32_16_160_simd_simd,      36285268418,      51729146456,      17056771092,        978820866
+           btree_8_32_16_256_binary_simd,      44967977788,      66895940542,      24000113868,        954451366
+           btree_8_32_16_256_linear_simd,      38322988854,      53147632508,      17788802346,        981989020
+             btree_8_32_16_256_simd_simd,      36886069124,      52650678376,      17775435688,        978108090
+            btree_8_32_16_64_binary_simd,      45909657428,      68415864098,      24689685582,        967109668
+            btree_8_32_16_64_linear_simd,      37065701426,      51262592710,      16854521072,        978662086
+              btree_8_32_16_64_simd_simd,      37334468434,      52439961744,      17496553680,        985627360
+            btree_8_32_16_96_binary_simd,      45628529482,      67739555376,      24219419512,        964146058
+            btree_8_32_16_96_linear_simd,      37461737370,      50810241070,      16701792358,        976284228
+              btree_8_32_16_96_simd_simd,      36803040512,      51548547942,      16904510490,        977487386
+```
+
+It looks like linear simd is the fastest, and that internal node size 128 is fastest for finds, fastest for inserts, and one of the fastest for erases.
+
+** Varying leaf node size, and locking internal node size at 128 elements:**
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 btree_8_32_128_128_binary_simd btree_8_32_128_128_linear_simd btree_8_32_128_128_simd_simd btree_8_32_16_128_binary_simd btree_8_32_16_128_linear_simd btree_8_32_16_128_simd_simd btree_8_32_24_128_binary_simd btree_8_32_24_128_linear_simd btree_8_32_24_128_simd_simd btree_8_32_32_128_binary_simd btree_8_32_32_128_linear_simd btree_8_32_32_128_simd_simd btree_8_32_48_128_binary_simd btree_8_32_48_128_linear_simd btree_8_32_48_128_simd_simd btree_8_32_64_128_binary_simd btree_8_32_64_128_linear_simd btree_8_32_64_128_simd_simd btree_8_32_96_128_binary_simd btree_8_32_96_128_linear_simd btree_8_32_96_128_simd_simd
+```
+
+```
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+          btree_8_32_128_128_binary_simd,      43252029816,      53675082872,      18148383898,        164467418
+          btree_8_32_128_128_linear_simd,      39711096212,      43944703996,      13583234294,        155936682
+            btree_8_32_128_128_simd_simd,      39160124954,      47123245914,      14451998486,        159569208
+           btree_8_32_16_128_binary_simd,      45343246430,      67451158774,      24170756944,        962191330
+           btree_8_32_16_128_linear_simd,      36954515442,      50608244078,      16595440392,        983236548
+             btree_8_32_16_128_simd_simd,      35868905914,      50711074902,      16516740082,        979366600
+           btree_8_32_24_128_binary_simd,      42579567854,      62215453520,      22219445060,        667851936
+           btree_8_32_24_128_linear_simd,      37397884078,      49460235268,      16751736896,        681557982
+             btree_8_32_24_128_simd_simd,      37612792298,      49556175856,      16093833666,        662253768
+           btree_8_32_32_128_binary_simd,      41893361222,      61394520732,      22017513586,        513357636
+           btree_8_32_32_128_linear_simd,      36502298952,      49136195752,      15909901010,        529045270
+             btree_8_32_32_128_simd_simd,      36601530026,      47986105224,      15964483114,        503650534
+           btree_8_32_48_128_binary_simd,      40531948114,      59807526260,      21038047536,        361668200
+           btree_8_32_48_128_linear_simd,      35778736384,      47215167940,      14967222586,        376613036
+             btree_8_32_48_128_simd_simd,      36140668934,      47302968214,      15008318148,        352800558
+           btree_8_32_64_128_binary_simd,      40531659998,      57106742992,      19786420088,        268481986
+           btree_8_32_64_128_linear_simd,      36138691222,      45610094206,      14357430410,        286729514
+             btree_8_32_64_128_simd_simd,      36290095942,      47348100324,      14776114298,        286145836
+           btree_8_32_96_128_binary_simd,      41355593966,      55332691196,      19188619610,        196321576
+           btree_8_32_96_128_linear_simd,      37312876632,      45083514208,      13964307280,        195732730
+             btree_8_32_96_128_simd_simd,      37197160930,      46948779708,      14786708324,        200716348
+```
+
+It looks like linear simd is fastest. A leaf node size of 64 or 96 seems to offer a reasonable compromise among inserts, finds, and erases.
+
+
+Now, let's assume that for key size 8, internal node size stays at 128, and see what leaf size should be for 256 byte values.
+
+** Varying leaf size for 256 byte values:**
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 btree_8_256_16_128_binary_simd btree_8_256_16_128_linear_simd btree_8_256_16_128_simd_simd btree_8_256_24_128_binary_simd btree_8_256_24_128_linear_simd btree_8_256_24_128_simd_simd btree_8_256_32_128_binary_simd btree_8_256_32_128_linear_simd btree_8_256_32_128_simd_simd btree_8_256_48_128_binary_simd btree_8_256_48_128_linear_simd btree_8_256_48_128_simd_simd btree_8_256_64_128_binary_simd btree_8_256_64_128_linear_simd btree_8_256_64_128_simd_simd btree_8_256_96_128_binary_simd btree_8_256_96_128_linear_simd btree_8_256_96_128_simd_simd
+```
+
+```
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+          btree_8_256_16_128_binary_simd,      69315775622,      71375260206,      25925146846,        987251234
+          btree_8_256_16_128_linear_simd,      61890641014,      54264434894,      17978441324,       1028142796
+            btree_8_256_16_128_simd_simd,      61638995182,      54366748000,      17584474824,       1020143344
+          btree_8_256_24_128_binary_simd,      69926299512,      67696694296,      24342563296,        683272432
+          btree_8_256_24_128_linear_simd,      64702394332,      52885719084,      17359743392,        709959440
+            btree_8_256_24_128_simd_simd,      64568645166,      53307803992,      17238805596,        696242548
+          btree_8_256_32_128_binary_simd,      73128465548,      65915424266,      23734277320,        524345416
+          btree_8_256_32_128_linear_simd,      67761236122,      52867890198,      17196713902,        550213840
+            btree_8_256_32_128_simd_simd,      68289584562,      52381273290,      16766296886,        533305402
+          btree_8_256_48_128_binary_simd,      81202187896,      63922678316,      22692935452,        361361724
+          btree_8_256_48_128_linear_simd,      76227018488,      51357549542,      16507435710,        384112722
+            btree_8_256_48_128_simd_simd,      76594143586,      50775131242,      16164306724,        392682320
+          btree_8_256_64_128_binary_simd,      90243622970,      62002151018,      21764639912,        289287572
+          btree_8_256_64_128_linear_simd,      84746679872,      50914711918,      16531792324,        304404380
+            btree_8_256_64_128_simd_simd,      85251011358,      51466656596,      16457028670,        302134744
+          btree_8_256_96_128_binary_simd,     108504446228,      61600577596,      21278079206,        210341034
+          btree_8_256_96_128_linear_simd,     102609575698,      49269195320,      15710331312,        219162878
+            btree_8_256_96_128_simd_simd,     101629657108,      52100929928,      16451985110,        262961950
+```
+
+As before, linear simd is fastest.
+
+There isn't an obvious winner here in terms of leaf node size, with a pretty strong trade-off between inserts and finds. The erase behavior is also puzzling as it keeps getting
+better with larger leaf node sizes (possibly because there are fewer merges/rebalances). Between 16 and 32 entries per leaf node is probably a reasonable range, as above that
+insert performance degrades pretty quickly.

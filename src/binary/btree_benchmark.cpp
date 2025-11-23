@@ -42,23 +42,42 @@ struct std::hash<std::array<int64_t, N>> {
 template <typename T>
 TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
                           size_t tree_size, size_t batches, size_t batch_size) {
+  auto get_dist = [&]() -> auto {
+    if constexpr (std::is_fundamental_v<typename T::key_type>) {
+      if (tree_size > std::numeric_limits<typename T::key_type>::max() / 2) {
+        throw std::runtime_error("Tree size too large for key data type");
+      }
+      return std::uniform_int_distribution<typename T::key_type>(
+          std::numeric_limits<typename T::key_type>::min(),
+          std::numeric_limits<typename T::key_type>::max());
+    } else {
+      if (tree_size > std::numeric_limits<int>::max() / 2) {
+        throw std::runtime_error("Tree size too large for key data type");
+      }
+      return std::uniform_int_distribution<int>(
+          std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+    }
+  };
   std::mt19937 rng(seed);
-  std::uniform_int_distribution<int> dist(std::numeric_limits<int>::min(),
-                                          std::numeric_limits<int>::max());
+  auto dist = get_dist();
   TimingStats stats;
   unsigned int dummy;
   std::unordered_set<typename T::key_type> keys{};
 
   auto insert = [&]() -> void {
+    bool inserted;
     typename T::key_type key;
-    if constexpr (std::is_same_v<typename T::key_type, int64_t>) {
-      key = dist(rng);
-    } else {
-      for (int i = 0; i < key.size(); ++i) {
-        key[i] = dist(rng);
+    do {
+      if constexpr (std::is_fundamental_v<typename T::key_type>) {
+        key = dist(rng);
+      } else {
+        for (int i = 0; i < key.size(); ++i) {
+          key[i] = dist(rng);
+        }
       }
-    }
-    keys.insert(key);
+      auto [_, i] = keys.insert(key);
+      inserted = i;
+    } while (!inserted);
     uint64_t start = __rdtscp(&dummy);
     tree.insert({key, {}});
     uint64_t stop = __rdtscp(&dummy);
@@ -135,12 +154,6 @@ int main(int argc, char** argv) {
 
   std::map<std::string, LambdaType> benchmarkers{
       /* 256 byte values */
-      {"btree_8_256_64_64_simd_simd",
-       [&]() -> TimingStats {
-         return benchmarker(
-             fast_containers::btree<int64_t, std::array<std::byte, 256>, 64, 64,
-                                    fast_containers::SearchMode::SIMD>{});
-       }},
       {"btree_8_256_16_128_simd_simd",
        [&]() -> TimingStats {
          return benchmarker(
@@ -158,6 +171,106 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(
              fast_containers::btree<int64_t, std::array<std::byte, 256>, 16,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_256_24_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 24,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_24_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 24,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_24_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 24,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_256_32_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 32,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_32_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 32,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_32_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 32,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_256_48_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 48,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_48_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 48,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_48_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 48,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_256_64_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 64,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_64_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 64,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_64_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 64,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_256_96_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 96,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_256_96_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 96,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_256_96_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 256>, 96,
                                     128,
                                     fast_containers::SearchMode::Linear>{});
        }},
@@ -364,6 +477,189 @@ int main(int argc, char** argv) {
              fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 128,
                                     fast_containers::SearchMode::Linear>{});
        }},
+      {"btree_8_32_16_64_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 64,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_16_64_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 64,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_16_64_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 64,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_16_96_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 96,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_16_96_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 96,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_16_96_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 96,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_16_160_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 160,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_16_160_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 160,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_16_160_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 160,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_16_256_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 256,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_16_256_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 256,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_16_256_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 16, 256,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_24_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 24, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_24_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 24, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_24_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 24, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_32_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 32, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_32_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 32, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_32_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 32, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_48_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 48, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_48_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 48, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_48_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 48, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_64_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_64_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_64_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 64, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_96_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 96, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_96_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 96, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_96_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 96, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_8_32_128_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 128,
+                                    128, fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_8_32_128_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 128,
+                                    128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_8_32_128_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int64_t, std::array<std::byte, 32>, 128,
+                                    128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+
       {"absl_8_32",
        [&]() -> TimingStats {
          return benchmarker(
@@ -378,6 +674,110 @@ int main(int argc, char** argv) {
        [&]() -> TimingStats {
          return benchmarker(
              std::unordered_map<std::int64_t, std::array<std::byte, 32>>{});
+       }},
+
+      {"btree_4_32_64_64_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_4_32_64_64_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_4_32_64_64_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_4_32_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_4_32_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_4_32_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int32_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"absl_4_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             absl::btree_map<std::int32_t, std::array<std::byte, 32>>{});
+       }},
+      {"map_4_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::map<std::int32_t, std::array<std::byte, 32>>{});
+       }},
+      {"unordered_map_4_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::unordered_map<std::int32_t, std::array<std::byte, 32>>{});
+       }},
+
+      {"btree_2_32_64_64_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_2_32_64_64_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_2_32_64_64_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 64, 64,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"btree_2_32_16_128_simd_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::SIMD>{});
+       }},
+      {"btree_2_32_16_128_binary_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Binary>{});
+       }},
+      {"btree_2_32_16_128_linear_simd",
+       [&]() -> TimingStats {
+         return benchmarker(
+             fast_containers::btree<int16_t, std::array<std::byte, 32>, 16, 128,
+                                    fast_containers::SearchMode::Linear>{});
+       }},
+      {"absl_2_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             absl::btree_map<std::int16_t, std::array<std::byte, 32>>{});
+       }},
+      {"map_2_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::map<std::int16_t, std::array<std::byte, 32>>{});
+       }},
+      {"unordered_map_2_32",
+       [&]() -> TimingStats {
+         return benchmarker(
+             std::unordered_map<std::int16_t, std::array<std::byte, 32>>{});
        }},
   };
 
@@ -414,6 +814,10 @@ int main(int argc, char** argv) {
     std::cout << cli << std::endl;
     print_valid_benchmarks();
     return 0;
+  }
+
+  if (batch_size > tree_size) {
+    throw std::runtime_error("Batch size must be less than tree size");
   }
 
   for (const auto& name : names) {
