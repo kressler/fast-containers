@@ -217,6 +217,7 @@ It looks like linear simd is the fastest, and that internal node size 128 is fas
 
 It looks like linear simd is fastest. A leaf node size of 64 or 96 seems to offer a reasonable compromise among inserts, finds, and erases.
 
+## Exploring 8 byte keys, 256 byte values
 
 Now, let's assume that for key size 8, internal node size stays at 128, and see what leaf size should be for 256 byte values.
 
