@@ -34,7 +34,7 @@ static void BM_OrderedArray_RemoveInsert(benchmark::State& state) {
   auto keys = GenerateUniqueKeys<Size>();
 
   // Pre-populate once outside the timing loop
-  ordered_array<int, int, Size, search_mode, move_mode> arr;
+  ordered_array<int, int, Size, std::less<int>, search_mode, move_mode> arr;
   for (std::size_t i = 0; i < Size - 1; ++i) {
     arr.insert(keys[i], i);
   }
@@ -60,7 +60,7 @@ static void BM_OrderedArray_Find(benchmark::State& state) {
   auto keys = GenerateUniqueKeys<Size>();
 
   // Pre-populate the array
-  ordered_array<int, int, Size, search_mode, move_mode> arr;
+  ordered_array<int, int, Size, std::less<int>, search_mode, move_mode> arr;
   for (std::size_t i = 0; i < Size; ++i) {
     arr.insert(keys[i], i);
   }
