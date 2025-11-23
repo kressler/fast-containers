@@ -217,7 +217,7 @@ It looks like linear simd is the fastest, and that internal node size 128 is fas
 
 It looks like linear simd is fastest. A leaf node size of 64 or 96 seems to offer a reasonable compromise among inserts, finds, and erases.
 
-## Exploring 8 byte keys, 256 byte values
+### Exploring 8 byte keys, 256 byte values
 
 Now, let's assume that for key size 8, internal node size stays at 128, and see what leaf size should be for 256 byte values.
 
@@ -254,3 +254,108 @@ As before, linear simd is fastest.
 There isn't an obvious winner here in terms of leaf node size, with a pretty strong trade-off between inserts and finds. The erase behavior is also puzzling as it keeps getting
 better with larger leaf node sizes (possibly because there are fewer merges/rebalances). Between 16 and 32 entries per leaf node is probably a reasonable range, as above that
 insert performance degrades pretty quickly.
+
+### Exploring 16 byte keys, 32 byte values
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 btree_16_32_16_128_binary_simd btree_16_32_16_128_linear_simd btree_16_32_16_32_binary_simd btree_16_32_16_32_linear_simd btree_16_32_16_48_binary_simd btree_16_32_16_48_linear_simd btree_16_32_16_64_binary_simd btree_16_32_16_64_linear_simd btree_16_32_16_96_binary_simd btree_16_32_16_96_linear_simd
+```
+
+```
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+          btree_16_32_16_128_binary_simd,      51234015676,      75004143854,      27010595690,        974676368
+          btree_16_32_16_128_linear_simd,      43516035804,      60644389306,      19977063324,        982950982
+           btree_16_32_16_32_binary_simd,      53841695044,      79583279188,      29201792262,        979324100
+           btree_16_32_16_32_linear_simd,      44072719742,      60671336584,      19798585492,        985163192
+           btree_16_32_16_48_binary_simd,      53278883456,      78655609180,      28800360246,        981259516
+           btree_16_32_16_48_linear_simd,      42766205720,      59786287582,      19503323168,        976098418
+           btree_16_32_16_64_binary_simd,      52225029384,      76848753538,      27942191950,        975570160
+           btree_16_32_16_64_linear_simd,      43018127122,      59800684916,      19361633812,        968265226
+           btree_16_32_16_96_binary_simd,      51614513450,      76248700526,      27406498252,        979267966
+           btree_16_32_16_96_linear_simd,      43169665802,      60668266656,      19512660486,        987122510
+```
+
+As elsewhere, linear simd is fastest.
+
+Here, it looks like an internal leaf size of 48 or 64 is a good value for both find and insert. This is roughly half the
+optimal for 8 byte keys, which might suggest that targeting a roughly constant internal node byte size is best. This would
+seem to be 1024 bytes of keys.
+
+### Exploring 32 byte keys, 32 byte values
+
+``` 
+./cmake-build-release/src/binary/btree_benchmark -i 5 -t 1000000 --batch-size 500000 --batches 10 btree_32_32_16_16_binary_simd btree_32_32_16_16_linear_simd btree_32_32_16_24_binary_simd btree_32_32_16_24_linear_simd btree_32_32_16_32_binary_simd btree_32_32_16_32_linear_simd btree_32_32_16_48_binary_simd btree_32_32_16_48_linear_simd btree_32_32_16_64_binary_simd btree_32_32_16_64_linear_simd
+```
+
+``` 
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+           btree_32_32_16_16_binary_simd,      61490910528,      95320002286,      36072264980,        973493032
+           btree_32_32_16_16_linear_simd,      46307721778,      70288710340,      24865312242,        978087758
+           btree_32_32_16_24_binary_simd,      58436896772,      90852273426,      34233546000,        976223912
+           btree_32_32_16_24_linear_simd,      44412000200,      67048821780,      23204439782,        981024338
+           btree_32_32_16_32_binary_simd,      57740811950,      89041619304,      33503664566,        977140484
+           btree_32_32_16_32_linear_simd,      43206558930,      65336984918,      22129587616,        982429558
+           btree_32_32_16_48_binary_simd,      56266388860,      86847859914,      32236408712,        981653372
+           btree_32_32_16_48_linear_simd,      43007841646,      64760274776,      21904085336,        987215432
+           btree_32_32_16_64_binary_simd,      55242294886,      85040931546,      31550998530,        979272046
+           btree_32_32_16_64_linear_simd,      43024613506,      65771188378,      22447008318,        976274436
+```
+
+As always, linear simd is fastest.
+
+Here, an internal node size of 48 is the winner for both find and insert. This seems to break with the hypothesis that a roughly
+fixed key size is best.
+
+### Pulling a bunch of this work together
+
+And running against absl::btree and some other ordered and unordered maps:
+
+```
+./cmake-build-release/src/binary/btree_benchmark -i 50 -t 1000000 --batch-size 500000 --batches 10 absl_8_32 map_8_32 unordered_map_8_32 unordered_dense_8_32 btree_8_32_96_128_linear_simd absl_8_256 map_8_256 unordered_map_8_256 unordered_dense_8_256 btree_8_256_16_128_linear_simd btree_8_256_24_128_linear_simd btree_8_256_32_128_linear_simd absl_16_32 map_16_32 unordered_map_16_32 unordered_dense_16_32 btree_16_32_64_64_linear_simd absl_16_256 map_16_256 unordered_map_16_256 unordered_dense_16_256 btree_16_256_16_64_linear_simd btree_16_256_24_64_linear_simd btree_16_256_32_64_linear_simd absl_32_32 map_32_32 unordered_map_32_32 unordered_dense_32_32 btree_32_32_48_48_linear_simd absl_32_256 map_32_256 unordered_map_32_256 unordered_dense_32_256 btree_32_256_16_48_linear_simd btree_32_256_24_48_linear_simd btree_32_256_32_48_linear_simd
+```
+
+``` 
+                          Benchmark Name,    Insert cycles,      Find cycles,     Erase cycles,   Iterate cycles
+                               absl_8_32,     408495001988,     727519229634,     259250606560,      19989221180
+                                map_8_32,     728733722554,    1290686406430,     556894022164,      98355093444
+                      unordered_map_8_32,     388244231320,     493617292236,     138504507966,      69895815554
+                    unordered_dense_8_32,     137818031748,     352863515664,      98522123204,        406677366
+           btree_8_32_96_128_linear_simd,     347165374608,     410529554780,     127095167848,       2037090824
+                              absl_8_256,     877027342492,     982090396984,     373652163340,      29674824980
+                               map_8_256,     816290315460,    1388345089400,     592470467048,     102431464182
+                     unordered_map_8_256,     437108565044,     542529106450,     152743909314,      91533053658
+                   unordered_dense_8_256,     194367636562,     405642593204,     127231927034,        406912850
+          btree_8_256_16_128_linear_simd,     514190564464,     496282287274,     161134449918,       9637734350
+          btree_8_256_24_128_linear_simd,     531408468866,     483519859832,     157362474788,       6584799584
+          btree_8_256_32_128_linear_simd,     554985756864,     479945250316,     154434270382,       5113730288
+                              absl_16_32,     527691923528,     938719706046,     358894700592,      23970362950
+                               map_16_32,     759891957844,    1339304436266,     575655836068,      99364134972
+                     unordered_map_16_32,     399973719688,     529826762448,     146046483098,      75844015492
+                   unordered_dense_16_32,     146045389658,     383275660496,     103015755440,        405679772
+           btree_16_32_64_64_linear_simd,     379408445144,     492777255936,     160484660482,       2797865644
+                             absl_16_256,    1085732215980,    1376846271346,     548585307048,      29565837674
+                              map_16_256,     840195234054,    1421056698330,     605552252716,     102699992748
+                    unordered_map_16_256,     454170063258,     623917179010,     194607134330,      92150364254
+                  unordered_dense_16_256,     199583951514,     429722464918,     132304658626,        202926620
+          btree_16_256_16_64_linear_simd,     579354318396,     593200749648,     192766789266,      10029685466
+          btree_16_256_24_64_linear_simd,     580395692122,     561260051448,     184626206700,       7047527140
+          btree_16_256_32_64_linear_simd,     600756028844,     552528357292,     182340157540,       5344418180
+                              absl_32_32,     594481566232,    1056944325710,     412192640164,      29041894580
+                               map_32_32,     776084874140,    1364151466266,     578054660746,     100214332478
+                     unordered_map_32_32,     419780434308,     553677448322,     151492881864,      82524474382
+                   unordered_dense_32_32,     143832627770,     410376623426,     107142989158,        205114928
+           btree_32_32_48_48_linear_simd,     406834955388,     554052604390,     184958946136,       3464618428
+                             absl_32_256,    1108402106674,    1371203324802,     543566546240,      29706282902
+                              map_32_256,     860221015774,    1422084896274,     588917335944,     103354042350
+                    unordered_map_32_256,     501063216280,     633724575400,     185631729398,      91756984798
+                  unordered_dense_32_256,     213480128744,     464520718856,     144544623708,        408419628
+          btree_32_256_16_48_linear_simd,     614517112650,     664011327586,     230982674482,      10520328450
+          btree_32_256_24_48_linear_simd,     634333014716,     649929908258,     224352850126,       7305632496
+          btree_32_256_32_48_linear_simd,     654998356054,     635379924186,     218358109560,       5499999290
+```
+
+As expected, we're handily beating absl::btree in all cases, and std::map even more so. Surprisingly, we are often
+beating std::unordered_map. As one would expect, ankerl::unorderd_dense is faster than we are.
+
+It also looks like 24 is probablyu leaf size for 256 byte values, offering a reasonable tradeoff between inserts, finds,
+and erases.
