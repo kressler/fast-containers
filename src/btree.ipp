@@ -5,10 +5,10 @@ namespace fast_containers {
 
 // Constructor
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::btree()
     : root_is_leaf_(true), size_(0) {
   // Always allocate an empty root leaf to simplify insert/erase logic
@@ -19,10 +19,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // Destructor
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::~btree() {
   // Unconditionally deallocate all nodes including root
   deallocate_tree();
@@ -30,10 +30,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // Copy constructor
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::btree(const btree& other)
     : root_is_leaf_(true), size_(0) {
   // Always allocate an empty root leaf
@@ -49,11 +49,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // Copy assignment operator
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT, MoveModeT>&
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::operator=(const btree& other) {
   if (this != &other) {
     // Clear existing contents (keeps root allocated)
@@ -69,10 +69,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // Move constructor
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::btree(btree&& other) noexcept
     : root_is_leaf_(other.root_is_leaf_),
       size_(other.size_),
@@ -95,11 +95,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // Move assignment operator
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>&
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT, MoveModeT>&
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::operator=(btree&& other) noexcept {
   if (this != &other) {
     // Deallocate existing tree (including root)
@@ -128,10 +128,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // swap
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::swap(btree& other) noexcept {
   // Swap root pointer (handle union carefully)
   if (root_is_leaf_ && other.root_is_leaf_) {
@@ -160,12 +160,12 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // find (non-const)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT, MoveModeT>::find(
     const Key& key) {
   if (size_ == 0) {
     return end();
@@ -184,12 +184,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
 
 // find (const)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::const_iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT, MoveModeT>::find(
     const Key& key) const {
   if (size_ == 0) {
     return end();
@@ -208,12 +208,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT, MoveModeT>::find(
 
 // lower_bound
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::lower_bound(const Key& key) {
   if (size_ == 0) {
     return end();
@@ -239,12 +239,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // upper_bound
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::upper_bound(const Key& key) {
   if (size_ == 0) {
     return end();
@@ -270,27 +270,27 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // equal_range
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+  requires ComparatorCompatible<Key, Compare>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator,
-          typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+          typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::equal_range(const Key& key) {
   return {lower_bound(key), upper_bound(key)};
 }
 
 // insert
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+  requires ComparatorCompatible<Key, Compare>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator,
           bool>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::insert(const Key& key, const Value& value) {
   // Find the appropriate leaf for the key (root on first insert)
   LeafNode* leaf = find_leaf_for_key(key);
@@ -326,27 +326,27 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // insert(value_type)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+  requires ComparatorCompatible<Key, Compare>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator,
           bool>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::insert(const value_type& value) {
   return insert(value.first, value.second);
 }
 
 // emplace
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename... Args>
-std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator,
           bool>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::emplace(Args&&... args) {
   // Construct the pair from the arguments
   value_type pair(std::forward<Args>(args)...);
@@ -356,13 +356,13 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // emplace_hint
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename... Args>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::emplace_hint(const_iterator hint, Args&&... args) {
   // For now, ignore the hint and just call emplace
   // In the future, we could use the hint to optimize the search
@@ -372,10 +372,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // operator[]
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
              MoveModeT>::operator[](const Key& key) {
   // Try to insert with default-constructed value
   // If key exists, insert returns the existing element
@@ -385,12 +385,12 @@ Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // erase (by key)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::size_type
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::erase(const Key& key) {
   // Empty tree - nothing to remove
   if (size_ == 0) {
@@ -411,12 +411,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // erase (by iterator)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
@@ -515,12 +515,12 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // erase (range)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::iterator
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::erase(iterator first, iterator last) {
   // Save the key of the 'last' element to detect when to stop
   // We can't rely on iterator comparison because iterators may be invalidated
@@ -549,54 +549,54 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // allocate_leaf_node
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::LeafNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::allocate_leaf_node() {
   return new LeafNode();
 }
 
 // allocate_internal_node
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-typename btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                MoveModeT>::InternalNode*
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::allocate_internal_node(bool leaf_children) {
   return new InternalNode(leaf_children);
 }
 
 // deallocate_leaf_node
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::deallocate_leaf_node(LeafNode* node) {
   delete node;
 }
 
 // deallocate_internal_node
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::deallocate_internal_node(InternalNode* node) {
   delete node;
 }
 
 // clear - removes all elements but keeps root allocated
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::clear() {
   if (size_ == 0) {
     return;  // Already empty
@@ -621,10 +621,10 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // deallocate_tree - deallocates entire tree including root (for destructor)
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::deallocate_tree() {
   if (root_is_leaf_) {
     // Tree has only one node (leaf root) - deallocate it
@@ -644,10 +644,10 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // deallocate_internal_subtree
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+  requires ComparatorCompatible<Key, Compare>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::deallocate_internal_subtree(InternalNode* node) {
   if (node->children_are_leaves) {
     // Children are leaves - deallocate them
@@ -668,13 +668,13 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // split_leaf
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+  requires ComparatorCompatible<Key, Compare>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, MoveModeT>::iterator,
           bool>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::split_leaf(LeafNode* leaf, const Key& key,
                              const Value& value) {
   // Create new leaf for right half
@@ -705,7 +705,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   const Key& promoted_key = new_leaf->data.begin()->first;
 
   // Insert the new key-value pair into appropriate leaf
-  LeafNode* target_leaf = (key < promoted_key) ? leaf : new_leaf;
+  LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
   auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
 
   // Handle duplicate key case
@@ -728,7 +728,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
   // Update leftmost_leaf_ if the leaf became the new leftmost
   if (target_leaf == leaf &&
       (leftmost_leaf_ == nullptr ||
-       leaf->data.begin()->first < leftmost_leaf_->data.begin()->first)) {
+       comp_(leaf->data.begin()->first, leftmost_leaf_->data.begin()->first))) {
     leftmost_leaf_ = leaf;
   }
 
@@ -737,11 +737,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // insert_into_parent
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::insert_into_parent(NodeType* left_child, const Key& key,
                                           NodeType* right_child) {
   // Helper lambda to get appropriate children array reference
@@ -795,7 +795,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
     auto [promoted_key, new_parent] = split_internal(parent);
 
     // Determine which parent to insert into
-    InternalNode* target_parent = (key < promoted_key) ? parent : new_parent;
+    InternalNode* target_parent = comp_(key, promoted_key) ? parent : new_parent;
     right_child->parent = target_parent;
 
     auto& target_children = get_children(target_parent);
@@ -814,12 +814,12 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // split_internal
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
-std::pair<const Key&, typename btree<Key, Value, LeafNodeSize, InternalNodeSize,
+  requires ComparatorCompatible<Key, Compare>
+std::pair<const Key&, typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                                      SearchModeT, MoveModeT>::InternalNode*>
-btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT>::split_internal(InternalNode* node) {
   // Create new internal node
   InternalNode* new_node = allocate_internal_node(node->children_are_leaves);
@@ -861,11 +861,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // update_parent_key_recursive
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename ChildNodeType>
-void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            MoveModeT>::update_parent_key_recursive(ChildNodeType* child,
                                                    const Key& new_min) {
   if (child->parent == nullptr) {
@@ -919,11 +919,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // find_left_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::find_left_sibling(NodeType* node) const {
   if (node->parent == nullptr) {
     return nullptr;  // Root has no siblings
@@ -990,11 +990,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // find_right_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::find_right_sibling(NodeType* node) const {
   if (node->parent == nullptr) {
     return nullptr;  // Root has no siblings
@@ -1061,11 +1061,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // borrow_from_left_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::borrow_from_left_sibling(NodeType* node) {
   NodeType* left_sibling = find_left_sibling(node);
 
@@ -1136,11 +1136,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // borrow_from_right_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::borrow_from_right_sibling(NodeType* node) {
   NodeType* right_sibling = find_right_sibling(node);
 
@@ -1214,11 +1214,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // merge_with_left_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::merge_with_left_sibling(NodeType* node) {
   NodeType* left_sibling = find_left_sibling(node);
   assert(left_sibling != nullptr &&
@@ -1390,11 +1390,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // merge_with_right_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::merge_with_right_sibling(NodeType* node) {
   NodeType* right_sibling = find_right_sibling(node);
   assert(right_sibling != nullptr &&
@@ -1567,11 +1567,11 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
 
 // handle_underflow
 template <typename Key, typename Value, std::size_t LeafNodeSize,
-          std::size_t InternalNodeSize, SearchMode SearchModeT,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, std::less<Key>>
+  requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, SearchModeT,
+NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                 MoveModeT>::handle_underflow(NodeType* node) {
   // Compute node size and underflow threshold based on node type
   size_type node_size;

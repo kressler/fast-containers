@@ -22,31 +22,31 @@ TEMPLATE_TEST_CASE("btree default constructor creates empty tree",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Default constructor - int, int") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
   }
 
   SECTION("Default constructor - int, std::string") {
-    btree<int, std::string, 64, 64, Mode> tree;
+    btree<int, std::string, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
   }
 
   SECTION("Default constructor - std::string, int") {
-    btree<std::string, int, 64, 64, Mode> tree;
+    btree<std::string, int, 64, 64, std::less<std::string>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
   }
 
   SECTION("Default constructor - different node sizes") {
-    btree<int, int, 16, 64, Mode> tree;
+    btree<int, int, 16, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
   }
 
   SECTION("Default constructor - small node sizes") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
   }
@@ -57,13 +57,13 @@ TEMPLATE_TEST_CASE("btree destructor deallocates resources",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Destructor on empty tree") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
     // Destructor called automatically - should not crash
   }
 
   SECTION("Multiple constructions and destructions") {
     for (int i = 0; i < 10; ++i) {
-      btree<int, std::string, 32, 32, Mode> tree;
+      btree<int, std::string, 32, 32, std::less<int>, Mode> tree;
       REQUIRE(tree.empty());
     }
   }
@@ -74,13 +74,13 @@ TEMPLATE_TEST_CASE("btree size and empty methods", "[btree][size]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Empty tree reports size 0") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.size() == 0);
     REQUIRE(tree.empty() == true);
   }
 
   SECTION("Size and empty are consistent") {
-    btree<int, std::string, 64, 64, Mode> tree;
+    btree<int, std::string, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty() == (tree.size() == 0));
   }
 }
@@ -90,17 +90,17 @@ TEMPLATE_TEST_CASE("btree works with different template parameters",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Small leaf nodes") {
-    btree<int, int, 8, 64, Mode> tree;
+    btree<int, int, 8, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
   }
 
   SECTION("Small internal nodes") {
-    btree<int, int, 64, 8, Mode> tree;
+    btree<int, int, 64, 8, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
   }
 
   SECTION("Both small") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
   }
 
@@ -108,19 +108,22 @@ TEMPLATE_TEST_CASE("btree works with different template parameters",
     struct LargeValue {
       char data[1024];
     };
-    btree<int, LargeValue, 16, 64, Mode> tree;
+    btree<int, LargeValue, 16, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
   }
 }
 
 TEST_CASE("btree works with different MoveMode", "[btree][movemode]") {
   SECTION("Standard MoveMode") {
-    btree<int, int, 64, 64, SearchMode::Binary, MoveMode::Standard> tree;
+    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary,
+          MoveMode::Standard>
+        tree;
     REQUIRE(tree.empty());
   }
 
   SECTION("SIMD MoveMode") {
-    btree<int, int, 64, 64, SearchMode::Binary, MoveMode::SIMD> tree;
+    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary, MoveMode::SIMD>
+        tree;
     REQUIRE(tree.empty());
   }
 }
@@ -138,12 +141,12 @@ TEMPLATE_TEST_CASE("btree empty tree iterators", "[btree][iterator]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Empty tree begin() == end()") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.begin() == tree.end());
   }
 
   SECTION("Empty tree find returns end()") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
     REQUIRE(tree.find(42) == tree.end());
   }
 }
@@ -152,7 +155,7 @@ TEMPLATE_TEST_CASE("btree single-leaf tree operations",
                    "[btree][find][iterator]", BinarySearchMode,
                    LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  using BTree = btree<int, int, 64, 64, Mode>;
+  using BTree = btree<int, int, 64, 64, std::less<int>, Mode>;
 
   SECTION("Find existing elements") {
     BTree tree;
@@ -219,7 +222,7 @@ TEMPLATE_TEST_CASE("btree single-leaf tree operations",
 TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
                    BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  using BTree = btree<int, int, 64, 64, Mode>;
+  using BTree = btree<int, int, 64, 64, std::less<int>, Mode>;
 
   SECTION("Insert into empty tree") {
     BTree tree;
@@ -367,7 +370,7 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
 
   SECTION("Insert fills node to capacity") {
     // Create a tree with small node size
-    btree<int, int, 8, 8, Mode> small_tree;
+    btree<int, int, 8, 8, std::less<int>, Mode> small_tree;
 
     // Insert up to capacity (8 elements)
     for (int i = 1; i <= 8; ++i) {
@@ -386,7 +389,7 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
   }
 
   SECTION("Insert with string keys") {
-    btree<std::string, int, 64, 64, Mode> tree;
+    btree<std::string, int, 64, 64, std::less<std::string>, Mode> tree;
 
     tree.insert("banana", 2);
     tree.insert("apple", 1);
@@ -407,7 +410,7 @@ TEMPLATE_TEST_CASE("btree insert operations", "[btree][insert]",
   }
 
   SECTION("Insert with string values") {
-    btree<int, std::string, 64, 64, Mode> tree;
+    btree<int, std::string, 64, 64, std::less<int>, Mode> tree;
 
     tree.insert(2, "two");
     tree.insert(1, "one");
@@ -427,7 +430,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
 
   SECTION("Split leaf node when full") {
     // Create tree with small leaf size to force splitting
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert 5 elements (leaf size is 4, so should split)
     for (int i = 1; i <= 5; ++i) {
@@ -457,7 +460,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
 
   SECTION("Multiple leaf splits") {
     // Create tree with small node size
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert 20 elements (will cause multiple splits)
     for (int i = 1; i <= 20; ++i) {
@@ -486,7 +489,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
   }
 
   SECTION("Split with descending insertion") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert in descending order (harder test case for splitting)
     for (int i = 10; i >= 1; --i) {
@@ -505,7 +508,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
   }
 
   SECTION("Split with random insertion") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     std::vector<int> insert_order = {5, 2, 8, 1, 9, 3, 7, 4, 6, 10};
     for (int key : insert_order) {
@@ -525,7 +528,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
 
   SECTION("Internal node splitting") {
     // Small internal node size to force internal node splits
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
 
     // Insert many elements to force multiple levels and internal splits
     for (int i = 1; i <= 30; ++i) {
@@ -554,7 +557,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
   }
 
   SECTION("Duplicate during split") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Fill tree
     for (int i = 1; i <= 10; ++i) {
@@ -573,7 +576,7 @@ TEMPLATE_TEST_CASE("btree node splitting", "[btree][insert][split]",
 TEMPLATE_TEST_CASE("btree erase operations - basic", "[btree][erase]",
                    BinarySearchMode, LinearSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  using BTree = btree<int, int, 64, 64, Mode>;
+  using BTree = btree<int, int, 64, 64, std::less<int>, Mode>;
 
   SECTION("Erase from empty tree") {
     BTree tree;
@@ -716,7 +719,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
 
   SECTION("Erase causes borrow from left sibling") {
     // Small node size to test underflow
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert elements to create siblings
     for (int i = 1; i <= 10; ++i) {
@@ -737,7 +740,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
   }
 
   SECTION("Erase causes borrow from right sibling") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert elements
     for (int i = 1; i <= 10; ++i) {
@@ -757,7 +760,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
   }
 
   SECTION("Erase causes merge with left sibling") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert to create structure with mergeable nodes
     for (int i = 1; i <= 15; ++i) {
@@ -785,7 +788,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
   }
 
   SECTION("Erase causes merge with right sibling") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 15; ++i) {
       tree.insert(i, i * 10);
@@ -806,7 +809,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
 
   SECTION("Erase causes cascading merges up the tree") {
     // Very small nodes to create deep tree
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
 
     // Insert many elements to create multi-level tree
     for (int i = 1; i <= 40; ++i) {
@@ -842,7 +845,7 @@ TEMPLATE_TEST_CASE("btree erase operations - underflow handling",
   }
 
   SECTION("Erase reduces tree height") {
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
 
     // Build multi-level tree
     for (int i = 1; i <= 30; ++i) {
@@ -870,7 +873,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Erase minimum element updates leftmost") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
@@ -886,7 +889,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
   }
 
   SECTION("Erase maximum element updates rightmost") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
@@ -903,7 +906,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
   }
 
   SECTION("Erase all but one element") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
@@ -931,7 +934,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
   }
 
   SECTION("Erase with string keys") {
-    btree<std::string, int, 4, 8, Mode> tree;
+    btree<std::string, int, 4, 8, std::less<std::string>, Mode> tree;
 
     tree.insert("apple", 1);
     tree.insert("banana", 2);
@@ -948,7 +951,7 @@ TEMPLATE_TEST_CASE("btree erase operations - edge cases", "[btree][erase]",
   }
 
   SECTION("Stress test - many inserts and erases") {
-    btree<int, int, 4, 8, Mode> tree;
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
 
     // Insert 100 elements
     for (int i = 1; i <= 100; ++i) {
@@ -994,7 +997,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("erase(iterator) - single element from middle") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1022,7 +1025,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - first element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1037,7 +1040,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - last element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1051,7 +1054,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - all elements one by one forward") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1066,7 +1069,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - triggers underflow and borrow") {
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1086,7 +1089,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - triggers underflow and merge") {
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1110,7 +1113,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - range erase middle") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1138,7 +1141,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - range erase from begin") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1152,7 +1155,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - range erase to end") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1172,7 +1175,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - erase everything") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1184,7 +1187,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - empty range") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1197,7 +1200,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - large range with underflow") {
-    btree<int, int, 3, 3, Mode> tree;
+    btree<int, int, 3, 3, std::less<int>, Mode> tree;
     for (int i = 1; i <= 50; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1226,7 +1229,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator) - with string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
     tree.insert("apple", 1);
     tree.insert("banana", 2);
     tree.insert("cherry", 3);
@@ -1245,7 +1248,7 @@ TEMPLATE_TEST_CASE("btree iterator-based erase", "[btree][erase][iterator]",
   }
 
   SECTION("erase(iterator, iterator) - sequential operations") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert 1-20
     for (int i = 1; i <= 20; ++i) {
@@ -1276,19 +1279,19 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("lower_bound - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto it = tree.lower_bound(5);
     REQUIRE(it == tree.end());
   }
 
   SECTION("upper_bound - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto it = tree.upper_bound(5);
     REQUIRE(it == tree.end());
   }
 
   SECTION("lower_bound - exact match") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1300,7 +1303,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - exact match") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1312,7 +1315,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - key between elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     // Insert: 1, 3, 5, 7, 9
     for (int i = 1; i <= 9; i += 2) {
       tree.insert(i, i * 10);
@@ -1326,7 +1329,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - key between elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     // Insert: 1, 3, 5, 7, 9
     for (int i = 1; i <= 9; i += 2) {
       tree.insert(i, i * 10);
@@ -1340,7 +1343,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - key at beginning") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1352,7 +1355,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - key at beginning") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1364,7 +1367,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - key at end") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1376,7 +1379,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - key at end") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1386,7 +1389,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - key before all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 10; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1398,7 +1401,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - key before all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 10; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1410,7 +1413,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - key after all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1420,7 +1423,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - key after all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1430,7 +1433,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound and upper_bound - range query") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1454,7 +1457,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
 
   SECTION("lower_bound - across leaf boundaries") {
     // Create a tree that will have multiple leaves
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert enough elements to create multiple leaves (more than leaf size)
     for (int i = 1; i <= 50; ++i) {
@@ -1475,7 +1478,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
 
   SECTION("upper_bound - across leaf boundaries") {
     // Create a tree that will have multiple leaves
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert enough elements to create multiple leaves
     for (int i = 1; i <= 50; ++i) {
@@ -1495,7 +1498,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound - with gaps in data") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert: 1, 5, 10, 15, 20, 25, 30
     tree.insert(1, 10);
@@ -1518,7 +1521,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("upper_bound - with gaps in data") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert: 1, 5, 10, 15, 20, 25, 30
     tree.insert(1, 10);
@@ -1541,7 +1544,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound and upper_bound - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
 
     tree.insert("apple", 1);
     tree.insert("banana", 2);
@@ -1581,7 +1584,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound and upper_bound - single element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     // lower_bound(5) -> 5
@@ -1613,7 +1616,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound and upper_bound - duplicates not allowed") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert 1-10
     for (int i = 1; i <= 10; ++i) {
@@ -1638,7 +1641,7 @@ TEMPLATE_TEST_CASE("btree lower_bound and upper_bound", "[btree][bounds]",
   }
 
   SECTION("lower_bound and upper_bound - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert 1000 elements
     for (int i = 1; i <= 1000; ++i) {
@@ -1681,7 +1684,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("equal_range - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto [first, last] = tree.equal_range(5);
     REQUIRE(first == tree.end());
@@ -1689,7 +1692,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - exact match") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     tree.insert(10, 100);
     tree.insert(15, 150);
@@ -1705,7 +1708,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - key not found (between elements)") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     tree.insert(15, 150);
 
@@ -1717,7 +1720,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - key at beginning") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     tree.insert(10, 100);
     tree.insert(15, 150);
@@ -1730,7 +1733,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - key at end") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     tree.insert(10, 100);
     tree.insert(15, 150);
@@ -1742,7 +1745,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - key before all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(10, 100);
     tree.insert(20, 200);
 
@@ -1753,7 +1756,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - key after all elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(10, 100);
     tree.insert(20, 200);
 
@@ -1764,7 +1767,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - single element tree (found)") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(10, 100);
 
     auto [first, last] = tree.equal_range(10);
@@ -1774,7 +1777,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - single element tree (not found, before)") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(10, 100);
 
     auto [first, last] = tree.equal_range(5);
@@ -1784,7 +1787,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - single element tree (not found, after)") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(10, 100);
 
     auto [first, last] = tree.equal_range(15);
@@ -1793,7 +1796,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - across leaf boundaries") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert enough elements to span multiple leaves
     for (int i = 1; i <= 20; ++i) {
@@ -1817,7 +1820,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
     tree.insert("apple", 1);
     tree.insert("banana", 2);
     tree.insert("cherry", 3);
@@ -1850,7 +1853,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert 1000 elements
     for (int i = 1; i <= 1000; ++i) {
@@ -1882,7 +1885,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - consistency with lower_bound and upper_bound") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 50; ++i) {
       tree.insert(i * 2, i * 20);  // Insert only even numbers
@@ -1901,7 +1904,7 @@ TEMPLATE_TEST_CASE("btree equal_range", "[btree][equal_range]",
   }
 
   SECTION("equal_range - range iteration") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
@@ -1927,7 +1930,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("clear - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     REQUIRE(tree.empty());
     REQUIRE(tree.size() == 0);
 
@@ -1937,7 +1940,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   }
 
   SECTION("clear - single element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     REQUIRE(tree.size() == 1);
 
@@ -1948,7 +1951,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   }
 
   SECTION("clear - multiple elements, single leaf") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 3; ++i) {
       tree.insert(i, i * 10);
     }
@@ -1964,7 +1967,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   }
 
   SECTION("clear - multiple leaves") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     // Insert enough to create multiple leaves
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
@@ -1981,7 +1984,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   }
 
   SECTION("clear - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     // Insert 1000 elements
     for (int i = 1; i <= 1000; ++i) {
       tree.insert(i, i * 10);
@@ -1994,7 +1997,7 @@ TEMPLATE_TEST_CASE("btree clear", "[btree][clear]", BinarySearchMode,
   }
 
   SECTION("clear - reuse after clear") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert elements
     for (int i = 1; i <= 10; ++i) {
@@ -2031,14 +2034,14 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("count - empty tree") {
-    const btree<int, int, 4, 4, Mode> tree;
+    const btree<int, int, 4, 4, std::less<int>, Mode> tree;
     REQUIRE(tree.count(5) == 0);
     REQUIRE(tree.count(0) == 0);
     REQUIRE(tree.count(100) == 0);
   }
 
   SECTION("count - single element found") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     const auto& const_tree = tree;
@@ -2046,7 +2049,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - single element not found") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     const auto& const_tree = tree;
@@ -2055,7 +2058,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - multiple elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 20; ++i) {
       tree.insert(i, i * 10);
     }
@@ -2074,7 +2077,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - after erase") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -2089,7 +2092,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - with gaps in data") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     // Insert: 1, 5, 10, 15, 20, 25, 30
     tree.insert(1, 10);
     for (int i = 5; i <= 30; i += 5) {
@@ -2113,7 +2116,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
 
     tree.insert("apple", 1);
     tree.insert("banana", 2);
@@ -2129,7 +2132,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 1000; ++i) {
       tree.insert(i, i * 10);
     }
@@ -2146,7 +2149,7 @@ TEMPLATE_TEST_CASE("btree count", "[btree][count]", BinarySearchMode,
   }
 
   SECTION("count - no duplicates allowed") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     tree.insert(5, 50);
     const auto& const_tree = tree;
@@ -2164,7 +2167,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("key_comp - basic functionality") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto comp = tree.key_comp();
 
     // Test basic comparisons
@@ -2175,7 +2178,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("key_comp - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
     auto comp = tree.key_comp();
 
     REQUIRE(comp("apple", "banana") == true);
@@ -2185,7 +2188,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("key_comp - ordering verification") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto comp = tree.key_comp();
 
     // Insert elements
@@ -2210,7 +2213,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("value_comp - basic functionality") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto comp = tree.value_comp();
 
     // value_comp compares pairs by their keys
@@ -2225,7 +2228,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("value_comp - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
     auto comp = tree.value_comp();
 
     std::pair<std::string, int> p1{"apple", 1};
@@ -2238,7 +2241,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("value_comp - ordering verification") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto comp = tree.value_comp();
 
     // Insert elements
@@ -2265,7 +2268,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("key_comp and value_comp - consistency") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto key_cmp = tree.key_comp();
     auto val_cmp = tree.value_comp();
 
@@ -2295,7 +2298,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("comparators - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Should be able to get comparators even from empty tree
     auto key_cmp = tree.key_comp();
@@ -2306,7 +2309,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("comparators - const tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
     tree.insert(10, 100);
 
@@ -2321,7 +2324,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("comparators - sorting with std algorithms") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto key_cmp = tree.key_comp();
 
     // Use key_comp with std::sort
@@ -2332,7 +2335,7 @@ TEMPLATE_TEST_CASE("btree key_comp and value_comp", "[btree][comparators]",
   }
 
   SECTION("comparators - value pairs with std algorithms") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto val_cmp = tree.value_comp();
 
     // Use value_comp with std::sort
@@ -2353,7 +2356,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("get_allocator - basic functionality") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto alloc = tree.get_allocator();
 
     // Verify we got an allocator
@@ -2363,7 +2366,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - type alias") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Verify allocator_type alias matches get_allocator return type
     static_assert(std::is_same_v<typename decltype(tree)::allocator_type,
@@ -2375,7 +2378,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - const tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     const auto& const_tree = tree;
@@ -2387,7 +2390,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto alloc = tree.get_allocator();
 
     // Should work even on empty tree
@@ -2397,7 +2400,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - non-empty tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
     }
@@ -2411,7 +2414,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - string key type") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
     auto alloc = tree.get_allocator();
 
     // Allocator should be for std::pair<std::string, int>
@@ -2420,7 +2423,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - different value types") {
-    btree<int, std::string, 4, 4, Mode> tree;
+    btree<int, std::string, 4, 4, std::less<int>, Mode> tree;
     auto alloc = tree.get_allocator();
 
     // Allocator should be for std::pair<int, std::string>
@@ -2429,7 +2432,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - allocator can allocate") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     auto alloc = tree.get_allocator();
 
     // Test that the allocator can actually allocate/deallocate
@@ -2447,7 +2450,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - multiple calls return equivalent allocators") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto alloc1 = tree.get_allocator();
     auto alloc2 = tree.get_allocator();
@@ -2457,7 +2460,7 @@ TEMPLATE_TEST_CASE("btree get_allocator", "[btree][allocator]",
   }
 
   SECTION("get_allocator - allocator type properties") {
-    using TreeType = btree<int, int, 4, 4, Mode>;
+    using TreeType = btree<int, int, 4, 4, std::less<int>, Mode>;
     using AllocType = typename TreeType::allocator_type;
 
     // Verify allocator type properties
@@ -2477,18 +2480,18 @@ TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("copy constructor - empty tree") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2(tree1);
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(tree1);
 
     REQUIRE(tree2.empty());
     REQUIRE(tree2.size() == 0);
   }
 
   SECTION("copy constructor - single element") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     tree1.insert(5, 50);
 
-    btree<int, int, 4, 4, Mode> tree2(tree1);
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(tree1);
 
     REQUIRE(tree2.size() == 1);
     auto it = tree2.find(5);
@@ -2502,12 +2505,12 @@ TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy constructor - multiple elements") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 20; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2(tree1);
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(tree1);
 
     REQUIRE(tree2.size() == 20);
     for (int i = 1; i <= 20; ++i) {
@@ -2524,12 +2527,12 @@ TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy constructor - large tree") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 1000; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2(tree1);
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(tree1);
 
     REQUIRE(tree2.size() == 1000);
     for (int i = 1; i <= 1000; i += 100) {
@@ -2540,12 +2543,12 @@ TEMPLATE_TEST_CASE("btree copy constructor", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy constructor - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree1;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree1;
     tree1.insert("apple", 1);
     tree1.insert("banana", 2);
     tree1.insert("cherry", 3);
 
-    btree<std::string, int, 4, 4, Mode> tree2(tree1);
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree2(tree1);
 
     REQUIRE(tree2.size() == 3);
     REQUIRE(tree2.find("apple")->second == 1);
@@ -2559,20 +2562,20 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("copy assignment - empty to empty") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     tree2 = tree1;
     REQUIRE(tree2.empty());
   }
 
   SECTION("copy assignment - non-empty to empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     tree2 = tree1;
 
     REQUIRE(tree2.size() == 10);
@@ -2582,9 +2585,9 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy assignment - empty to non-empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     for (int i = 1; i <= 10; ++i) {
       tree2.insert(i, i * 10);
     }
@@ -2595,12 +2598,12 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy assignment - non-empty to non-empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     for (int i = 100; i <= 110; ++i) {
       tree2.insert(i, i * 10);
     }
@@ -2616,7 +2619,7 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy assignment - self assignment") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
@@ -2630,12 +2633,12 @@ TEMPLATE_TEST_CASE("btree copy assignment", "[btree][copy]", BinarySearchMode,
   }
 
   SECTION("copy assignment - independence") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     tree2 = tree1;
 
     // Modify tree1
@@ -2654,18 +2657,18 @@ TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("move constructor - empty tree") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(std::move(tree1));
 
     REQUIRE(tree2.empty());
     REQUIRE(tree1.empty());  // Moved-from tree is empty
   }
 
   SECTION("move constructor - single element") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     tree1.insert(5, 50);
 
-    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(std::move(tree1));
 
     REQUIRE(tree2.size() == 1);
     REQUIRE(tree2.find(5) != tree2.end());
@@ -2676,12 +2679,12 @@ TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move constructor - multiple elements") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 20; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(std::move(tree1));
 
     REQUIRE(tree2.size() == 20);
     for (int i = 1; i <= 20; ++i) {
@@ -2693,12 +2696,12 @@ TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move constructor - moved-from tree is reusable") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2(std::move(tree1));
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2(std::move(tree1));
 
     // Reuse tree1
     tree1.insert(100, 1000);
@@ -2710,11 +2713,12 @@ TEMPLATE_TEST_CASE("btree move constructor", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move constructor - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree1;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree1;
     tree1.insert("apple", 1);
     tree1.insert("banana", 2);
 
-    btree<std::string, int, 4, 4, Mode> tree2(std::move(tree1));
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree2(
+        std::move(tree1));
 
     REQUIRE(tree2.size() == 2);
     REQUIRE(tree2.find("apple") != tree2.end());
@@ -2727,8 +2731,8 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("move assignment - empty to empty") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     tree2 = std::move(tree1);
     REQUIRE(tree2.empty());
@@ -2736,12 +2740,12 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move assignment - non-empty to empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     tree2 = std::move(tree1);
 
     REQUIRE(tree2.size() == 10);
@@ -2749,9 +2753,9 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move assignment - empty to non-empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     for (int i = 1; i <= 10; ++i) {
       tree2.insert(i, i * 10);
     }
@@ -2762,12 +2766,12 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move assignment - non-empty to non-empty") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     for (int i = 100; i <= 110; ++i) {
       tree2.insert(i, i * 10);
     }
@@ -2786,7 +2790,7 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move assignment - self assignment") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
@@ -2801,12 +2805,12 @@ TEMPLATE_TEST_CASE("btree move assignment", "[btree][move]", BinarySearchMode,
   }
 
   SECTION("move assignment - moved-from tree is reusable") {
-    btree<int, int, 4, 4, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
     }
 
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
     tree2 = std::move(tree1);
 
     // Reuse tree1
@@ -2824,7 +2828,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("emplace - insert new element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Emplace with separate key and value
     auto [it, inserted] = tree.emplace(5, 50);
@@ -2837,7 +2841,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - existing element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     // Try to emplace duplicate
@@ -2849,7 +2853,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - multiple elements") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto [it1, ins1] = tree.emplace(1, 10);
     auto [it2, ins2] = tree.emplace(2, 20);
@@ -2866,7 +2870,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - with std::pair") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Emplace using std::pair
     auto [it, inserted] = tree.emplace(std::make_pair(5, 50));
@@ -2878,7 +2882,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
 
     auto [it1, ins1] = tree.emplace("apple", 1);
     auto [it2, ins2] = tree.emplace("banana", 2);
@@ -2895,7 +2899,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 100; ++i) {
       auto [it, inserted] = tree.emplace(i, i * 10);
@@ -2915,7 +2919,7 @@ TEMPLATE_TEST_CASE("btree emplace", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace - return value on duplicate") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto [it1, ins1] = tree.emplace(5, 50);
     REQUIRE(ins1);
@@ -2932,7 +2936,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("emplace_hint - insert new element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Emplace with hint (hint is ignored for now)
     auto it = tree.emplace_hint(tree.end(), 5, 50);
@@ -2944,7 +2948,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - existing element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     // Try to emplace duplicate with hint
@@ -2955,7 +2959,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - multiple elements with hints") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto it1 = tree.emplace_hint(tree.end(), 1, 10);
     auto it2 = tree.emplace_hint(it1, 2, 20);
@@ -2968,7 +2972,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - with std::pair") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Emplace using std::pair with hint
     auto it = tree.emplace_hint(tree.end(), std::make_pair(5, 50));
@@ -2979,7 +2983,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
 
     auto it1 = tree.emplace_hint(tree.end(), "apple", 1);
     auto it2 = tree.emplace_hint(tree.end(), "banana", 2);
@@ -2992,7 +2996,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto hint = tree.end();
     for (int i = 1; i <= 100; ++i) {
@@ -3012,7 +3016,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - return value on duplicate") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     auto it1 = tree.emplace_hint(tree.end(), 5, 50);
     REQUIRE(it1->second == 50);
@@ -3022,7 +3026,7 @@ TEMPLATE_TEST_CASE("btree emplace_hint", "[btree][emplace]", BinarySearchMode,
   }
 
   SECTION("emplace_hint - wrong hint doesn't break correctness") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert some elements
     tree.insert(1, 10);
@@ -3043,7 +3047,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("operator[] - insert new element with default value") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Access non-existent key creates it with default value (0 for int)
     int& value = tree[5];
@@ -3057,7 +3061,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - access existing element") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     // Access existing key returns its value
@@ -3067,7 +3071,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - modify value through reference") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
     tree.insert(5, 50);
 
     // Modify value through operator[]
@@ -3080,7 +3084,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - insert and modify in one operation") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert and immediately modify
     tree[10] = 999;
@@ -3090,7 +3094,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - multiple inserts and accesses") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert multiple elements
     tree[1] = 10;
@@ -3109,7 +3113,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - mixed insert and access") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Pre-populate some elements
     for (int i = 1; i <= 10; i += 2) {
@@ -3134,7 +3138,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - large tree") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert many elements
     for (int i = 1; i <= 100; ++i) {
@@ -3162,7 +3166,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree;
 
     // Insert with operator[]
     tree["apple"] = 1;
@@ -3186,7 +3190,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - default value for custom types") {
-    btree<int, std::string, 4, 4, Mode> tree;
+    btree<int, std::string, 4, 4, std::less<int>, Mode> tree;
 
     // Access non-existent key creates it with default value (empty string)
     std::string& value = tree[5];
@@ -3199,7 +3203,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - increment pattern") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Common pattern: increment counter
     for (int i = 0; i < 10; ++i) {
@@ -3211,7 +3215,7 @@ TEMPLATE_TEST_CASE("btree operator[]", "[btree][access]", BinarySearchMode,
   }
 
   SECTION("operator[] - overwrite pattern") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     // Insert initial value
     tree.insert(5, 50);
@@ -3228,8 +3232,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("swap - two empty trees") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     tree1.swap(tree2);
 
@@ -3238,8 +3242,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - empty with non-empty") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     for (int i = 1; i <= 10; ++i) {
       tree2.insert(i, i * 10);
@@ -3257,8 +3261,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - non-empty with empty") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     for (int i = 1; i <= 10; ++i) {
       tree1.insert(i, i * 10);
@@ -3276,8 +3280,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - two non-empty trees") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     // Fill tree1 with 1-10
     for (int i = 1; i <= 10; ++i) {
@@ -3309,7 +3313,7 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - self swap") {
-    btree<int, int, 4, 4, Mode> tree;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
 
     for (int i = 1; i <= 10; ++i) {
       tree.insert(i, i * 10);
@@ -3326,8 +3330,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - large trees") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     // Fill tree1 with 1-1000
     for (int i = 1; i <= 1000; ++i) {
@@ -3355,8 +3359,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - string keys") {
-    btree<std::string, int, 4, 4, Mode> tree1;
-    btree<std::string, int, 4, 4, Mode> tree2;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree1;
+    btree<std::string, int, 4, 4, std::less<std::string>, Mode> tree2;
 
     tree1.insert("apple", 1);
     tree1.insert("banana", 2);
@@ -3377,8 +3381,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - iterators remain valid") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     tree1.insert(1, 10);
     tree1.insert(2, 20);
@@ -3402,8 +3406,8 @@ TEMPLATE_TEST_CASE("btree swap", "[btree][swap]", BinarySearchMode,
   }
 
   SECTION("swap - followed by modifications") {
-    btree<int, int, 4, 4, Mode> tree1;
-    btree<int, int, 4, 4, Mode> tree2;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree1;
+    btree<int, int, 4, 4, std::less<int>, Mode> tree2;
 
     tree1.insert(1, 10);
     tree2.insert(100, 1000);
@@ -3428,7 +3432,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   constexpr SearchMode Mode = SearchMode::SIMD;
 
   SECTION("Basic insert and find with SIMD mode") {
-    btree<int, int, 64, 64, Mode> tree;
+    btree<int, int, 64, 64, std::less<int>, Mode> tree;
 
     // Insert some values
     for (int i = 0; i < 100; ++i) {
@@ -3446,7 +3450,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   }
 
   SECTION("SIMD mode with int32_t keys") {
-    btree<int32_t, std::string, 32, 32, Mode> tree;
+    btree<int32_t, std::string, 32, 32, std::less<int32_t>, Mode> tree;
 
     tree.insert(42, "answer");
     tree.insert(-100, "negative");
@@ -3458,7 +3462,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   }
 
   SECTION("SIMD mode with int64_t keys") {
-    btree<int64_t, int, 16, 16, Mode> tree;
+    btree<int64_t, int, 16, 16, std::less<int64_t>, Mode> tree;
 
     tree.insert(1000000000LL, 1);
     tree.insert(-1000000000LL, 2);
@@ -3470,7 +3474,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   }
 
   SECTION("SIMD mode with uint32_t keys") {
-    btree<uint32_t, int, 16, 16, Mode> tree;
+    btree<uint32_t, int, 16, 16, std::less<uint32_t>, Mode> tree;
 
     tree.insert(100u, 1);
     tree.insert(200u, 2);
@@ -3481,7 +3485,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   }
 
   SECTION("SIMD mode erase operations") {
-    btree<int, int, 8, 8, Mode> tree;
+    btree<int, int, 8, 8, std::less<int>, Mode> tree;
 
     for (int i = 0; i < 50; ++i) {
       tree.insert(i, i * 2);
@@ -3501,7 +3505,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
   }
 
   SECTION("SIMD mode iteration") {
-    btree<int, int, 16, 16, Mode> tree;
+    btree<int, int, 16, 16, std::less<int>, Mode> tree;
 
     for (int i = 0; i < 20; ++i) {
       tree.insert(i, i * 3);
@@ -3516,5 +3520,119 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
     }
 
     REQUIRE(count == 20);
+  }
+}
+
+TEST_CASE("btree with std::greater (descending order)", "[btree][comparator]") {
+  SECTION("Binary search mode") {
+    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Binary> tree;
+
+    // Insert elements (they should be stored in descending order)
+    tree.insert(5, "five");
+    tree.insert(10, "ten");
+    tree.insert(3, "three");
+    tree.insert(7, "seven");
+    tree.insert(1, "one");
+
+    REQUIRE(tree.size() == 5);
+
+    // Verify find works
+    auto found = tree.find(7);
+    REQUIRE(found != tree.end());
+    REQUIRE(found->second == "seven");
+
+    // Verify iteration is in descending order
+    auto it = tree.begin();
+    REQUIRE(it->first == 10);
+    ++it;
+    REQUIRE(it->first == 7);
+    ++it;
+    REQUIRE(it->first == 5);
+    ++it;
+    REQUIRE(it->first == 3);
+    ++it;
+    REQUIRE(it->first == 1);
+
+    // Verify erase works
+    tree.erase(7);
+    REQUIRE(tree.size() == 4);
+    REQUIRE(tree.find(7) == tree.end());
+
+    // Verify order is maintained after erase
+    it = tree.begin();
+    REQUIRE(it->first == 10);
+    ++it;
+    REQUIRE(it->first == 5);
+    ++it;
+    REQUIRE(it->first == 3);
+    ++it;
+    REQUIRE(it->first == 1);
+  }
+
+  SECTION("Linear search mode") {
+    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Linear> tree;
+
+    tree.insert(15, "fifteen");
+    tree.insert(25, "twenty-five");
+    tree.insert(5, "five");
+    tree.insert(20, "twenty");
+
+    REQUIRE(tree.size() == 4);
+
+    // Verify descending order
+    auto it = tree.begin();
+    REQUIRE(it->first == 25);
+    ++it;
+    REQUIRE(it->first == 20);
+    ++it;
+    REQUIRE(it->first == 15);
+    ++it;
+    REQUIRE(it->first == 5);
+
+    // Verify find works
+    REQUIRE(tree.find(20) != tree.end());
+    REQUIRE(tree.find(20)->second == "twenty");
+    REQUIRE(tree.find(100) == tree.end());
+  }
+
+  SECTION("Large tree with many elements") {
+    btree<int, int, 16, 16, std::greater<int>, SearchMode::Binary> tree;
+
+    // Insert 100 elements
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, i * 2);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify descending order by checking first and last elements
+    auto it = tree.begin();
+    REQUIRE(it->first == 99);  // Largest key first in descending order
+
+    // Verify find works
+    for (int i = 0; i < 100; ++i) {
+      auto found = tree.find(i);
+      REQUIRE(found != tree.end());
+      REQUIRE(found->second == i * 2);
+    }
+
+    // Erase some elements
+    for (int i = 40; i < 60; ++i) {
+      tree.erase(i);
+    }
+
+    REQUIRE(tree.size() == 80);
+
+    // Verify erased elements are gone
+    for (int i = 40; i < 60; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+
+    // Verify remaining elements are still there and in descending order
+    int prev_key = 100;
+    for (auto pair : tree) {
+      REQUIRE(pair.first < prev_key);
+      prev_key = pair.first;
+    }
   }
 }
