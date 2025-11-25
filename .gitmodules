@@ -13,3 +13,6 @@
 [submodule "third_party/unordered_dense"]
 	path = third_party/unordered_dense
 	url = https://github.com/martinus/unordered_dense.git
+[submodule "third_party/histograms"]
+	path = third_party/histograms
+	url = https://github.com/kressler/histograms.git
