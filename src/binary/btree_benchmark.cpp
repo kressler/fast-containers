@@ -359,6 +359,44 @@ int main(int argc, char** argv) {
                                     fast_containers::SearchMode::Binary>{},
              stats);
        }},
+      {"btree_16_256_4_64_linear_simd",
+       [&](TimingStats& stats) -> void {
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 4, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear>{},
+             stats);
+       }},
+      {"btree_16_256_4_64_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 4, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear,
+                                    fast_containers::MoveMode::Standard>{},
+             stats);
+       }},
+      {"btree_16_256_8_64_linear_simd",
+       [&](TimingStats& stats) -> void {
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 8, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear>{},
+             stats);
+       }},
+      {"btree_16_256_8_64_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 8, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear,
+                                    fast_containers::MoveMode::Standard>{},
+             stats);
+       }},
       {"btree_16_256_16_64_linear_simd",
        [&](TimingStats& stats) -> void {
          benchmarker(
@@ -366,6 +404,16 @@ int main(int argc, char** argv) {
                                     std::array<std::byte, 256>, 16, 64,
                                     std::less<std::array<std::int64_t, 2>>,
                                     fast_containers::SearchMode::Linear>{},
+             stats);
+       }},
+      {"btree_16_256_16_64_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 16, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear,
+                                    fast_containers::MoveMode::Standard>{},
              stats);
        }},
       {"btree_16_256_24_64_linear_simd",
