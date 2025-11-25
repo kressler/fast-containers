@@ -1,7 +1,7 @@
 # Fast Containers - C++ SIMD Containers
 
 ## Stack
-- C++23, CMake 3.30+, Catch2 v3.11.0, Google Benchmark v1.9.4, Lyra 1.6.1
+- C++23, CMake 3.30+, Catch2 v3.11.0, Google Benchmark v1.9.4, Lyra 1.6.1, Histograms (header-only)
 - Style: Google C++ (clang-format), 80 chars, 2 spaces, `int* ptr`
 
 ## Structure
@@ -12,7 +12,7 @@ src/
   btree.hpp (interface)              # 667 lines
   btree.ipp (implementation)         # 1532 lines
   tests/, benchmarks/, binary/
-third_party/{catch2/, benchmark/, lyra/}  # submodules
+third_party/{catch2/, benchmark/, lyra/, histograms/, unordered_dense/, abseil-cpp/}  # submodules
 hooks/, install-hooks.sh
 ```
 
@@ -584,7 +584,7 @@ namespace fast_containers {
 - [ ] Prefetch hints
 - [ ] AVX-512 support
 - [x] 64-byte cache line alignment (PR #22)
-- [ ] Custom comparators
+- [x] Custom comparators (PRs #64, #65, #66)
 - [ ] Move semantics for insert
 
 ## Setup
@@ -604,3 +604,131 @@ ctest --test-dir cmake-build-release --output-on-failure
 - Fixed compile-time size, no reallocation
 - Iterator proxy pattern (use `auto`, not `auto&`)
 - Move-only values untested
+
+## SIMD Support for std::greater (PR #66)
+
+### Problem
+SIMD search mode only worked with `std::less` (ascending order). Users needing descending order had to use slower Binary or Linear search modes.
+
+### Solution
+Extended all SIMD implementations to support both `std::less` and `std::greater` using compile-time dispatch:
+
+```cpp
+constexpr bool is_ascending = std::is_same_v<Compare, std::less<Key>>;
+
+// For ascending (std::less): find first position where key >= search_key
+//   Check: keys_vec < search_vec, find first false
+// For descending (std::greater): find first position where key <= search_key
+//   Check: keys_vec > search_vec, find first false
+
+if constexpr (is_ascending) {
+  cmp = _mm256_cmpgt_epi32(search_vec, keys_vec);  // keys < search
+} else {
+  cmp = _mm256_cmpgt_epi32(keys_vec, search_vec);  // keys > search
+}
+```
+
+### Key Points
+- **Zero runtime overhead**: All comparator logic resolved at compile-time via `if constexpr`
+- **All key sizes supported**: 1, 2, 4, 8 bytes (int8_t through double)
+- **Float comparison**: Use `_CMP_LT_OQ` vs `_CMP_GT_OQ` for ascending vs descending
+- **Integer comparison**: Swap operands in `_mm256_cmpgt_epi*` calls
+- **Updated static_assert**: Now allows both `std::less<Key>` and `std::greater<Key>`
+
+### Performance
+SIMD provides same speedup for descending order as ascending:
+- Size 32: 45% faster than Linear
+- Size 64: 59% faster than Linear
+
+### Files Modified
+- `ordered_array.hpp`: Updated static_assert to accept std::greater
+- `ordered_array.ipp`: Updated all 4 SIMD implementations (1, 2, 4, 8 byte)
+- `test_ordered_array.cpp`: Added 6 comprehensive test sections for std::greater
+
+## Git Submodule Management
+
+### Adding a New Submodule
+```bash
+git submodule add <repo-url> third_party/<name>
+git commit -m "Add <name> as a git submodule"
+git push
+```
+
+### Updating a Submodule to Latest
+```bash
+git submodule update --remote third_party/<name>
+git add third_party/<name>
+git commit -m "Update <name> submodule to latest version"
+git push
+```
+
+### Using Header-Only Libraries via CMake
+When a submodule provides an INTERFACE library target (like histograms):
+
+```cmake
+# Add the submodule
+add_subdirectory(third_party/histograms)
+
+# Link against it (automatically provides include paths)
+target_link_libraries(your_target PRIVATE histograms::histograms)
+```
+
+The INTERFACE library pattern provides:
+- Include directories (`$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>`)
+- Compile features (e.g., `cxx_std_23`)
+- Proper namespacing with `::` alias
+
+### Histograms Integration
+- **Location**: `third_party/histograms/`
+- **Type**: Header-only library
+- **Target**: `histograms::histograms` (INTERFACE library)
+- **Headers**: `histogram.h`, `log_linear_bucketer.h`
+- **Usage**: `#include "histogram.h"` after linking
+
+## Bulk Code Modifications
+
+### Pattern: Updating Lambda Signatures
+When refactoring many similar lambda expressions, use `perl` for reliability:
+
+**Task**: Change 143 lambda entries from returning values to taking reference parameters.
+
+**Before**:
+```cpp
+[&]() -> TimingStats {
+  return benchmarker(tree{});
+}
+```
+
+**After**:
+```cpp
+[&](TimingStats& stats) -> void {
+  benchmarker(tree{}, stats);
+}
+```
+
+**Commands**:
+```bash
+# Update lambda signatures
+perl -i -pe 's/\[&\]\(\) -> TimingStats \{/[&](TimingStats& stats) -> void {/g' file.cpp
+
+# Remove return keyword
+perl -i -pe 's/return benchmarker\(/benchmarker(/g' file.cpp
+
+# Add stats parameter to calls
+perl -i -pe 's/>\{\}\);$/>{}, stats);/g' file.cpp
+```
+
+### Why Perl Over Sed
+- **Perl** handles complex patterns and special characters more reliably
+- **Sed** can produce unexpected results with nested parentheses and braces
+- For simple substitutions, sed is fine; for complex patterns, use perl
+
+### Verification
+```bash
+# Count occurrences to verify changes
+grep -c "old_pattern" file.cpp  # Should be 0
+grep -c "new_pattern" file.cpp  # Should match expected count
+
+# Compile to catch any errors
+cmake --build build-dir --target your_target
+```
