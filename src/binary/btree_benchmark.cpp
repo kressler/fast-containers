@@ -7,6 +7,7 @@
 #include <map>
 #include <print>
 #include <random>
+#include <thread>
 #include <unordered_set>
 
 #include "../btree.hpp"
@@ -33,8 +34,6 @@ struct TimingStats {
       find_histogram;
   histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
       erase_histogram;
-  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
-      iterate_histogram;
 };
 
 template <size_t N>
@@ -92,6 +91,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
     tree.insert({key, {}});
     uint64_t stop = __rdtscp(&dummy);
     stats.insert_time += stop - start;
+    stats.insert_histogram.observe(stop - start);
   };
 
   auto find = [&](const typename T::key_type& key) -> void {
@@ -99,6 +99,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
     benchmark::DoNotOptimize(tree.find(key));
     uint64_t stop = __rdtscp(&dummy);
     stats.find_time += stop - start;
+    stats.find_histogram.observe(stop - start);
   };
 
   auto erase = [&]() -> void {
@@ -108,6 +109,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
     benchmark::DoNotOptimize(tree.find(key));
     uint64_t stop = __rdtscp(&dummy);
     stats.erase_time += stop - start;
+    stats.erase_histogram.observe(stop - start);
   };
 
   auto iterate = [&]() -> void {
@@ -1361,5 +1363,43 @@ int main(int argc, char** argv) {
     std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", name,
                  stats.insert_time, stats.find_time, stats.erase_time,
                  stats.iterate_time);
+  }
+
+  std::cout << std::endl << std::endl;
+
+  unsigned int dummy;
+  auto start = std::chrono::high_resolution_clock::now();
+  uint64_t rdtsc_start = __rdtsc();
+  std::this_thread::sleep_for(std::chrono::milliseconds{1000});
+  auto end = std::chrono::high_resolution_clock::now();
+  uint64_t rdtsc_end = __rdtsc();
+  const double cycles_per_nano =
+      static_cast<double>(rdtsc_end - rdtsc_start) /
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+  std::cout << "rdtsc calibration: " << cycles_per_nano << " cycles / ns"
+            << std::endl;
+
+  const std::vector<double> percentiles{0.5, 0.9, 0.95, 0.99, 0.999, 0.9999};
+  std::cout << "    ";
+  for (const auto& percentile : percentiles) {
+    std::print("{:>16}, ", percentile);
+  }
+  std::cout << std::endl;
+
+  auto print_percentiles = [&](const std::string& name, const auto& histogram) {
+    auto values = histogram.percentiles(percentiles);
+    std::cout << "  " << name << ":";
+    for (const auto& value : values) {
+      std::print("{:>16f}, ", value / cycles_per_nano);
+    }
+    std::cout << std::endl;
+  };
+
+  for (const auto& name : names) {
+    std::cout << name << std::endl;
+    const auto& stats = results.at(name);
+    print_percentiles("i", stats.insert_histogram);
+    print_percentiles("f", stats.find_histogram);
+    print_percentiles("e", stats.erase_histogram);
   }
 }
