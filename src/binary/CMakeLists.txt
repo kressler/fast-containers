@@ -6,3 +6,6 @@ target_link_libraries(btree_benchmark PRIVATE absl::base benchmark::benchmark hi
 
 add_executable(lyra_example lyra_example.cpp)
 target_link_libraries(lyra_example PRIVATE lyra)
+
+add_executable(spin spin.cpp)
+target_link_libraries(spin PRIVATE benchmark::benchmark histograms lyra)
