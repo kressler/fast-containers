@@ -103,6 +103,9 @@ target_include_directories(lyra INTERFACE third_party/lyra/include)
 add_library(unordered_dense INTERFACE)
 target_include_directories(unordered_dense INTERFACE third_party/unordered_dense/include)
 
+add_library(histograms INTERFACE)
+target_include_directories(histograms INTERFACE third_party/histograms/src)
+
 # Enable testing
 enable_testing()
 

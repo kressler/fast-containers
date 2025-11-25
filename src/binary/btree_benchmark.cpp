@@ -2,7 +2,6 @@
 #include <ankerl/unordered_dense.h>
 #include <benchmark/benchmark.h>
 
-#include <chrono>
 #include <iostream>
 #include <lyra/lyra.hpp>
 #include <map>
@@ -11,6 +10,8 @@
 #include <unordered_set>
 
 #include "../btree.hpp"
+#include "histogram.h"
+#include "log_linear_bucketer.h"
 
 struct TimingStats {
   uint64_t insert_time{0};
@@ -25,6 +26,15 @@ struct TimingStats {
     iterate_time += rhs.iterate_time;
     return *this;  // return the result by reference
   }
+
+  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+      insert_histogram;
+  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+      find_histogram;
+  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+      erase_histogram;
+  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+      iterate_histogram;
 };
 
 template <size_t N>
@@ -41,8 +51,8 @@ struct std::hash<std::array<int64_t, N>> {
 };
 
 template <typename T>
-TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
-                          size_t tree_size, size_t batches, size_t batch_size) {
+void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
+                   size_t batches, size_t batch_size, TimingStats& stats) {
   auto get_dist = [&]() -> auto {
     if constexpr (std::is_fundamental_v<typename T::key_type>) {
       if (tree_size > std::numeric_limits<typename T::key_type>::max() / 2) {
@@ -61,7 +71,6 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
   };
   std::mt19937 rng(seed);
   auto dist = get_dist();
-  TimingStats stats;
   unsigned int dummy;
   std::unordered_set<typename T::key_type> keys{};
 
@@ -132,11 +141,9 @@ TimingStats run_benchmark(T& tree, uint64_t seed, size_t iterations,
   }
 
   iterate();
-
-  return stats;
 }
 
-using LambdaType = std::function<TimingStats()>;
+using LambdaType = std::function<void(TimingStats&)>;
 
 int main(int argc, char** argv) {
   bool show_help = false;
@@ -148,19 +155,20 @@ int main(int argc, char** argv) {
   std::vector<std::string> names;
   std::unordered_map<std::string, TimingStats> results;
 
-  auto benchmarker = [&](auto tree) -> TimingStats {
-    return run_benchmark(tree, seed, target_iterations, tree_size, batches,
-                         batch_size);
+  auto benchmarker = [&](auto tree, TimingStats& stats) -> void {
+    run_benchmark(tree, seed, target_iterations, tree_size, batches, batch_size,
+                  stats);
   };
 
   std::map<std::string, LambdaType> benchmarkers{
       /* 256 byte values */
       {"btree_8_256_16_128_simd_simd",
-       [&]() -> TimingStats {
+       [&](TimingStats& stats) -> void {
          return benchmarker(
              fast_containers::btree<int64_t, std::array<std::byte, 256>, 16,
                                     128, std::less<int64_t>,
-                                    fast_containers::SearchMode::SIMD>{});
+                                    fast_containers::SearchMode::SIMD>{},
+             stats);
        }},
       {"btree_8_256_16_128_binary_simd",
        [&]() -> TimingStats {
@@ -1222,12 +1230,6 @@ int main(int argc, char** argv) {
                "Iterate cycles");
   for (const auto& name : names) {
     const auto& stats = results.at(name);
-#if 0
-    std::cout << name << ": Insert: " << stats.insert_time
-              << ", Find: " << stats.find_time
-              << ", Erase: " << stats.erase_time
-              << ", Iterate: " << stats.iterate_time << std::endl;
-#endif
     std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", name,
                  stats.insert_time, stats.find_time, stats.erase_time,
                  stats.iterate_time);
