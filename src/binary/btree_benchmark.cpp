@@ -28,11 +28,11 @@ struct TimingStats {
     return *this;  // return the result by reference
   }
 
-  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+  histograms::Histogram<histograms::LogLinearBucketer<384, 4, 1>>
       insert_histogram;
-  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+  histograms::Histogram<histograms::LogLinearBucketer<384, 4, 1>>
       find_histogram;
-  histograms::Histogram<histograms::LogLinearBucketer<130, 2, 1>>
+  histograms::Histogram<histograms::LogLinearBucketer<384, 4, 1>>
       erase_histogram;
 };
 
