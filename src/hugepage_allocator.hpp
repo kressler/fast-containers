@@ -1,17 +1,11 @@
 #pragma once
 
-#include <sys/mman.h>
-
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
-#include <vector>
 
-#ifdef HAVE_NUMA
-#include <numa.h>
-#include <numaif.h>
-#endif
+#include "hugepage_pool.hpp"
 
 namespace fast_containers {
 
@@ -95,8 +89,8 @@ class HugePageAllocator {
                              bool use_hugepages = true,
                              size_type growth_size = 64 * 1024 * 1024,
                              bool use_numa = false)
-      : pool_(std::make_shared<Pool>(initial_pool_size, use_hugepages,
-                                     growth_size, use_numa)) {}
+      : pool_(std::make_shared<HugePagePool>(initial_pool_size, use_hugepages,
+                                             growth_size, use_numa)) {}
 
   /**
    * Copy constructor (shares pool with other allocator).
@@ -110,9 +104,9 @@ class HugePageAllocator {
    */
   template <typename U>
   explicit HugePageAllocator(const HugePageAllocator<U>& other)
-      : pool_(std::make_shared<Pool>(
-            other.pool_->initial_size_, other.pool_->using_hugepages_,
-            other.pool_->growth_size_, other.pool_->using_numa_)) {}
+      : pool_(std::make_shared<HugePagePool>(
+            other.pool_->initial_size(), other.pool_->is_hugepages_enabled(),
+            other.pool_->growth_size(), other.pool_->is_numa_enabled())) {}
 
   /**
    * Allocate n objects of type T.
@@ -131,46 +125,9 @@ class HugePageAllocator {
           "HugePageAllocator only supports allocating 1 object at a time");
     }
 
-    // Try to allocate from free list first
-    // Intrusive free list: each freed block stores pointer to next free block
-    if (pool_->free_list_head_ != nullptr) {
-      void* ptr = pool_->free_list_head_;
-      pool_->free_list_head_ = *reinterpret_cast<void**>(ptr);
-
-#ifdef ALLOCATOR_STATS
-      pool_->stats_.record_allocation(object_size);
-#endif
-
-      return static_cast<T*>(ptr);
-    }
-
-    // Allocate from pool
-    // Align next_free to cache-line boundary (or larger if required by type)
-    uintptr_t current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-    uintptr_t aligned = (current + allocation_alignment - 1) &
-                        ~(static_cast<uintptr_t>(allocation_alignment) - 1);
-    size_type padding = aligned - current;
-
-    // Grow pool if needed
-    if (pool_->bytes_remaining_ < object_size + padding) {
-      pool_->grow();
-      // After growth, recalculate alignment from new next_free_
-      current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-      aligned = (current + allocation_alignment - 1) &
-                ~(static_cast<uintptr_t>(allocation_alignment) - 1);
-      padding = aligned - current;
-    }
-
-    pool_->next_free_ = reinterpret_cast<std::byte*>(aligned);
-    void* result = pool_->next_free_;
-    pool_->next_free_ += object_size;
-    pool_->bytes_remaining_ -= (object_size + padding);
-
-#ifdef ALLOCATOR_STATS
-    pool_->stats_.record_allocation(object_size);
-#endif
-
-    return static_cast<T*>(result);
+    // Delegate to pool with required alignment
+    void* ptr = pool_->allocate(object_size, allocation_alignment);
+    return static_cast<T*>(ptr);
   }
 
   /**
@@ -188,14 +145,8 @@ class HugePageAllocator {
           "HugePageAllocator only supports deallocating 1 object at a time");
     }
 
-    // Add to intrusive free list
-    // Store current head pointer in the freed block, then update head
-    *reinterpret_cast<void**>(p) = pool_->free_list_head_;
-    pool_->free_list_head_ = p;
-
-#ifdef ALLOCATOR_STATS
-    pool_->stats_.record_deallocation(object_size);
-#endif
+    // Delegate to pool
+    pool_->deallocate(p, object_size);
   }
 
   /**
@@ -216,259 +167,52 @@ class HugePageAllocator {
   /**
    * Check if allocator is using hugepages.
    */
-  bool using_hugepages() const { return pool_->using_hugepages_; }
+  bool using_hugepages() const { return pool_->using_hugepages(); }
 
   /**
    * Check if allocator is using NUMA-aware allocations.
    */
-  bool using_numa() const {
-#ifdef HAVE_NUMA
-    return pool_->using_numa_;
-#else
-    return false;
-#endif
-  }
+  bool using_numa() const { return pool_->using_numa(); }
 
   /**
    * Get remaining bytes in pool.
    */
-  size_type bytes_remaining() const { return pool_->bytes_remaining_; }
+  size_type bytes_remaining() const { return pool_->bytes_remaining(); }
 
 #ifdef ALLOCATOR_STATS
   /**
    * Get total number of allocations (compile-time optional).
    */
-  size_type get_allocations() const { return pool_->stats_.allocations; }
+  size_type get_allocations() const { return pool_->get_allocations(); }
 
   /**
    * Get total number of deallocations (compile-time optional).
    */
-  size_type get_deallocations() const { return pool_->stats_.deallocations; }
+  size_type get_deallocations() const { return pool_->get_deallocations(); }
 
   /**
    * Get number of pool growth events (compile-time optional).
    */
-  size_type get_growth_events() const { return pool_->stats_.growth_events; }
+  size_type get_growth_events() const { return pool_->get_growth_events(); }
 
   /**
    * Get lifetime total bytes allocated (compile-time optional).
    */
-  size_type get_bytes_allocated() const {
-    return pool_->stats_.bytes_allocated;
-  }
+  size_type get_bytes_allocated() const { return pool_->get_bytes_allocated(); }
 
   /**
    * Get current bytes in use (compile-time optional).
    */
-  size_type get_current_usage() const { return pool_->stats_.current_usage; }
+  size_type get_current_usage() const { return pool_->get_current_usage(); }
 
   /**
    * Get peak bytes in use (compile-time optional).
    */
-  size_type get_peak_usage() const { return pool_->stats_.peak_usage; }
+  size_type get_peak_usage() const { return pool_->get_peak_usage(); }
 #endif
 
  private:
-  static constexpr size_type HUGEPAGE_SIZE = 2 * 1024 * 1024;  // 2MB
-
-  struct MemoryRegion {
-    std::byte* base = nullptr;
-    size_type size = 0;
-  };
-
-#ifdef ALLOCATOR_STATS
-  /**
-   * Statistics tracked by the allocator (compile-time optional).
-   * Enable by defining ALLOCATOR_STATS at compile time.
-   *
-   * Note: Not thread-safe (consistent with rest of allocator).
-   */
-  struct Stats {
-    size_type allocations{0};      // Total allocations
-    size_type deallocations{0};    // Total deallocations
-    size_type growth_events{0};    // Number of pool growths
-    size_type bytes_allocated{0};  // Lifetime total bytes allocated
-    size_type current_usage{0};    // Current bytes in use
-    size_type peak_usage{0};       // Peak bytes in use
-
-    void record_allocation(size_type bytes) {
-      ++allocations;
-      bytes_allocated += bytes;
-      current_usage += bytes;
-      if (current_usage > peak_usage) {
-        peak_usage = current_usage;
-      }
-    }
-
-    void record_deallocation(size_type bytes) {
-      ++deallocations;
-      current_usage -= bytes;
-    }
-
-    void record_growth() { ++growth_events; }
-  };
-#endif
-
-  struct Pool {
-    std::vector<MemoryRegion> regions_;
-    std::byte* next_free_;
-    size_type bytes_remaining_;
-    size_type initial_size_;
-    size_type growth_size_;
-    bool using_hugepages_;
-    bool using_numa_;
-    void* free_list_head_;  // Head of intrusive free list
-#ifdef HAVE_NUMA
-    int numa_node_;  // Current NUMA node (-1 if NUMA not available)
-#endif
-
-#ifdef ALLOCATOR_STATS
-    Stats stats_;
-#endif
-
-    Pool(size_type initial_size, bool use_hugepages, size_type growth_size,
-         bool use_numa)
-        : bytes_remaining_(0),
-          initial_size_(initial_size),
-          growth_size_(growth_size),
-          using_hugepages_(false),
-          using_numa_(false),
-          next_free_(nullptr),
-          free_list_head_(nullptr)
-#ifdef HAVE_NUMA
-          ,
-          numa_node_(-1)
-#endif
-    {
-#ifdef HAVE_NUMA
-      // Check if NUMA is available and requested
-      if (use_numa && numa_available() != -1) {
-        numa_node_ = numa_node_of_cpu(sched_getcpu());
-        using_numa_ = true;
-      }
-#endif
-
-      // Allocate initial region
-      MemoryRegion initial_region;
-
-      // Try hugepages first if requested
-      if (use_hugepages) {
-        initial_region = allocate_hugepages_region(initial_size);
-        if (initial_region.base != nullptr) {
-          using_hugepages_ = true;
-        }
-      }
-
-      // Fall back to regular pages if hugepages unavailable or not requested
-      if (initial_region.base == nullptr) {
-        initial_region = allocate_regular_region(initial_size);
-      }
-
-      regions_.push_back(initial_region);
-      next_free_ = initial_region.base;
-      bytes_remaining_ = initial_region.size;
-    }
-
-    ~Pool() {
-      for (const auto& region : regions_) {
-        if (region.base != nullptr) {
-          munmap(region.base, region.size);
-        }
-      }
-    }
-
-    // Non-copyable, non-movable
-    Pool(const Pool&) = delete;
-    Pool& operator=(const Pool&) = delete;
-
-    /**
-     * Grow the pool by allocating a new region of growth_size_.
-     * Called when current region is exhausted.
-     */
-    void grow() {
-      MemoryRegion new_region;
-
-      if (using_hugepages_) {
-        new_region = allocate_hugepages_region(growth_size_);
-        if (new_region.base == nullptr) {
-          // Hugepages no longer available, fall back to regular
-          new_region = allocate_regular_region(growth_size_);
-        }
-      } else {
-        new_region = allocate_regular_region(growth_size_);
-      }
-
-      regions_.push_back(new_region);
-      next_free_ = new_region.base;
-      bytes_remaining_ = new_region.size;
-
-#ifdef ALLOCATOR_STATS
-      stats_.record_growth();
-#endif
-    }
-
-   private:
-    MemoryRegion allocate_hugepages_region(size_type size) {
-      // Round up to hugepage boundary
-      size_type aligned_size =
-          (size + HUGEPAGE_SIZE - 1) & ~(HUGEPAGE_SIZE - 1);
-
-      void* ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-
-      if (ptr == MAP_FAILED) {
-        return {nullptr, 0};  // Hugepages not available
-      }
-
-#ifdef HAVE_NUMA
-      // Bind memory to NUMA node if NUMA is enabled
-      if (using_numa_ && numa_node_ >= 0) {
-        unsigned long nodemask = 1UL << numa_node_;
-        mbind(ptr, aligned_size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
-              MPOL_MF_STRICT | MPOL_MF_MOVE);
-      }
-#endif
-
-      // Advise kernel about access pattern
-      // Use MADV_RANDOM for internal nodes (tree-structured access)
-      // Use MADV_SEQUENTIAL for leaf nodes (linked list traversal)
-      // For now, use MADV_NORMAL (let kernel decide)
-      madvise(ptr, aligned_size, MADV_NORMAL);
-
-      // Pre-fault pages to ensure hugepages are allocated now
-      // (avoid blocking page faults later)
-      for (size_type i = 0; i < aligned_size; i += HUGEPAGE_SIZE) {
-        static_cast<volatile char*>(ptr)[i] = 0;
-      }
-
-      return {static_cast<std::byte*>(ptr), aligned_size};
-    }
-
-    MemoryRegion allocate_regular_region(size_type size) {
-      void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-      if (ptr == MAP_FAILED) {
-        throw std::bad_alloc();
-      }
-
-#ifdef HAVE_NUMA
-      // Bind memory to NUMA node if NUMA is enabled
-      if (using_numa_ && numa_node_ >= 0) {
-        unsigned long nodemask = 1UL << numa_node_;
-        mbind(ptr, size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
-              MPOL_MF_STRICT | MPOL_MF_MOVE);
-      }
-#endif
-
-      // Hint to use transparent hugepages if available
-      madvise(ptr, size, MADV_HUGEPAGE);
-
-      return {static_cast<std::byte*>(ptr), size};
-    }
-  };
-
-  std::shared_ptr<Pool> pool_;
+  std::shared_ptr<HugePagePool> pool_;
 
   // Allow rebind to access pool_
   template <typename>
