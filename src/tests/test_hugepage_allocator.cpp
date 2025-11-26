@@ -341,3 +341,117 @@ TEST_CASE("btree with std::allocator - default allocator still works",
     }
   }
 }
+
+#ifdef ALLOCATOR_STATS
+TEST_CASE("HugePageAllocator - statistics tracking",
+          "[hugepage_allocator][stats]") {
+  // Create small pool to force growth
+  constexpr size_t initial_size = 1024;  // 1KB initial
+  constexpr size_t growth_size = 2048;   // 2KB growth
+  HugePageAllocator<int64_t> alloc(initial_size, false, growth_size);
+
+  SECTION("Track allocations and deallocations") {
+    std::vector<int64_t*> ptrs;
+
+    // Allocate 10 blocks
+    for (int i = 0; i < 10; ++i) {
+      int64_t* p = alloc.allocate(1);
+      *p = i;
+      ptrs.push_back(p);
+    }
+
+    REQUIRE(alloc.get_allocations() == 10);
+    REQUIRE(alloc.get_deallocations() == 0);
+    REQUIRE(alloc.get_bytes_allocated() == 10 * sizeof(int64_t));
+    REQUIRE(alloc.get_current_usage() == 10 * sizeof(int64_t));
+    REQUIRE(alloc.get_peak_usage() == 10 * sizeof(int64_t));
+
+    // Deallocate 5 blocks
+    for (int i = 0; i < 5; ++i) {
+      alloc.deallocate(ptrs[i], 1);
+    }
+
+    REQUIRE(alloc.get_allocations() == 10);
+    REQUIRE(alloc.get_deallocations() == 5);
+    REQUIRE(alloc.get_current_usage() == 5 * sizeof(int64_t));
+    REQUIRE(alloc.get_peak_usage() == 10 * sizeof(int64_t));  // Peak unchanged
+
+    // Allocate 3 more blocks (reusing from free list)
+    for (int i = 0; i < 3; ++i) {
+      int64_t* p = alloc.allocate(1);
+      *p = i + 100;
+      ptrs.push_back(p);
+    }
+
+    REQUIRE(alloc.get_allocations() == 13);
+    REQUIRE(alloc.get_deallocations() == 5);
+    REQUIRE(alloc.get_current_usage() == 8 * sizeof(int64_t));
+    REQUIRE(alloc.get_peak_usage() == 10 * sizeof(int64_t));
+
+    // Clean up
+    for (size_t i = 5; i < ptrs.size(); ++i) {
+      alloc.deallocate(ptrs[i], 1);
+    }
+  }
+
+  SECTION("Track pool growth") {
+    REQUIRE(alloc.get_growth_events() == 0);
+
+    std::vector<int64_t*> ptrs;
+
+    // Allocate enough to trigger growth
+    // initial_size / sizeof(int64_t) = 1024 / 8 = 128 int64_t's
+    // Allocate 200 to ensure growth
+    for (int i = 0; i < 200; ++i) {
+      int64_t* p = alloc.allocate(1);
+      *p = i;
+      ptrs.push_back(p);
+    }
+
+    // Should have grown at least once
+    REQUIRE(alloc.get_growth_events() >= 1);
+    REQUIRE(alloc.get_allocations() == 200);
+    REQUIRE(alloc.get_bytes_allocated() == 200 * sizeof(int64_t));
+
+    // Clean up
+    for (int64_t* p : ptrs) {
+      alloc.deallocate(p, 1);
+    }
+
+    REQUIRE(alloc.get_deallocations() == 200);
+    REQUIRE(alloc.get_current_usage() == 0);
+  }
+
+  SECTION("Peak usage tracking") {
+    std::vector<int64_t*> ptrs;
+
+    // Allocate 20 blocks
+    for (int i = 0; i < 20; ++i) {
+      ptrs.push_back(alloc.allocate(1));
+    }
+    size_t peak1 = alloc.get_peak_usage();
+    REQUIRE(peak1 == 20 * sizeof(int64_t));
+
+    // Deallocate 10 blocks
+    for (int i = 0; i < 10; ++i) {
+      alloc.deallocate(ptrs[i], 1);
+    }
+    size_t usage_after_dealloc = alloc.get_current_usage();
+    REQUIRE(usage_after_dealloc == 10 * sizeof(int64_t));
+    REQUIRE(alloc.get_peak_usage() == peak1);  // Peak unchanged
+
+    // Allocate 15 more blocks (net usage = 25)
+    for (int i = 0; i < 15; ++i) {
+      ptrs.push_back(alloc.allocate(1));
+    }
+    size_t peak2 = alloc.get_peak_usage();
+    REQUIRE(peak2 == 25 * sizeof(int64_t));
+    REQUIRE(peak2 > peak1);
+
+    // Clean up
+    for (size_t i = 10; i < ptrs.size(); ++i) {
+      alloc.deallocate(ptrs[i], 1);
+    }
+  }
+}
+#endif
