@@ -15,6 +15,10 @@ add_executable(test_hugepage_allocator tests/test_hugepage_allocator.cpp)
 target_link_libraries(test_hugepage_allocator PRIVATE Catch2::Catch2WithMain)
 add_test(NAME test_hugepage_allocator COMMAND test_hugepage_allocator)
 
+add_executable(test_policy_based_allocator tests/test_policy_based_allocator.cpp)
+target_link_libraries(test_policy_based_allocator PRIVATE Catch2::Catch2WithMain)
+add_test(NAME test_policy_based_allocator COMMAND test_policy_based_allocator)
+
 # Benchmarks
 add_executable(sample_benchmark benchmarks/sample_benchmark.cpp)
 target_link_libraries(sample_benchmark PRIVATE benchmark::benchmark)
