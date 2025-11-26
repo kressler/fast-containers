@@ -53,6 +53,29 @@ if(ENABLE_ALLOCATOR_STATS)
     add_compile_definitions(ALLOCATOR_STATS)
 endif()
 
+# Option to enable NUMA (Non-Uniform Memory Access) awareness
+# Requires libnuma library (libnuma-dev on Debian/Ubuntu)
+# Useful for multi-socket systems to allocate memory on local NUMA nodes
+option(ENABLE_NUMA "Enable NUMA awareness (requires libnuma)" OFF)
+
+if(ENABLE_NUMA)
+    find_library(NUMA_LIBRARY NAMES numa)
+    find_path(NUMA_INCLUDE_DIR NAMES numa.h)
+
+    if(NUMA_LIBRARY AND NUMA_INCLUDE_DIR)
+        message(STATUS "Building with NUMA awareness enabled")
+        message(STATUS "  libnuma library: ${NUMA_LIBRARY}")
+        message(STATUS "  libnuma include: ${NUMA_INCLUDE_DIR}")
+        add_compile_definitions(HAVE_NUMA)
+        include_directories(${NUMA_INCLUDE_DIR})
+        link_libraries(${NUMA_LIBRARY})
+    else()
+        message(WARNING "NUMA support requested but libnuma not found. Install libnuma-dev and try again.")
+        message(WARNING "  NUMA_LIBRARY: ${NUMA_LIBRARY}")
+        message(WARNING "  NUMA_INCLUDE_DIR: ${NUMA_INCLUDE_DIR}")
+    endif()
+endif()
+
 if(ENABLE_ASAN)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(STATUS "Building with AddressSanitizer (ASAN) enabled")
