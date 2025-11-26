@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 #include "../btree.hpp"
+#include "../hugepage_allocator.hpp"
 #include "histogram.h"
 #include "log_linear_bucketer.h"
 
@@ -157,7 +158,11 @@ int main(int argc, char** argv) {
   std::vector<std::string> names;
   std::unordered_map<std::string, TimingStats> results;
 
-  auto benchmarker = [&](auto tree, TimingStats& stats) -> void {
+  auto benchmarker =
+      [&]<typename Tree,
+          typename Allocator = std::allocator<typename Tree::value_type>>(
+          Tree tree, TimingStats& stats,
+          const Allocator& alloc = Allocator()) -> void {
     run_benchmark(tree, seed, target_iterations, tree_size, batches, batch_size,
                   stats);
   };
@@ -397,6 +402,18 @@ int main(int argc, char** argv) {
                                     fast_containers::MoveMode::Standard>{},
              stats);
        }},
+      {"btree_16_256_8_64_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         fast_containers::HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
+             2048ul * 1024ul * 1024ul, true);
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 8, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear,
+                                    fast_containers::MoveMode::Standard>{},
+             stats, alloc);
+       }},
       {"btree_16_256_16_64_linear_simd",
        [&](TimingStats& stats) -> void {
          benchmarker(
@@ -415,6 +432,18 @@ int main(int argc, char** argv) {
                                     fast_containers::SearchMode::Linear,
                                     fast_containers::MoveMode::Standard>{},
              stats);
+       }},
+      {"btree_16_256_16_64_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         fast_containers::HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
+             2048ul * 1024ul * 1024ul, true);
+         benchmarker(
+             fast_containers::btree<std::array<std::int64_t, 2>,
+                                    std::array<std::byte, 256>, 16, 64,
+                                    std::less<std::array<std::int64_t, 2>>,
+                                    fast_containers::SearchMode::Linear,
+                                    fast_containers::MoveMode::Standard>{},
+             stats, alloc);
        }},
       {"btree_16_256_24_64_linear_simd",
        [&](TimingStats& stats) -> void {
