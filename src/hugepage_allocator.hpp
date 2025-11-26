@@ -31,7 +31,8 @@ namespace fast_containers {
  * - Each instantiation (via rebind) creates a separate pool
  * - Pool grows by allocating additional regions when exhausted
  * - Only supports allocating/deallocating 1 object at a time (throws for n!=1)
- * - Uses simple free list for deallocation (all blocks are sizeof(T))
+ * - Uses intrusive free list (freed blocks store next pointer in-place)
+ * - Requires sizeof(T) >= sizeof(void*) for intrusive free list
  * - Not thread-safe (add locking if needed for concurrent use)
  *
  * @tparam T The type to allocate
@@ -48,6 +49,11 @@ class HugePageAllocator {
   // Since n==1 is required, these are compile-time constants
   static constexpr size_type object_size = sizeof(T);
   static constexpr size_type object_alignment = alignof(T);
+
+  // Intrusive free list requires sufficient size to store a pointer
+  static_assert(sizeof(T) >= sizeof(void*),
+                "Type T must be at least sizeof(void*) bytes for intrusive "
+                "free list");
 
   // Rebind support for STL containers
   template <typename U>
@@ -105,10 +111,10 @@ class HugePageAllocator {
     }
 
     // Try to allocate from free list first
-    // Since n==1, all free blocks are object_size, so any block works
-    if (!pool_->free_list_.empty()) {
-      void* ptr = pool_->free_list_.back();
-      pool_->free_list_.pop_back();
+    // Intrusive free list: each freed block stores pointer to next free block
+    if (pool_->free_list_head_ != nullptr) {
+      void* ptr = pool_->free_list_head_;
+      pool_->free_list_head_ = *reinterpret_cast<void**>(ptr);
       return static_cast<T*>(ptr);
     }
 
@@ -152,8 +158,10 @@ class HugePageAllocator {
           "HugePageAllocator only supports deallocating 1 object at a time");
     }
 
-    // Add to free list for reuse (all blocks are sizeof(T))
-    pool_->free_list_.push_back(p);
+    // Add to intrusive free list
+    // Store current head pointer in the freed block, then update head
+    *reinterpret_cast<void**>(p) = pool_->free_list_head_;
+    pool_->free_list_head_ = p;
   }
 
   /**
@@ -196,14 +204,15 @@ class HugePageAllocator {
     size_type initial_size_;
     size_type growth_size_;
     bool using_hugepages_;
-    std::vector<void*> free_list_;
+    void* free_list_head_;  // Head of intrusive free list
 
     Pool(size_type initial_size, bool use_hugepages, size_type growth_size)
         : bytes_remaining_(0),
           initial_size_(initial_size),
           growth_size_(growth_size),
           using_hugepages_(false),
-          next_free_(nullptr) {
+          next_free_(nullptr),
+          free_list_head_(nullptr) {
       // Allocate initial region
       MemoryRegion initial_region;
 
