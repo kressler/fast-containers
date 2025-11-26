@@ -1,7 +1,7 @@
 // Implementation file for btree.hpp
 // This file contains all method implementations for the btree class.
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 // Constructor
 template <typename Key, typename Value, std::size_t LeafNodeSize,
@@ -1645,4 +1645,4 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   }
 }
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers

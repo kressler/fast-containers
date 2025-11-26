@@ -2,7 +2,7 @@
 // This file is included at the end of ordered_array.hpp
 // DO NOT include this file directly
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 // ============================================================================
 // Constructors and Assignment Operators
@@ -1437,4 +1437,4 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_b
   }
 }
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers

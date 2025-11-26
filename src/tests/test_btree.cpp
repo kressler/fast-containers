@@ -4,7 +4,7 @@
 
 #include "../btree.hpp"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 
 // Helper types for testing different SearchModes
 struct BinarySearchMode {

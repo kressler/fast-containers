@@ -58,8 +58,9 @@ int main(int argc, char** argv) {
               << iter + seed << std::endl;
 
     std::map<int, int> ordered_map;
-    fast_containers::btree<int, int, 32, 128, std::less<int>,
-                           fast_containers::SearchMode::SIMD>
+    kressler::fast_containers::btree<
+        int, int, 32, 128, std::less<int>,
+        kressler::fast_containers::SearchMode::SIMD>
         btree;
     std::unordered_set<int> seen;
 

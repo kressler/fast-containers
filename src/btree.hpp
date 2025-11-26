@@ -11,7 +11,7 @@
 
 #include "ordered_array.hpp"
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 /**
  * A B+ Tree that uses ordered_array as the underlying storage for nodes.
@@ -708,7 +708,7 @@ class btree {
   }
 };
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers
 
 // Include implementation
 #include "btree.ipp"

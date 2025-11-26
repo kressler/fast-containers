@@ -5,7 +5,7 @@
 #include "../btree.hpp"
 #include "../hugepage_allocator.hpp"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 
 // Benchmark configuration
 constexpr size_t TREE_SIZE = 100000;  // 100K elements

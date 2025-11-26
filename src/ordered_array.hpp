@@ -16,7 +16,7 @@
 #include <immintrin.h>
 #endif
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 // Enum to control search strategy
 enum class SearchMode {
@@ -653,7 +653,7 @@ operator+(typename ordered_array<Key, Value, Length, Compare, SearchModeT,
   return it + n;
 }
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers
 
 // Include implementation
 #include "ordered_array.ipp"

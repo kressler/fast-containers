@@ -5,7 +5,7 @@
 
 #include "hugepage_pool.hpp"
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 /**
  * Type trait to detect if a type has next_leaf member (LeafNode
@@ -377,4 +377,4 @@ auto make_single_pool_allocator(std::size_t pool_size,
   return PolicyBasedHugePageAllocator<ValueType, SinglePoolPolicy>(policy);
 }
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers

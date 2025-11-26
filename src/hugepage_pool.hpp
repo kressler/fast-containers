@@ -11,7 +11,7 @@
 #include <numaif.h>
 #endif
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 /**
  * Type-erased memory pool using explicit hugepages (2MB pages on Linux
@@ -397,4 +397,4 @@ class HugePagePool {
   }
 };
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers

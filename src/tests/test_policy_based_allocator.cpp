@@ -6,7 +6,7 @@
 #include "../hugepage_pool.hpp"
 #include "../policy_based_hugepage_allocator.hpp"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 
 TEST_CASE("HugePagePool - type-erased allocations", "[hugepage_pool][policy]") {
   SECTION("Basic allocation and deallocation") {

@@ -3,7 +3,7 @@
 #include "../btree.hpp"
 #include "../hugepage_allocator.hpp"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 
 TEST_CASE("HugePageAllocator - basic allocation", "[hugepage_allocator]") {
   HugePageAllocator<int64_t> alloc(1024 * 1024);  // 1MB pool

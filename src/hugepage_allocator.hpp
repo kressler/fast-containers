@@ -7,7 +7,7 @@
 
 #include "hugepage_pool.hpp"
 
-namespace fast_containers {
+namespace kressler::fast_containers {
 
 /**
  * Pool-based allocator using explicit hugepages (2MB pages on Linux x86-64).
@@ -219,4 +219,4 @@ class HugePageAllocator {
   friend class HugePageAllocator;
 };
 
-}  // namespace fast_containers
+}  // namespace kressler::fast_containers

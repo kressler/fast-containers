@@ -17,7 +17,7 @@
 #include "histogram.h"
 #include "log_linear_bucketer.h"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 using namespace histograms;
 
 struct TimingStats {

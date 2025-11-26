@@ -7,7 +7,7 @@
 
 #include "../ordered_array.hpp"
 
-using namespace fast_containers;
+using namespace kressler::fast_containers;
 
 // Generate unique random keys for benchmarking
 template <std::size_t Size>
