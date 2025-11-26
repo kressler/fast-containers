@@ -29,7 +29,9 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  histograms::Histogram<histograms::LogLinearBucketer<384, 4, 1>> histogram;
+  kressler::histograms::Histogram<
+      kressler::histograms::LogLinearBucketer<384, 4, 1>>
+      histogram;
 
   unsigned int dummy;
   const uint64_t end_cycles = __rdtscp(&dummy) + run_cycles;
