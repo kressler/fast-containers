@@ -2,6 +2,7 @@
 
 #include <sys/mman.h>
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
@@ -34,6 +35,7 @@ namespace fast_containers {
  * - Only supports allocating/deallocating 1 object at a time (throws for n!=1)
  * - Uses intrusive free list (freed blocks store next pointer in-place)
  * - Requires sizeof(T) >= sizeof(void*) for intrusive free list
+ * - Optional statistics tracking (define ALLOCATOR_STATS at compile time)
  * - Not thread-safe (add locking if needed for concurrent use)
  *
  * @tparam T The type to allocate
@@ -124,6 +126,11 @@ class HugePageAllocator {
     if (pool_->free_list_head_ != nullptr) {
       void* ptr = pool_->free_list_head_;
       pool_->free_list_head_ = *reinterpret_cast<void**>(ptr);
+
+#ifdef ALLOCATOR_STATS
+      pool_->stats_.record_allocation(object_size);
+#endif
+
       return static_cast<T*>(ptr);
     }
 
@@ -149,6 +156,10 @@ class HugePageAllocator {
     pool_->next_free_ += object_size;
     pool_->bytes_remaining_ -= (object_size + padding);
 
+#ifdef ALLOCATOR_STATS
+    pool_->stats_.record_allocation(object_size);
+#endif
+
     return static_cast<T*>(result);
   }
 
@@ -171,6 +182,10 @@ class HugePageAllocator {
     // Store current head pointer in the freed block, then update head
     *reinterpret_cast<void**>(p) = pool_->free_list_head_;
     pool_->free_list_head_ = p;
+
+#ifdef ALLOCATOR_STATS
+    pool_->stats_.record_deallocation(object_size);
+#endif
   }
 
   /**
@@ -198,6 +213,50 @@ class HugePageAllocator {
    */
   size_type bytes_remaining() const { return pool_->bytes_remaining_; }
 
+#ifdef ALLOCATOR_STATS
+  /**
+   * Get total number of allocations (compile-time optional).
+   */
+  size_type get_allocations() const {
+    return pool_->stats_.allocations.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * Get total number of deallocations (compile-time optional).
+   */
+  size_type get_deallocations() const {
+    return pool_->stats_.deallocations.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * Get number of pool growth events (compile-time optional).
+   */
+  size_type get_growth_events() const {
+    return pool_->stats_.growth_events.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * Get lifetime total bytes allocated (compile-time optional).
+   */
+  size_type get_bytes_allocated() const {
+    return pool_->stats_.bytes_allocated.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * Get current bytes in use (compile-time optional).
+   */
+  size_type get_current_usage() const {
+    return pool_->stats_.current_usage.load(std::memory_order_relaxed);
+  }
+
+  /**
+   * Get peak bytes in use (compile-time optional).
+   */
+  size_type get_peak_usage() const {
+    return pool_->stats_.peak_usage.load(std::memory_order_relaxed);
+  }
+#endif
+
  private:
   static constexpr size_type HUGEPAGE_SIZE = 2 * 1024 * 1024;  // 2MB
 
@@ -205,6 +264,44 @@ class HugePageAllocator {
     std::byte* base = nullptr;
     size_type size = 0;
   };
+
+#ifdef ALLOCATOR_STATS
+  /**
+   * Statistics tracked by the allocator (compile-time optional).
+   * Enable by defining ALLOCATOR_STATS at compile time.
+   */
+  struct Stats {
+    std::atomic<size_type> allocations{0};    // Total allocations
+    std::atomic<size_type> deallocations{0};  // Total deallocations
+    std::atomic<size_type> growth_events{0};  // Number of pool growths
+    std::atomic<size_type> bytes_allocated{
+        0};                                   // Lifetime total bytes allocated
+    std::atomic<size_type> current_usage{0};  // Current bytes in use
+    std::atomic<size_type> peak_usage{0};     // Peak bytes in use
+
+    void record_allocation(size_type bytes) {
+      allocations.fetch_add(1, std::memory_order_relaxed);
+      bytes_allocated.fetch_add(bytes, std::memory_order_relaxed);
+      size_type new_usage =
+          current_usage.fetch_add(bytes, std::memory_order_relaxed) + bytes;
+      // Update peak if needed (may race, but approximate is fine)
+      size_type current_peak = peak_usage.load(std::memory_order_relaxed);
+      while (new_usage > current_peak &&
+             !peak_usage.compare_exchange_weak(current_peak, new_usage,
+                                               std::memory_order_relaxed)) {
+      }
+    }
+
+    void record_deallocation(size_type bytes) {
+      deallocations.fetch_add(1, std::memory_order_relaxed);
+      current_usage.fetch_sub(bytes, std::memory_order_relaxed);
+    }
+
+    void record_growth() {
+      growth_events.fetch_add(1, std::memory_order_relaxed);
+    }
+  };
+#endif
 
   struct Pool {
     std::vector<MemoryRegion> regions_;
@@ -214,6 +311,10 @@ class HugePageAllocator {
     size_type growth_size_;
     bool using_hugepages_;
     void* free_list_head_;  // Head of intrusive free list
+
+#ifdef ALLOCATOR_STATS
+    Stats stats_;
+#endif
 
     Pool(size_type initial_size, bool use_hugepages, size_type growth_size)
         : bytes_remaining_(0),
@@ -275,6 +376,10 @@ class HugePageAllocator {
       regions_.push_back(new_region);
       next_free_ = new_region.base;
       bytes_remaining_ = new_region.size;
+
+#ifdef ALLOCATOR_STATS
+      stats_.record_growth();
+#endif
     }
 
    private:

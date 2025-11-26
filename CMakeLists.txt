@@ -44,6 +44,15 @@ endif()
 # Useful for debugging memory issues like buffer overflows, use-after-free, etc.
 option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)
 
+# Option to enable allocator statistics tracking
+# Tracks allocation counts, growth events, peak usage, etc.
+option(ENABLE_ALLOCATOR_STATS "Enable allocator statistics tracking" OFF)
+
+if(ENABLE_ALLOCATOR_STATS)
+    message(STATUS "Building with allocator statistics tracking enabled")
+    add_compile_definitions(ALLOCATOR_STATS)
+endif()
+
 if(ENABLE_ASAN)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(STATUS "Building with AddressSanitizer (ASAN) enabled")
