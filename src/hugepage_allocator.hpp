@@ -67,6 +67,8 @@ class HugePageAllocator {
 
   /**
    * Rebind constructor (creates separate pool for different type).
+   * This allows LeafNode and InternalNode allocators to have independent
+   * pools, which can be sized differently based on node sizes and counts.
    */
   template <typename U>
   explicit HugePageAllocator(const HugePageAllocator<U>& other)

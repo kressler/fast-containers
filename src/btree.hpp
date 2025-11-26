@@ -188,9 +188,10 @@ class btree {
 
   /**
    * Returns the allocator associated with the container.
+   * Note: Returns a copy constructed from leaf_alloc_ via rebind.
    * Complexity: O(1)
    */
-  allocator_type get_allocator() const { return value_alloc_; }
+  allocator_type get_allocator() const { return allocator_type(leaf_alloc_); }
 
   /**
    * Forward iterator for btree.
@@ -498,9 +499,9 @@ class btree {
   // Comparator instance
   [[no_unique_address]] Compare comp_;
 
-  // Allocators for value_type, LeafNode, and InternalNode
-  // Using rebind to get appropriate allocators for each node type
-  [[no_unique_address]] allocator_type value_alloc_;
+  // Allocators for LeafNode and InternalNode
+  // Each allocator maintains a separate pool via rebind mechanism
+  // This allows different pool sizes for different node types
   [[no_unique_address]]
   typename std::allocator_traits<Allocator>::template rebind_alloc<LeafNode>
       leaf_alloc_;

@@ -12,7 +12,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT, Allocator>::btree(const Allocator& alloc)
     : root_is_leaf_(true),
       size_(0),
-      value_alloc_(alloc),
       leaf_alloc_(alloc),
       internal_alloc_(alloc) {
   // Always allocate an empty root leaf to simplify insert/erase logic
@@ -41,9 +40,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       MoveModeT, Allocator>::btree(const btree& other)
     : root_is_leaf_(true),
       size_(0),
-      value_alloc_(std::allocator_traits<allocator_type>::
-                       select_on_container_copy_construction(
-                           other.value_alloc_)),
       leaf_alloc_(std::allocator_traits<decltype(leaf_alloc_)>::
                       select_on_container_copy_construction(other.leaf_alloc_)),
       internal_alloc_(
@@ -92,7 +88,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       size_(other.size_),
       leftmost_leaf_(other.leftmost_leaf_),
       rightmost_leaf_(other.rightmost_leaf_),
-      value_alloc_(std::move(other.value_alloc_)),
       leaf_alloc_(std::move(other.leaf_alloc_)),
       internal_alloc_(std::move(other.internal_alloc_)) {
   // Move the correct root pointer based on type
