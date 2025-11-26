@@ -27,11 +27,13 @@ namespace fast_containers {
  * std::less<Key>)
  * @tparam SearchModeT Search mode passed through to ordered_array
  * @tparam MoveModeT Move mode passed through to ordered_array
+ * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
  */
 template <typename Key, typename Value, std::size_t LeafNodeSize = 64,
           std::size_t InternalNodeSize = 64, typename Compare = std::less<Key>,
           SearchMode SearchModeT = SearchMode::Binary,
-          MoveMode MoveModeT = MoveMode::SIMD>
+          MoveMode MoveModeT = MoveMode::SIMD,
+          typename Allocator = std::allocator<std::pair<Key, Value>>>
   requires ComparatorCompatible<Key, Compare>
 class btree {
  public:
@@ -40,7 +42,7 @@ class btree {
   using mapped_type = Value;
   using value_type = std::pair<Key, Value>;
   using size_type = std::size_t;
-  using allocator_type = std::allocator<value_type>;
+  using allocator_type = Allocator;
   using key_compare = Compare;
 
   // Compile-time check: SIMD search mode requires a SIMD-searchable key type
@@ -122,8 +124,10 @@ class btree {
 
   /**
    * Default constructor - creates an empty B+ tree.
+   *
+   * @param alloc Allocator to use for node allocation
    */
-  btree();
+  explicit btree(const Allocator& alloc = Allocator());
 
   /**
    * Destructor - deallocates all nodes.
@@ -184,11 +188,10 @@ class btree {
 
   /**
    * Returns the allocator associated with the container.
-   * Note: The current implementation uses raw new/delete for node allocation.
-   * This method provides API compatibility with std::map.
+   * Note: Returns a copy constructed from leaf_alloc_ via rebind.
    * Complexity: O(1)
    */
-  allocator_type get_allocator() const { return allocator_type(); }
+  allocator_type get_allocator() const { return allocator_type(leaf_alloc_); }
 
   /**
    * Forward iterator for btree.
@@ -495,6 +498,16 @@ class btree {
 
   // Comparator instance
   [[no_unique_address]] Compare comp_;
+
+  // Allocators for LeafNode and InternalNode
+  // Each allocator maintains a separate pool via rebind mechanism
+  // This allows different pool sizes for different node types
+  [[no_unique_address]]
+  typename std::allocator_traits<Allocator>::template rebind_alloc<LeafNode>
+      leaf_alloc_;
+  [[no_unique_address]]
+  typename std::allocator_traits<Allocator>::template rebind_alloc<InternalNode>
+      internal_alloc_;
 
   /**
    * Recursively deallocate all nodes in the tree.
