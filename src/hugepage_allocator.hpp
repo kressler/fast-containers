@@ -19,6 +19,7 @@ namespace fast_containers {
  * Benefits:
  * - Reduced TLB misses (2MB pages vs 4KB pages)
  * - Better cache locality within hugepages
+ * - Cache-line aligned allocations (64-byte boundaries)
  * - Separate pools per type (via rebind mechanism)
  * - Dynamic growth: pools expand automatically as needed
  *
@@ -49,6 +50,14 @@ class HugePageAllocator {
   // Since n==1 is required, these are compile-time constants
   static constexpr size_type object_size = sizeof(T);
   static constexpr size_type object_alignment = alignof(T);
+
+  // Cache line size for alignment (typical x86-64 cache line)
+  static constexpr size_type cache_line_size = 64;
+
+  // Use cache-line alignment for better cache utilization
+  // Aligns to max of object's natural alignment and cache line boundary
+  static constexpr size_type allocation_alignment =
+      object_alignment > cache_line_size ? object_alignment : cache_line_size;
 
   // Intrusive free list requires sufficient size to store a pointer
   static_assert(sizeof(T) >= sizeof(void*),
@@ -119,10 +128,10 @@ class HugePageAllocator {
     }
 
     // Allocate from pool
-    // Align next_free to alignment requirement
+    // Align next_free to cache-line boundary (or larger if required by type)
     uintptr_t current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-    uintptr_t aligned = (current + object_alignment - 1) &
-                        ~(static_cast<uintptr_t>(object_alignment) - 1);
+    uintptr_t aligned = (current + allocation_alignment - 1) &
+                        ~(static_cast<uintptr_t>(allocation_alignment) - 1);
     size_type padding = aligned - current;
 
     // Grow pool if needed
@@ -130,8 +139,8 @@ class HugePageAllocator {
       pool_->grow();
       // After growth, recalculate alignment from new next_free_
       current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-      aligned = (current + object_alignment - 1) &
-                ~(static_cast<uintptr_t>(object_alignment) - 1);
+      aligned = (current + allocation_alignment - 1) &
+                ~(static_cast<uintptr_t>(allocation_alignment) - 1);
       padding = aligned - current;
     }
 
