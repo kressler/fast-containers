@@ -47,7 +47,7 @@ static void BM_BTree_HugePageAllocator_Insert(benchmark::State& state) {
               SearchMode::Binary, MoveMode::SIMD,
               HugePageAllocator<std::pair<int64_t, int64_t>>>;
     HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-        POOL_SIZE_MB * 1024 * 1024, false);
+        POOL_SIZE_MB * 1024 * 1024, true);
     TreeType tree(alloc);
     state.ResumeTiming();
 
@@ -93,7 +93,7 @@ static void BM_BTree_HugePageAllocator_Lookup(benchmark::State& state) {
                          std::less<int64_t>, SearchMode::Binary, MoveMode::SIMD,
                          HugePageAllocator<std::pair<int64_t, int64_t>>>;
   HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-      POOL_SIZE_MB * 1024 * 1024, false);
+      POOL_SIZE_MB * 1024 * 1024, true);
   TreeType tree(alloc);
 
   std::uniform_int_distribution<int64_t> insert_dist(0, TREE_SIZE * 10);
@@ -142,7 +142,7 @@ static void BM_BTree_HugePageAllocator_Iteration(benchmark::State& state) {
                          std::less<int64_t>, SearchMode::Binary, MoveMode::SIMD,
                          HugePageAllocator<std::pair<int64_t, int64_t>>>;
   HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-      POOL_SIZE_MB * 1024 * 1024, false);
+      POOL_SIZE_MB * 1024 * 1024, true);
   TreeType tree(alloc);
 
   for (size_t i = 0; i < TREE_SIZE; ++i) {
@@ -210,7 +210,7 @@ static void BM_BTree_HugePageAllocator_Mixed(benchmark::State& state) {
               SearchMode::Binary, MoveMode::SIMD,
               HugePageAllocator<std::pair<int64_t, int64_t>>>;
     HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-        POOL_SIZE_MB * 1024 * 1024, false);
+        POOL_SIZE_MB * 1024 * 1024, true);
     TreeType tree(alloc);
 
     // Pre-populate with half the elements
