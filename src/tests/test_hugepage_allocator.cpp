@@ -121,6 +121,56 @@ TEST_CASE("HugePageAllocator - dynamic growth", "[hugepage_allocator]") {
   }
 }
 
+TEST_CASE("HugePageAllocator - cache-line alignment", "[hugepage_allocator]") {
+  HugePageAllocator<int64_t> alloc(1024 * 1024, false);
+
+  SECTION("All allocations are 64-byte aligned") {
+    constexpr size_t cache_line_size = 64;
+    std::vector<int64_t*> ptrs;
+
+    // Allocate multiple blocks and verify alignment
+    for (int i = 0; i < 100; ++i) {
+      int64_t* p = alloc.allocate(1);
+      REQUIRE(p != nullptr);
+
+      // Check that pointer is 64-byte aligned
+      uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+      REQUIRE(addr % cache_line_size == 0);
+
+      *p = i;
+      ptrs.push_back(p);
+    }
+
+    // Verify all values
+    for (size_t i = 0; i < ptrs.size(); ++i) {
+      REQUIRE(*ptrs[i] == static_cast<int64_t>(i));
+    }
+
+    // Clean up
+    for (int64_t* p : ptrs) {
+      alloc.deallocate(p, 1);
+    }
+  }
+
+  SECTION("Free list preserves alignment") {
+    constexpr size_t cache_line_size = 64;
+
+    // Allocate and deallocate
+    int64_t* p1 = alloc.allocate(1);
+    uintptr_t addr1 = reinterpret_cast<uintptr_t>(p1);
+    REQUIRE(addr1 % cache_line_size == 0);
+    alloc.deallocate(p1, 1);
+
+    // Allocate again from free list
+    int64_t* p2 = alloc.allocate(1);
+    uintptr_t addr2 = reinterpret_cast<uintptr_t>(p2);
+    REQUIRE(addr2 % cache_line_size == 0);
+    REQUIRE(p2 == p1);  // Should be same pointer
+
+    alloc.deallocate(p2, 1);
+  }
+}
+
 TEST_CASE("btree with HugePageAllocator - basic operations",
           "[btree][hugepage_allocator]") {
   using TreeType =
