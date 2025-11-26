@@ -12,6 +12,8 @@
 
 #include "../btree.hpp"
 #include "../hugepage_allocator.hpp"
+#include "../hugepage_pool.hpp"
+#include "../policy_based_hugepage_allocator.hpp"
 #include "histogram.h"
 #include "log_linear_bucketer.h"
 
@@ -48,6 +50,16 @@ struct std::hash<std::array<int64_t, N>> {
     }
     return h;
   }
+};
+
+auto print_pool_stats = [](const fast_containers::HugePagePool& pool,
+                           std::string_view name) -> void {
+#ifdef ALLOCATOR_STATS
+  std::cout << name << " pool stats:\n";
+  std::println("a: {}, d: {}, g: {}, b: {}, p: {}", pool.get_allocations(),
+               pool.get_deallocations(), pool.get_growth_events(),
+               pool.get_bytes_allocated(), pool.get_peak_usage());
+#endif
 };
 
 template <typename T>
@@ -161,11 +173,31 @@ int main(int argc, char** argv) {
   auto benchmarker =
       [&]<typename Tree,
           typename Allocator = std::allocator<typename Tree::value_type>>(
-          Tree tree, TimingStats& stats,
-          const Allocator& alloc = Allocator()) -> void {
+          Tree tree, TimingStats& stats) -> void {
     run_benchmark(tree, seed, target_iterations, tree_size, batches, batch_size,
                   stats);
   };
+
+  // Define command line interface
+  auto cli = lyra::cli() | lyra::help(show_help) |
+             lyra::opt(seed, "seed")["-d"]["--seed"](
+                 "Random seed (defaults to time since epoch") |
+             lyra::opt(target_iterations, "iterations")["-i"]["--iterations"](
+                 "Iterations to run") |
+             lyra::opt(tree_size, "min_keys")["-t"]["--tree-size"](
+                 "Minimum keys to target in tree") |
+             lyra::opt(batches, "batches")["-b"]["--batches"](
+                 "Number of erase/insert batches to run") |
+             lyra::opt(batch_size, "batch_size")["-s"]["--batch-size"](
+                 "Size of an erase/insert batch") |
+             lyra::arg(names, "names")("Name of the benchmark to run");
+
+  // Parse command line
+  auto result = cli.parse({argc, argv});
+  if (!result) {
+    std::cerr << "Error in command line: " << result.message() << std::endl;
+    exit(1);
+  }
 
   std::map<std::string, LambdaType> benchmarkers{
       /* 256 byte values */
@@ -404,15 +436,18 @@ int main(int argc, char** argv) {
        }},
       {"btree_16_256_8_64_linear_std_hp",
        [&](TimingStats& stats) -> void {
-         fast_containers::HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-             2048ul * 1024ul * 1024ul, true);
+         auto alloc = fast_containers::make_two_pool_allocator<
+             std::array<int64_t, 2>, std::array<std::byte, 256>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
          benchmarker(
-             fast_containers::btree<std::array<std::int64_t, 2>,
-                                    std::array<std::byte, 256>, 8, 64,
-                                    std::less<std::array<std::int64_t, 2>>,
-                                    fast_containers::SearchMode::Linear,
-                                    fast_containers::MoveMode::Standard>{},
-             stats, alloc);
+             fast_containers::btree<
+                 std::array<std::int64_t, 2>, std::array<std::byte, 256>, 8, 64,
+                 std::less<std::array<std::int64_t, 2>>,
+                 fast_containers::SearchMode::Linear,
+                 fast_containers::MoveMode::Standard, decltype(alloc)>{alloc},
+             stats);
+         print_pool_stats(*alloc.get_policy().leaf_pool_, "Leaf");
+         print_pool_stats(*alloc.get_policy().internal_pool_, "Internal");
        }},
       {"btree_16_256_16_64_linear_simd",
        [&](TimingStats& stats) -> void {
@@ -435,15 +470,18 @@ int main(int argc, char** argv) {
        }},
       {"btree_16_256_16_64_linear_std_hp",
        [&](TimingStats& stats) -> void {
-         fast_containers::HugePageAllocator<std::pair<int64_t, int64_t>> alloc(
-             2048ul * 1024ul * 1024ul, true);
+         auto alloc = fast_containers::make_two_pool_allocator<
+             std::array<int64_t, 2>, std::array<std::byte, 256>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
          benchmarker(
-             fast_containers::btree<std::array<std::int64_t, 2>,
-                                    std::array<std::byte, 256>, 16, 64,
-                                    std::less<std::array<std::int64_t, 2>>,
-                                    fast_containers::SearchMode::Linear,
-                                    fast_containers::MoveMode::Standard>{},
-             stats, alloc);
+             fast_containers::btree<
+                 std::array<std::int64_t, 2>, std::array<std::byte, 256>, 16,
+                 64, std::less<std::array<std::int64_t, 2>>,
+                 fast_containers::SearchMode::Linear,
+                 fast_containers::MoveMode::Standard, decltype(alloc)>{alloc},
+             stats);
+         print_pool_stats(*alloc.get_policy().leaf_pool_, "Leaf");
+         print_pool_stats(*alloc.get_policy().internal_pool_, "Internal");
        }},
       {"btree_16_256_24_64_linear_simd",
        [&](TimingStats& stats) -> void {
@@ -1384,27 +1422,6 @@ int main(int argc, char** argv) {
       std::cout << "  " << name.first << std::endl;
     }
   };
-
-  // Define command line interface
-  auto cli = lyra::cli() | lyra::help(show_help) |
-             lyra::opt(seed, "seed")["-d"]["--seed"](
-                 "Random seed (defaults to time since epoch") |
-             lyra::opt(target_iterations, "iterations")["-i"]["--iterations"](
-                 "Iterations to run") |
-             lyra::opt(tree_size, "min_keys")["-t"]["--tree-size"](
-                 "Minimum keys to target in tree") |
-             lyra::opt(batches, "batches")["-b"]["--batches"](
-                 "Number of erase/insert batches to run") |
-             lyra::opt(batch_size, "batch_size")["-s"]["--batch-size"](
-                 "Size of an erase/insert batch") |
-             lyra::arg(names, "names")("Name of the benchmark to run");
-
-  // Parse command line
-  auto result = cli.parse({argc, argv});
-  if (!result) {
-    std::cerr << "Error in command line: " << result.message() << std::endl;
-    exit(1);
-  }
 
   // Show help if requested
   if (show_help) {
