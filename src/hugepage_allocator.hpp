@@ -45,6 +45,10 @@ class HugePageAllocator {
   using propagate_on_container_move_assignment = std::true_type;
   using is_always_equal = std::false_type;
 
+  // Since n==1 is required, these are compile-time constants
+  static constexpr size_type object_size = sizeof(T);
+  static constexpr size_type object_alignment = alignof(T);
+
   // Rebind support for STL containers
   template <typename U>
   struct rebind {
@@ -100,11 +104,8 @@ class HugePageAllocator {
           "HugePageAllocator only supports allocating 1 object at a time");
     }
 
-    const size_type bytes = sizeof(T);
-    const size_type alignment = alignof(T);
-
     // Try to allocate from free list first
-    // Since n==1, all free blocks are sizeof(T), so any block works
+    // Since n==1, all free blocks are object_size, so any block works
     if (!pool_->free_list_.empty()) {
       void* ptr = pool_->free_list_.back();
       pool_->free_list_.pop_back();
@@ -114,24 +115,24 @@ class HugePageAllocator {
     // Allocate from pool
     // Align next_free to alignment requirement
     uintptr_t current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-    uintptr_t aligned =
-        (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
+    uintptr_t aligned = (current + object_alignment - 1) &
+                        ~(static_cast<uintptr_t>(object_alignment) - 1);
     size_type padding = aligned - current;
 
     // Grow pool if needed
-    if (pool_->bytes_remaining_ < bytes + padding) {
+    if (pool_->bytes_remaining_ < object_size + padding) {
       pool_->grow();
       // After growth, recalculate alignment from new next_free_
       current = reinterpret_cast<uintptr_t>(pool_->next_free_);
-      aligned =
-          (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
+      aligned = (current + object_alignment - 1) &
+                ~(static_cast<uintptr_t>(object_alignment) - 1);
       padding = aligned - current;
     }
 
     pool_->next_free_ = reinterpret_cast<std::byte*>(aligned);
     void* result = pool_->next_free_;
-    pool_->next_free_ += bytes;
-    pool_->bytes_remaining_ -= (bytes + padding);
+    pool_->next_free_ += object_size;
+    pool_->bytes_remaining_ -= (object_size + padding);
 
     return static_cast<T*>(result);
   }
