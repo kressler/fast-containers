@@ -6,16 +6,16 @@
 using namespace fast_containers;
 
 TEST_CASE("HugePageAllocator - basic allocation", "[hugepage_allocator]") {
-  HugePageAllocator<int> alloc(1024 * 1024);  // 1MB pool
+  HugePageAllocator<int64_t> alloc(1024 * 1024);  // 1MB pool
 
   SECTION("Allocate and deallocate single elements") {
-    int* p1 = alloc.allocate(1);
+    int64_t* p1 = alloc.allocate(1);
     REQUIRE(p1 != nullptr);
     *p1 = 42;
     REQUIRE(*p1 == 42);
     alloc.deallocate(p1, 1);
 
-    int* p2 = alloc.allocate(1);
+    int64_t* p2 = alloc.allocate(1);
     REQUIRE(p2 != nullptr);
     *p2 = 100;
     REQUIRE(*p2 == 100);
@@ -30,7 +30,7 @@ TEST_CASE("HugePageAllocator - basic allocation", "[hugepage_allocator]") {
     size_t initial = alloc.bytes_remaining();
     REQUIRE(initial > 0);
 
-    int* p = alloc.allocate(1);
+    int64_t* p = alloc.allocate(1);
     size_t after = alloc.bytes_remaining();
     REQUIRE(after < initial);
 
@@ -39,14 +39,14 @@ TEST_CASE("HugePageAllocator - basic allocation", "[hugepage_allocator]") {
 }
 
 TEST_CASE("HugePageAllocator - rebind", "[hugepage_allocator]") {
-  using IntAlloc = HugePageAllocator<int>;
-  using DoubleAlloc = typename IntAlloc::rebind<double>::other;
+  using Int64Alloc = HugePageAllocator<int64_t>;
+  using DoubleAlloc = typename Int64Alloc::rebind<double>::other;
 
-  IntAlloc int_alloc(1024 * 1024);
-  DoubleAlloc double_alloc(int_alloc);
+  Int64Alloc int64_alloc(1024 * 1024);
+  DoubleAlloc double_alloc(int64_alloc);
 
   SECTION("Rebind creates separate pool") {
-    int* ip = int_alloc.allocate(1);
+    int64_t* ip = int64_alloc.allocate(1);
     double* dp = double_alloc.allocate(1);
 
     REQUIRE(ip != nullptr);
@@ -58,7 +58,7 @@ TEST_CASE("HugePageAllocator - rebind", "[hugepage_allocator]") {
     REQUIRE(*ip == 42);
     REQUIRE(*dp == 3.14);
 
-    int_alloc.deallocate(ip, 1);
+    int64_alloc.deallocate(ip, 1);
     double_alloc.deallocate(dp, 1);
   }
 }
@@ -66,10 +66,10 @@ TEST_CASE("HugePageAllocator - rebind", "[hugepage_allocator]") {
 TEST_CASE("HugePageAllocator - fallback to regular pages",
           "[hugepage_allocator]") {
   // Force fallback by requesting hugepages but allowing fallback
-  HugePageAllocator<int> alloc(1024 * 1024, true);
+  HugePageAllocator<int64_t> alloc(1024 * 1024, true);
 
   SECTION("Allocator works regardless of hugepage availability") {
-    int* p = alloc.allocate(1);
+    int64_t* p = alloc.allocate(1);
     REQUIRE(p != nullptr);
     *p = 42;
     REQUIRE(*p == 42);
