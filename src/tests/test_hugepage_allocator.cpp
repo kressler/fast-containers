@@ -22,27 +22,19 @@ TEST_CASE("HugePageAllocator - basic allocation", "[hugepage_allocator]") {
     alloc.deallocate(p2, 1);
   }
 
-  SECTION("Allocate multiple elements") {
-    int* arr = alloc.allocate(100);
-    REQUIRE(arr != nullptr);
-    for (int i = 0; i < 100; ++i) {
-      arr[i] = i;
-    }
-    for (int i = 0; i < 100; ++i) {
-      REQUIRE(arr[i] == i);
-    }
-    alloc.deallocate(arr, 100);
+  SECTION("Allocate n>1 throws exception") {
+    REQUIRE_THROWS_AS(alloc.allocate(100), std::invalid_argument);
   }
 
   SECTION("Check remaining bytes") {
     size_t initial = alloc.bytes_remaining();
     REQUIRE(initial > 0);
 
-    int* p = alloc.allocate(10);
+    int* p = alloc.allocate(1);
     size_t after = alloc.bytes_remaining();
     REQUIRE(after < initial);
 
-    alloc.deallocate(p, 10);
+    alloc.deallocate(p, 1);
   }
 }
 
@@ -77,18 +69,55 @@ TEST_CASE("HugePageAllocator - fallback to regular pages",
   HugePageAllocator<int> alloc(1024 * 1024, true);
 
   SECTION("Allocator works regardless of hugepage availability") {
-    int* p = alloc.allocate(100);
+    int* p = alloc.allocate(1);
     REQUIRE(p != nullptr);
+    *p = 42;
+    REQUIRE(*p == 42);
+    alloc.deallocate(p, 1);
+  }
+}
 
-    for (int i = 0; i < 100; ++i) {
-      p[i] = i * 2;
+TEST_CASE("HugePageAllocator - dynamic growth", "[hugepage_allocator]") {
+  // Create small initial pool that will need to grow
+  constexpr size_t initial_size = 1024;  // 1KB initial
+  constexpr size_t growth_size = 2048;   // 2KB growth
+  HugePageAllocator<int64_t> alloc(initial_size, false, growth_size);
+
+  SECTION("Pool grows when exhausted") {
+    std::vector<int64_t*> ptrs;
+
+    // Allocate enough to exhaust initial pool and trigger growth
+    // initial_size / sizeof(int64_t) = 1024 / 8 = 128 int64_t's
+    // Allocate 200 to ensure we trigger at least one growth
+    for (int i = 0; i < 200; ++i) {
+      int64_t* p = alloc.allocate(1);
+      REQUIRE(p != nullptr);
+      *p = i;
+      ptrs.push_back(p);
     }
 
-    for (int i = 0; i < 100; ++i) {
-      REQUIRE(p[i] == i * 2);
+    // Verify all allocations are valid
+    for (size_t i = 0; i < ptrs.size(); ++i) {
+      REQUIRE(*ptrs[i] == static_cast<int64_t>(i));
     }
 
-    alloc.deallocate(p, 100);
+    // Clean up
+    for (int64_t* p : ptrs) {
+      alloc.deallocate(p, 1);
+    }
+  }
+
+  SECTION("Free list works across regions") {
+    // Allocate, deallocate, then allocate again from free list
+    int64_t* p1 = alloc.allocate(1);
+    *p1 = 42;
+    alloc.deallocate(p1, 1);
+
+    int64_t* p2 = alloc.allocate(1);  // Should reuse p1 from free list
+    REQUIRE(p2 == p1);                // Same pointer reused
+    *p2 = 100;
+    REQUIRE(*p2 == 100);
+    alloc.deallocate(p2, 1);
   }
 }
 

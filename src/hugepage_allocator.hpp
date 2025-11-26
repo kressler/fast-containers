@@ -20,6 +20,7 @@ namespace fast_containers {
  * - Reduced TLB misses (2MB pages vs 4KB pages)
  * - Better cache locality within hugepages
  * - Separate pools per type (via rebind mechanism)
+ * - Dynamic growth: pools expand automatically as needed
  *
  * Requirements:
  * - Explicit hugepages must be configured on the system:
@@ -28,8 +29,9 @@ namespace fast_containers {
  *
  * Implementation notes:
  * - Each instantiation (via rebind) creates a separate pool
- * - Pool size is fixed at construction time
- * - Uses simple free list for deallocation
+ * - Pool grows by allocating additional regions when exhausted
+ * - Only supports allocating/deallocating 1 object at a time (throws for n!=1)
+ * - Uses simple free list for deallocation (all blocks are sizeof(T))
  * - Not thread-safe (add locking if needed for concurrent use)
  *
  * @tparam T The type to allocate
@@ -52,13 +54,18 @@ class HugePageAllocator {
   /**
    * Construct allocator with specified pool size.
    *
-   * @param pool_size_bytes Total size of memory pool in bytes (default 256MB)
+   * @param initial_pool_size Initial size of memory pool in bytes (default
+   * 256MB)
    * @param use_hugepages If true, attempt to use hugepages; otherwise use
    * regular pages (default true)
+   * @param growth_size Size of additional regions when pool grows (default
+   * 64MB)
    */
-  explicit HugePageAllocator(size_type pool_size_bytes = 256 * 1024 * 1024,
-                             bool use_hugepages = true)
-      : pool_(std::make_shared<Pool>(pool_size_bytes, use_hugepages)) {}
+  explicit HugePageAllocator(size_type initial_pool_size = 256 * 1024 * 1024,
+                             bool use_hugepages = true,
+                             size_type growth_size = 64 * 1024 * 1024)
+      : pool_(std::make_shared<Pool>(initial_pool_size, use_hugepages,
+                                     growth_size)) {}
 
   /**
    * Copy constructor (shares pool with other allocator).
@@ -72,33 +79,36 @@ class HugePageAllocator {
    */
   template <typename U>
   explicit HugePageAllocator(const HugePageAllocator<U>& other)
-      : pool_(std::make_shared<Pool>(other.pool_->total_size_,
-                                     other.pool_->using_hugepages_)) {}
+      : pool_(std::make_shared<Pool>(other.pool_->initial_size_,
+                                     other.pool_->using_hugepages_,
+                                     other.pool_->growth_size_)) {}
 
   /**
    * Allocate n objects of type T.
    *
-   * @param n Number of objects to allocate
+   * @param n Number of objects to allocate (must be 1)
    * @return Pointer to allocated memory
-   * @throws std::bad_alloc if pool is exhausted
+   * @throws std::invalid_argument if n != 1
+   * @throws std::bad_alloc if unable to grow pool
    */
   T* allocate(size_type n) {
     if (n == 0)
       return nullptr;
 
-    const size_type bytes = n * sizeof(T);
+    if (n != 1) {
+      throw std::invalid_argument(
+          "HugePageAllocator only supports allocating 1 object at a time");
+    }
+
+    const size_type bytes = sizeof(T);
     const size_type alignment = alignof(T);
 
     // Try to allocate from free list first
+    // Since n==1, all free blocks are sizeof(T), so any block works
     if (!pool_->free_list_.empty()) {
-      for (auto it = pool_->free_list_.begin(); it != pool_->free_list_.end();
-           ++it) {
-        if (it->size >= bytes) {
-          void* ptr = it->ptr;
-          pool_->free_list_.erase(it);
-          return static_cast<T*>(ptr);
-        }
-      }
+      void* ptr = pool_->free_list_.back();
+      pool_->free_list_.pop_back();
+      return static_cast<T*>(ptr);
     }
 
     // Allocate from pool
@@ -108,8 +118,14 @@ class HugePageAllocator {
         (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
     size_type padding = aligned - current;
 
+    // Grow pool if needed
     if (pool_->bytes_remaining_ < bytes + padding) {
-      throw std::bad_alloc();
+      pool_->grow();
+      // After growth, recalculate alignment from new next_free_
+      current = reinterpret_cast<uintptr_t>(pool_->next_free_);
+      aligned =
+          (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
+      padding = aligned - current;
     }
 
     pool_->next_free_ = reinterpret_cast<std::byte*>(aligned);
@@ -124,14 +140,19 @@ class HugePageAllocator {
    * Deallocate n objects at pointer p.
    *
    * @param p Pointer to memory to deallocate
-   * @param n Number of objects (used for size calculation)
+   * @param n Number of objects (must be 1)
    */
   void deallocate(T* p, size_type n) {
     if (p == nullptr || n == 0)
       return;
 
-    // Add to free list for reuse
-    pool_->free_list_.push_back({p, n * sizeof(T)});
+    if (n != 1) {
+      throw std::invalid_argument(
+          "HugePageAllocator only supports deallocating 1 object at a time");
+    }
+
+    // Add to free list for reuse (all blocks are sizeof(T))
+    pool_->free_list_.push_back(p);
   }
 
   /**
@@ -162,39 +183,52 @@ class HugePageAllocator {
  private:
   static constexpr size_type HUGEPAGE_SIZE = 2 * 1024 * 1024;  // 2MB
 
-  struct FreeBlock {
-    void* ptr;
-    size_type size;
+  struct MemoryRegion {
+    std::byte* base = nullptr;
+    size_type size = 0;
   };
 
   struct Pool {
-    std::byte* base_;
+    std::vector<MemoryRegion> regions_;
     std::byte* next_free_;
-    size_type total_size_;
     size_type bytes_remaining_;
+    size_type initial_size_;
+    size_type growth_size_;
     bool using_hugepages_;
-    std::vector<FreeBlock> free_list_;
+    std::vector<void*> free_list_;
 
-    Pool(size_type size, bool use_hugepages)
-        : total_size_(size), bytes_remaining_(size), using_hugepages_(false) {
+    Pool(size_type initial_size, bool use_hugepages, size_type growth_size)
+        : bytes_remaining_(0),
+          initial_size_(initial_size),
+          growth_size_(growth_size),
+          using_hugepages_(false),
+          next_free_(nullptr) {
+      // Allocate initial region
+      MemoryRegion initial_region;
+
       // Try hugepages first if requested
       if (use_hugepages) {
-        base_ = allocate_hugepages(size);
-        if (base_ != nullptr) {
+        initial_region = allocate_hugepages_region(initial_size);
+        if (initial_region.base != nullptr) {
           using_hugepages_ = true;
-          next_free_ = base_;
-          return;
         }
       }
 
-      // Fall back to regular pages
-      base_ = allocate_regular(size);
-      next_free_ = base_;
+      // Fall back to regular pages if hugepages unavailable or not requested
+      if (initial_region.base == nullptr) {
+        initial_region = allocate_regular_region(initial_size);
+      }
+
+      regions_.push_back(initial_region);
+      next_free_ = initial_region.base;
+      bytes_remaining_ = initial_region.size;
     }
 
     ~Pool() {
-      if (base_ != nullptr) {
-        munmap(base_, total_size_);
+      for (const auto& region : regions_) {
+        if (region.base != nullptr) {
+          munmap(region.base, region.size);
+        }
       }
     }
 
@@ -202,8 +236,30 @@ class HugePageAllocator {
     Pool(const Pool&) = delete;
     Pool& operator=(const Pool&) = delete;
 
+    /**
+     * Grow the pool by allocating a new region of growth_size_.
+     * Called when current region is exhausted.
+     */
+    void grow() {
+      MemoryRegion new_region;
+
+      if (using_hugepages_) {
+        new_region = allocate_hugepages_region(growth_size_);
+        if (new_region.base == nullptr) {
+          // Hugepages no longer available, fall back to regular
+          new_region = allocate_regular_region(growth_size_);
+        }
+      } else {
+        new_region = allocate_regular_region(growth_size_);
+      }
+
+      regions_.push_back(new_region);
+      next_free_ = new_region.base;
+      bytes_remaining_ = new_region.size;
+    }
+
    private:
-    std::byte* allocate_hugepages(size_type size) {
+    MemoryRegion allocate_hugepages_region(size_type size) {
       // Round up to hugepage boundary
       size_type aligned_size =
           (size + HUGEPAGE_SIZE - 1) & ~(HUGEPAGE_SIZE - 1);
@@ -212,7 +268,7 @@ class HugePageAllocator {
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
 
       if (ptr == MAP_FAILED) {
-        return nullptr;  // Hugepages not available
+        return {nullptr, 0};  // Hugepages not available
       }
 
       // Advise kernel about access pattern
@@ -227,13 +283,10 @@ class HugePageAllocator {
         static_cast<volatile char*>(ptr)[i] = 0;
       }
 
-      total_size_ = aligned_size;
-      bytes_remaining_ = aligned_size;
-
-      return static_cast<std::byte*>(ptr);
+      return {static_cast<std::byte*>(ptr), aligned_size};
     }
 
-    std::byte* allocate_regular(size_type size) {
+    MemoryRegion allocate_regular_region(size_type size) {
       void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -244,7 +297,7 @@ class HugePageAllocator {
       // Hint to use transparent hugepages if available
       madvise(ptr, size, MADV_HUGEPAGE);
 
-      return static_cast<std::byte*>(ptr);
+      return {static_cast<std::byte*>(ptr), size};
     }
   };
 
