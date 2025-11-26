@@ -11,6 +11,10 @@ add_executable(test_btree tests/test_btree.cpp)
 target_link_libraries(test_btree PRIVATE Catch2::Catch2WithMain)
 add_test(NAME test_btree COMMAND test_btree)
 
+add_executable(test_hugepage_allocator tests/test_hugepage_allocator.cpp)
+target_link_libraries(test_hugepage_allocator PRIVATE Catch2::Catch2WithMain)
+add_test(NAME test_hugepage_allocator COMMAND test_hugepage_allocator)
+
 # Benchmarks
 add_executable(sample_benchmark benchmarks/sample_benchmark.cpp)
 target_link_libraries(sample_benchmark PRIVATE benchmark::benchmark)
@@ -18,6 +22,11 @@ target_link_libraries(sample_benchmark PRIVATE benchmark::benchmark)
 add_executable(ordered_array_search_benchmark
                benchmarks/ordered_array_search_benchmark.cpp)
 target_link_libraries(ordered_array_search_benchmark
+                      PRIVATE benchmark::benchmark)
+
+add_executable(hugepage_allocator_benchmark
+               benchmarks/hugepage_allocator_benchmark.cpp)
+target_link_libraries(hugepage_allocator_benchmark
                       PRIVATE benchmark::benchmark)
 
 add_subdirectory(binary)
