@@ -263,6 +263,26 @@ class HugePagePool {
    */
   size_type bytes_remaining() const { return bytes_remaining_; }
 
+  /**
+   * Get initial pool size (for rebind constructor).
+   */
+  size_type initial_size() const { return initial_size_; }
+
+  /**
+   * Get growth size (for rebind constructor).
+   */
+  size_type growth_size() const { return growth_size_; }
+
+  /**
+   * Check if pool is configured to use hugepages.
+   */
+  bool is_hugepages_enabled() const { return using_hugepages_; }
+
+  /**
+   * Check if pool is configured to use NUMA.
+   */
+  bool is_numa_enabled() const { return using_numa_; }
+
 #ifdef ALLOCATOR_STATS
   /**
    * Get total number of allocations (compile-time optional).
