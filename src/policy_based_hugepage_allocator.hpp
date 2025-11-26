@@ -278,4 +278,103 @@ class PolicyBasedHugePageAllocator {
   friend class PolicyBasedHugePageAllocator;
 };
 
+/**
+ * Factory function to create a two-pool allocator for btrees.
+ *
+ * This is a convenience function that simplifies the creation of a
+ * PolicyBasedHugePageAllocator with TwoPoolPolicy. It creates two separate
+ * pools (one for leaf nodes, one for internal nodes) and wraps them in the
+ * appropriate allocator.
+ *
+ * Example usage:
+ * ```cpp
+ * auto alloc = make_two_pool_allocator<int, std::string>(
+ *     512 * 1024 * 1024,  // leaf pool size
+ *     256 * 1024 * 1024,  // internal pool size
+ *     true);              // use hugepages
+ *
+ * btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
+ *       MoveMode::Standard, decltype(alloc)> tree(alloc);
+ *
+ * // Access statistics from pools via get_policy()
+ * auto& leaf_pool = alloc.get_policy().leaf_pool_;
+ * auto& internal_pool = alloc.get_policy().internal_pool_;
+ * std::cout << "Leaf allocations: " << leaf_pool->get_allocations() << "\n";
+ * ```
+ *
+ * @tparam Key The key type for the btree
+ * @tparam Value The value type for the btree
+ * @param leaf_pool_size Size of the leaf node pool in bytes
+ * @param internal_pool_size Size of the internal node pool in bytes
+ * @param use_hugepages If true, attempt to use hugepages (default: true)
+ * @param leaf_growth_size Size of additional leaf pool regions when pool grows
+ * (default: 64MB)
+ * @param internal_growth_size Size of additional internal pool regions when
+ * pool grows (default: 64MB)
+ * @param use_numa If true and NUMA available, allocate on local NUMA node
+ * (default: false)
+ * @return PolicyBasedHugePageAllocator configured with two pools
+ */
+template <typename Key, typename Value>
+auto make_two_pool_allocator(std::size_t leaf_pool_size,
+                             std::size_t internal_pool_size,
+                             bool use_hugepages = true,
+                             std::size_t leaf_growth_size = 64 * 1024 * 1024,
+                             std::size_t internal_growth_size = 64 * 1024 *
+                                                                1024,
+                             bool use_numa = false) {
+  auto leaf_pool = std::make_shared<HugePagePool>(leaf_pool_size, use_hugepages,
+                                                  leaf_growth_size, use_numa);
+  auto internal_pool = std::make_shared<HugePagePool>(
+      internal_pool_size, use_hugepages, internal_growth_size, use_numa);
+
+  TwoPoolPolicy policy(leaf_pool, internal_pool);
+  using ValueType = std::pair<Key, Value>;
+  return PolicyBasedHugePageAllocator<ValueType, TwoPoolPolicy>(policy);
+}
+
+/**
+ * Factory function to create a single-pool allocator for btrees.
+ *
+ * This is a convenience function that simplifies the creation of a
+ * PolicyBasedHugePageAllocator with SinglePoolPolicy. It creates one pool
+ * shared by both leaf and internal nodes.
+ *
+ * Example usage:
+ * ```cpp
+ * auto alloc = make_single_pool_allocator<int, std::string>(
+ *     1024 * 1024 * 1024,  // pool size (1GB)
+ *     true);               // use hugepages
+ *
+ * btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
+ *       MoveMode::Standard, decltype(alloc)> tree(alloc);
+ *
+ * // Access statistics from pool via get_policy()
+ * auto& pool = alloc.get_policy().pool_;
+ * std::cout << "Total allocations: " << pool->get_allocations() << "\n";
+ * ```
+ *
+ * @tparam Key The key type for the btree
+ * @tparam Value The value type for the btree
+ * @param pool_size Size of the pool in bytes
+ * @param use_hugepages If true, attempt to use hugepages (default: true)
+ * @param growth_size Size of additional pool regions when pool grows (default:
+ * 64MB)
+ * @param use_numa If true and NUMA available, allocate on local NUMA node
+ * (default: false)
+ * @return PolicyBasedHugePageAllocator configured with a single pool
+ */
+template <typename Key, typename Value>
+auto make_single_pool_allocator(std::size_t pool_size,
+                                bool use_hugepages = true,
+                                std::size_t growth_size = 64 * 1024 * 1024,
+                                bool use_numa = false) {
+  auto pool = std::make_shared<HugePagePool>(pool_size, use_hugepages,
+                                             growth_size, use_numa);
+
+  SinglePoolPolicy policy(pool);
+  using ValueType = std::pair<Key, Value>;
+  return PolicyBasedHugePageAllocator<ValueType, SinglePoolPolicy>(policy);
+}
+
 }  // namespace fast_containers

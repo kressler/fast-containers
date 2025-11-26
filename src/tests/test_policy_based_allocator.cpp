@@ -344,3 +344,170 @@ TEST_CASE("Type trait detection", "[policy][traits]") {
     REQUIRE_FALSE(has_children_are_leaves_v<std::string>);
   }
 }
+
+TEST_CASE("make_two_pool_allocator factory function", "[policy][factory]") {
+  SECTION("Basic creation and usage") {
+    auto alloc = make_two_pool_allocator<int, std::string>(
+        512 * 1024,   // leaf pool size
+        256 * 1024);  // internal pool size
+
+    // Verify allocator works
+    auto* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    alloc.deallocate(p, 1);
+
+    // Verify pools are accessible
+    auto& leaf_pool = alloc.get_policy().leaf_pool_;
+    auto& internal_pool = alloc.get_policy().internal_pool_;
+    REQUIRE(leaf_pool != nullptr);
+    REQUIRE(internal_pool != nullptr);
+    REQUIRE(leaf_pool != internal_pool);
+  }
+
+  SECTION("Integration with btree") {
+    auto alloc = make_two_pool_allocator<int, std::string>(512 * 1024,
+                                                           256 * 1024, false);
+
+    using AllocType = decltype(alloc);
+    btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
+          MoveMode::Standard, AllocType>
+        tree(alloc);
+
+    // Insert data
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    REQUIRE(tree.size() == 100);
+
+#ifdef ALLOCATOR_STATS
+    // Verify statistics are accessible
+    auto& leaf_pool = alloc.get_policy().leaf_pool_;
+    auto& internal_pool = alloc.get_policy().internal_pool_;
+    REQUIRE(leaf_pool->get_allocations() > 0);
+#endif
+  }
+
+  SECTION("Custom configuration") {
+    auto alloc = make_two_pool_allocator<int, std::string>(
+        1024 * 1024,  // leaf pool size
+        512 * 1024,   // internal pool size
+        false,        // no hugepages
+        128 * 1024,   // leaf growth size
+        64 * 1024,    // internal growth size
+        false);       // no NUMA
+
+    auto* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    alloc.deallocate(p, 1);
+  }
+}
+
+TEST_CASE("make_single_pool_allocator factory function", "[policy][factory]") {
+  SECTION("Basic creation and usage") {
+    auto alloc = make_single_pool_allocator<int, std::string>(512 * 1024);
+
+    // Verify allocator works
+    auto* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    alloc.deallocate(p, 1);
+
+    // Verify pool is accessible
+    auto& pool = alloc.get_policy().pool_;
+    REQUIRE(pool != nullptr);
+  }
+
+  SECTION("Integration with btree") {
+    auto alloc =
+        make_single_pool_allocator<int, std::string>(1024 * 1024, false);
+
+    using AllocType = decltype(alloc);
+    btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
+          MoveMode::Standard, AllocType>
+        tree(alloc);
+
+    // Insert data
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    REQUIRE(tree.size() == 100);
+
+#ifdef ALLOCATOR_STATS
+    // Verify statistics are accessible
+    auto& pool = alloc.get_policy().pool_;
+    REQUIRE(pool->get_allocations() > 0);
+#endif
+  }
+
+  SECTION("Custom configuration") {
+    auto alloc =
+        make_single_pool_allocator<int, std::string>(1024 * 1024,  // pool size
+                                                     false,  // no hugepages
+                                                     128 * 1024,  // growth size
+                                                     false);      // no NUMA
+
+    auto* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    alloc.deallocate(p, 1);
+  }
+}
+
+TEST_CASE("Factory functions - pool sharing", "[policy][factory]") {
+  SECTION("Multiple btrees share same pools via two-pool allocator") {
+    auto alloc = make_two_pool_allocator<int, std::string>(512 * 1024,
+                                                           256 * 1024, false);
+
+    using AllocType = decltype(alloc);
+    using BTreeType = btree<int, std::string, 32, 32, std::less<int>,
+                            SearchMode::Binary, MoveMode::Standard, AllocType>;
+
+    BTreeType tree1(alloc);
+    BTreeType tree2(alloc);
+
+    // Insert into both trees
+    for (int i = 0; i < 50; ++i) {
+      tree1.insert(i, "tree1_" + std::to_string(i));
+      tree2.insert(i + 100, "tree2_" + std::to_string(i));
+    }
+
+    REQUIRE(tree1.size() == 50);
+    REQUIRE(tree2.size() == 50);
+
+#ifdef ALLOCATOR_STATS
+    // Both trees share the same pools
+    auto& leaf_pool = alloc.get_policy().leaf_pool_;
+    REQUIRE(leaf_pool->get_allocations() > 0);
+#endif
+  }
+
+  SECTION("Multiple btrees share same pool via single-pool allocator") {
+    auto alloc =
+        make_single_pool_allocator<int, std::string>(1024 * 1024, false);
+
+    using AllocType = decltype(alloc);
+    using BTreeType = btree<int, std::string, 32, 32, std::less<int>,
+                            SearchMode::Binary, MoveMode::Standard, AllocType>;
+
+    BTreeType tree1(alloc);
+    BTreeType tree2(alloc);
+    BTreeType tree3(alloc);
+
+    // Insert into all trees
+    for (int i = 0; i < 30; ++i) {
+      tree1.insert(i, "tree1_" + std::to_string(i));
+      tree2.insert(i + 100, "tree2_" + std::to_string(i));
+      tree3.insert(i + 200, "tree3_" + std::to_string(i));
+    }
+
+    REQUIRE(tree1.size() == 30);
+    REQUIRE(tree2.size() == 30);
+    REQUIRE(tree3.size() == 30);
+
+#ifdef ALLOCATOR_STATS
+    // All trees share the same pool
+    auto& pool = alloc.get_policy().pool_;
+    REQUIRE(pool->get_allocations() > 0);
+#endif
+  }
+}
