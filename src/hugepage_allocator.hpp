@@ -2,7 +2,6 @@
 
 #include <sys/mman.h>
 
-#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
@@ -217,44 +216,34 @@ class HugePageAllocator {
   /**
    * Get total number of allocations (compile-time optional).
    */
-  size_type get_allocations() const {
-    return pool_->stats_.allocations.load(std::memory_order_relaxed);
-  }
+  size_type get_allocations() const { return pool_->stats_.allocations; }
 
   /**
    * Get total number of deallocations (compile-time optional).
    */
-  size_type get_deallocations() const {
-    return pool_->stats_.deallocations.load(std::memory_order_relaxed);
-  }
+  size_type get_deallocations() const { return pool_->stats_.deallocations; }
 
   /**
    * Get number of pool growth events (compile-time optional).
    */
-  size_type get_growth_events() const {
-    return pool_->stats_.growth_events.load(std::memory_order_relaxed);
-  }
+  size_type get_growth_events() const { return pool_->stats_.growth_events; }
 
   /**
    * Get lifetime total bytes allocated (compile-time optional).
    */
   size_type get_bytes_allocated() const {
-    return pool_->stats_.bytes_allocated.load(std::memory_order_relaxed);
+    return pool_->stats_.bytes_allocated;
   }
 
   /**
    * Get current bytes in use (compile-time optional).
    */
-  size_type get_current_usage() const {
-    return pool_->stats_.current_usage.load(std::memory_order_relaxed);
-  }
+  size_type get_current_usage() const { return pool_->stats_.current_usage; }
 
   /**
    * Get peak bytes in use (compile-time optional).
    */
-  size_type get_peak_usage() const {
-    return pool_->stats_.peak_usage.load(std::memory_order_relaxed);
-  }
+  size_type get_peak_usage() const { return pool_->stats_.peak_usage; }
 #endif
 
  private:
@@ -269,37 +258,32 @@ class HugePageAllocator {
   /**
    * Statistics tracked by the allocator (compile-time optional).
    * Enable by defining ALLOCATOR_STATS at compile time.
+   *
+   * Note: Not thread-safe (consistent with rest of allocator).
    */
   struct Stats {
-    std::atomic<size_type> allocations{0};    // Total allocations
-    std::atomic<size_type> deallocations{0};  // Total deallocations
-    std::atomic<size_type> growth_events{0};  // Number of pool growths
-    std::atomic<size_type> bytes_allocated{
-        0};                                   // Lifetime total bytes allocated
-    std::atomic<size_type> current_usage{0};  // Current bytes in use
-    std::atomic<size_type> peak_usage{0};     // Peak bytes in use
+    size_type allocations{0};      // Total allocations
+    size_type deallocations{0};    // Total deallocations
+    size_type growth_events{0};    // Number of pool growths
+    size_type bytes_allocated{0};  // Lifetime total bytes allocated
+    size_type current_usage{0};    // Current bytes in use
+    size_type peak_usage{0};       // Peak bytes in use
 
     void record_allocation(size_type bytes) {
-      allocations.fetch_add(1, std::memory_order_relaxed);
-      bytes_allocated.fetch_add(bytes, std::memory_order_relaxed);
-      size_type new_usage =
-          current_usage.fetch_add(bytes, std::memory_order_relaxed) + bytes;
-      // Update peak if needed (may race, but approximate is fine)
-      size_type current_peak = peak_usage.load(std::memory_order_relaxed);
-      while (new_usage > current_peak &&
-             !peak_usage.compare_exchange_weak(current_peak, new_usage,
-                                               std::memory_order_relaxed)) {
+      ++allocations;
+      bytes_allocated += bytes;
+      current_usage += bytes;
+      if (current_usage > peak_usage) {
+        peak_usage = current_usage;
       }
     }
 
     void record_deallocation(size_type bytes) {
-      deallocations.fetch_add(1, std::memory_order_relaxed);
-      current_usage.fetch_sub(bytes, std::memory_order_relaxed);
+      ++deallocations;
+      current_usage -= bytes;
     }
 
-    void record_growth() {
-      growth_events.fetch_add(1, std::memory_order_relaxed);
-    }
+    void record_growth() { ++growth_events; }
   };
 #endif
 
