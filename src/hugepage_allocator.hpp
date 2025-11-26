@@ -8,6 +8,11 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef HAVE_NUMA
+#include <numa.h>
+#include <numaif.h>
+#endif
+
 namespace fast_containers {
 
 /**
@@ -22,11 +27,13 @@ namespace fast_containers {
  * - Cache-line aligned allocations (64-byte boundaries)
  * - Separate pools per type (via rebind mechanism)
  * - Dynamic growth: pools expand automatically as needed
+ * - Optional NUMA awareness (allocate on local NUMA node)
  *
  * Requirements:
  * - Explicit hugepages must be configured on the system:
  *   sudo sysctl -w vm.nr_hugepages=<num_pages>
  * - Falls back to regular pages if hugepages unavailable
+ * - For NUMA: requires libnuma library (compile with -DENABLE_NUMA=ON)
  *
  * Implementation notes:
  * - Each instantiation (via rebind) creates a separate pool
@@ -35,6 +42,7 @@ namespace fast_containers {
  * - Uses intrusive free list (freed blocks store next pointer in-place)
  * - Requires sizeof(T) >= sizeof(void*) for intrusive free list
  * - Optional statistics tracking (define ALLOCATOR_STATS at compile time)
+ * - Optional NUMA awareness (define HAVE_NUMA at compile time)
  * - Not thread-safe (add locking if needed for concurrent use)
  *
  * @tparam T The type to allocate
@@ -80,12 +88,15 @@ class HugePageAllocator {
    * regular pages (default true)
    * @param growth_size Size of additional regions when pool grows (default
    * 64MB)
+   * @param use_numa If true and NUMA available, allocate on local NUMA node
+   * (default false)
    */
   explicit HugePageAllocator(size_type initial_pool_size = 256 * 1024 * 1024,
                              bool use_hugepages = true,
-                             size_type growth_size = 64 * 1024 * 1024)
+                             size_type growth_size = 64 * 1024 * 1024,
+                             bool use_numa = false)
       : pool_(std::make_shared<Pool>(initial_pool_size, use_hugepages,
-                                     growth_size)) {}
+                                     growth_size, use_numa)) {}
 
   /**
    * Copy constructor (shares pool with other allocator).
@@ -99,9 +110,9 @@ class HugePageAllocator {
    */
   template <typename U>
   explicit HugePageAllocator(const HugePageAllocator<U>& other)
-      : pool_(std::make_shared<Pool>(other.pool_->initial_size_,
-                                     other.pool_->using_hugepages_,
-                                     other.pool_->growth_size_)) {}
+      : pool_(std::make_shared<Pool>(
+            other.pool_->initial_size_, other.pool_->using_hugepages_,
+            other.pool_->growth_size_, other.pool_->using_numa_)) {}
 
   /**
    * Allocate n objects of type T.
@@ -208,6 +219,17 @@ class HugePageAllocator {
   bool using_hugepages() const { return pool_->using_hugepages_; }
 
   /**
+   * Check if allocator is using NUMA-aware allocations.
+   */
+  bool using_numa() const {
+#ifdef HAVE_NUMA
+    return pool_->using_numa_;
+#else
+    return false;
+#endif
+  }
+
+  /**
    * Get remaining bytes in pool.
    */
   size_type bytes_remaining() const { return pool_->bytes_remaining_; }
@@ -294,19 +316,38 @@ class HugePageAllocator {
     size_type initial_size_;
     size_type growth_size_;
     bool using_hugepages_;
+    bool using_numa_;
     void* free_list_head_;  // Head of intrusive free list
+#ifdef HAVE_NUMA
+    int numa_node_;  // Current NUMA node (-1 if NUMA not available)
+#endif
 
 #ifdef ALLOCATOR_STATS
     Stats stats_;
 #endif
 
-    Pool(size_type initial_size, bool use_hugepages, size_type growth_size)
+    Pool(size_type initial_size, bool use_hugepages, size_type growth_size,
+         bool use_numa)
         : bytes_remaining_(0),
           initial_size_(initial_size),
           growth_size_(growth_size),
           using_hugepages_(false),
+          using_numa_(false),
           next_free_(nullptr),
-          free_list_head_(nullptr) {
+          free_list_head_(nullptr)
+#ifdef HAVE_NUMA
+          ,
+          numa_node_(-1)
+#endif
+    {
+#ifdef HAVE_NUMA
+      // Check if NUMA is available and requested
+      if (use_numa && numa_available() != -1) {
+        numa_node_ = numa_node_of_cpu(sched_getcpu());
+        using_numa_ = true;
+      }
+#endif
+
       // Allocate initial region
       MemoryRegion initial_region;
 
@@ -379,6 +420,15 @@ class HugePageAllocator {
         return {nullptr, 0};  // Hugepages not available
       }
 
+#ifdef HAVE_NUMA
+      // Bind memory to NUMA node if NUMA is enabled
+      if (using_numa_ && numa_node_ >= 0) {
+        unsigned long nodemask = 1UL << numa_node_;
+        mbind(ptr, aligned_size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
+              MPOL_MF_STRICT | MPOL_MF_MOVE);
+      }
+#endif
+
       // Advise kernel about access pattern
       // Use MADV_RANDOM for internal nodes (tree-structured access)
       // Use MADV_SEQUENTIAL for leaf nodes (linked list traversal)
@@ -401,6 +451,15 @@ class HugePageAllocator {
       if (ptr == MAP_FAILED) {
         throw std::bad_alloc();
       }
+
+#ifdef HAVE_NUMA
+      // Bind memory to NUMA node if NUMA is enabled
+      if (using_numa_ && numa_node_ >= 0) {
+        unsigned long nodemask = 1UL << numa_node_;
+        mbind(ptr, size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
+              MPOL_MF_STRICT | MPOL_MF_MOVE);
+      }
+#endif
 
       // Hint to use transparent hugepages if available
       madvise(ptr, size, MADV_HUGEPAGE);

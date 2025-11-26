@@ -455,3 +455,111 @@ TEST_CASE("HugePageAllocator - statistics tracking",
   }
 }
 #endif
+
+#ifdef HAVE_NUMA
+TEST_CASE("HugePageAllocator - NUMA awareness", "[hugepage_allocator][numa]") {
+  SECTION("NUMA disabled by default") {
+    HugePageAllocator<int64_t> alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024,
+                                     false);
+    REQUIRE_FALSE(alloc.using_numa());
+  }
+
+  SECTION("NUMA enabled when requested") {
+    // NUMA might not be available on all systems
+    HugePageAllocator<int64_t> alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024,
+                                     true);
+
+    // Check if NUMA is available on this system
+    if (numa_available() != -1) {
+      REQUIRE(alloc.using_numa());
+    } else {
+      // NUMA not available, allocator should gracefully fall back
+      REQUIRE_FALSE(alloc.using_numa());
+    }
+  }
+
+  SECTION("NUMA allocations work correctly") {
+    HugePageAllocator<int64_t> alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024,
+                                     true);
+
+    // Allocate and use memory
+    std::vector<int64_t*> ptrs;
+    for (int i = 0; i < 100; ++i) {
+      int64_t* p = alloc.allocate(1);
+      REQUIRE(p != nullptr);
+      *p = i;  // Write to verify memory is accessible
+      ptrs.push_back(p);
+    }
+
+    // Verify values
+    for (int i = 0; i < 100; ++i) {
+      REQUIRE(*ptrs[i] == i);
+    }
+
+    // Clean up
+    for (auto* p : ptrs) {
+      alloc.deallocate(p, 1);
+    }
+  }
+
+  SECTION("NUMA with hugepages") {
+    HugePageAllocator<int64_t> alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024,
+                                     true);
+
+    // Test that hugepages and NUMA can work together
+    int64_t* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    *p = 42;
+    REQUIRE(*p == 42);
+    alloc.deallocate(p, 1);
+  }
+
+  SECTION("NUMA without hugepages") {
+    HugePageAllocator<int64_t> alloc(256 * 1024 * 1024, false, 64 * 1024 * 1024,
+                                     true);
+
+    // Test that NUMA works with regular pages
+    int64_t* p = alloc.allocate(1);
+    REQUIRE(p != nullptr);
+    *p = 123;
+    REQUIRE(*p == 123);
+    alloc.deallocate(p, 1);
+  }
+
+  SECTION("Rebind preserves NUMA setting") {
+    HugePageAllocator<int64_t> alloc1(256 * 1024 * 1024, true, 64 * 1024 * 1024,
+                                      true);
+
+    // Rebind to different type
+    HugePageAllocator<double> alloc2(alloc1);
+
+    // NUMA setting should be preserved
+    if (numa_available() != -1) {
+      REQUIRE(alloc2.using_numa() == alloc1.using_numa());
+    }
+  }
+
+  SECTION("NUMA with btree") {
+    using AllocType = HugePageAllocator<std::pair<int, std::string>>;
+    AllocType alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024, true);
+
+    btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
+          MoveMode::Standard, AllocType>
+        tree(alloc);
+
+    // Insert elements
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify lookups
+    for (int i = 0; i < 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == "value" + std::to_string(i));
+    }
+  }
+}
+#endif
