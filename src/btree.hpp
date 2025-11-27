@@ -161,6 +161,21 @@ class btree {
   btree& operator=(btree&& other) noexcept;
 
   /**
+   * Constructs the tree from an initializer list.
+   * Enables syntax like: btree<int, string> tree = {{1, "a"}, {2, "b"}};
+   * Complexity: O(n log n) where n is the number of elements
+   */
+  btree(std::initializer_list<value_type> init,
+        const Allocator& alloc = Allocator());
+
+  /**
+   * Constructs the tree from a range of elements.
+   * Complexity: O(n log n) where n is the distance between first and last
+   */
+  template <typename InputIt>
+  btree(InputIt first, InputIt last, const Allocator& alloc = Allocator());
+
+  /**
    * Returns the number of elements in the tree.
    * Complexity: O(1)
    */
@@ -651,6 +666,22 @@ class btree {
   Value& operator[](const Key& key);
 
   /**
+   * Returns a reference to the value associated with the specified key.
+   * Throws std::out_of_range if the key does not exist.
+   *
+   * Complexity: O(log n)
+   */
+  Value& at(const Key& key);
+
+  /**
+   * Returns a const reference to the value associated with the specified key.
+   * Throws std::out_of_range if the key does not exist.
+   *
+   * Complexity: O(log n)
+   */
+  const Value& at(const Key& key) const;
+
+  /**
    * Removes the element with the given key from the tree.
    * Returns the number of elements removed (0 or 1).
    *
@@ -699,6 +730,14 @@ class btree {
    * Complexity: O(log n)
    */
   size_type count(const Key& key) const { return find(key) != end() ? 1 : 0; }
+
+  /**
+   * Checks if there is an element with the specified key.
+   * Equivalent to find(key) != end() but more readable.
+   *
+   * Complexity: O(log n)
+   */
+  bool contains(const Key& key) const { return find(key) != end(); }
 
   /**
    * Swaps the contents of this tree with another tree.
