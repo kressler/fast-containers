@@ -756,6 +756,19 @@ int main(int argc, char** argv) {
                            SearchMode::Linear, MoveMode::Standard>{},
                      stats);
        }},
+      {"btree_32_32_48_48_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_two_pool_allocator<std::array<int64_t, 4>,
+                                              std::array<std::byte, 32>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(
+             btree<std::array<int64_t, 4>, std::array<std::byte, 32>, 48, 48,
+                   std::less<std::array<int64_t, 4>>, SearchMode::Linear,
+                   MoveMode::Standard, decltype(alloc)>{alloc},
+             stats);
+         print_pool_stats(*alloc.get_policy().leaf_pool_, "Leaf");
+         print_pool_stats(*alloc.get_policy().internal_pool_, "Internal");
+       }},
       {"absl_32_32",
        [&](TimingStats& stats) -> void {
          benchmarker(absl::btree_map<std::array<std::int64_t, 4>,
@@ -985,6 +998,19 @@ int main(int argc, char** argv) {
                            std::less<int64_t>, SearchMode::Linear,
                            MoveMode::Standard>{},
                      stats);
+       }},
+
+      {"btree_8_32_96_128_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc =
+             make_two_pool_allocator<int64_t, std::array<std::byte, 32>>(
+                 64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(btree<int64_t, std::array<std::byte, 32>, 96, 128,
+                           std::less<int64_t>, SearchMode::Linear,
+                           MoveMode::Standard, decltype(alloc)>{alloc},
+                     stats);
+         print_pool_stats(*alloc.get_policy().leaf_pool_, "Leaf");
+         print_pool_stats(*alloc.get_policy().internal_pool_, "Internal");
        }},
       {"btree_8_32_96_256_linear_simd",
        [&](TimingStats& stats) -> void {
