@@ -674,6 +674,23 @@ class btree {
   std::pair<iterator, bool> try_emplace(const Key& key, Args&&... args);
 
   /**
+   * Inserts a new element or assigns to an existing one.
+   * If the key exists, assigns the new value to the existing element.
+   * If the key doesn't exist, inserts a new element with the value.
+   *
+   * This is different from insert() which leaves existing values unchanged.
+   *
+   * @param key The key to insert or assign
+   * @param value The value to insert or assign
+   * @return Pair of iterator to inserted/updated element and bool indicating
+   * insertion (true) vs assignment (false)
+   *
+   * Complexity: O(log n)
+   */
+  template <typename M>
+  std::pair<iterator, bool> insert_or_assign(const Key& key, M&& value);
+
+  /**
    * Accesses or inserts an element with the specified key.
    * If the key exists, returns a reference to the associated value.
    * If the key does not exist, inserts a new element with default-constructed

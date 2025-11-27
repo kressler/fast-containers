@@ -204,6 +204,20 @@ class ordered_array {
   std::pair<iterator, bool> try_emplace(const Key& key, Args&&... args);
 
   /**
+   * Inserts a new element or assigns to an existing one.
+   * If the key exists, assigns the new value to the existing element.
+   * If the key doesn't exist, inserts a new element with the value.
+   *
+   * @param key The key to insert or assign
+   * @param value The value to insert or assign
+   * @return Pair of iterator to inserted/updated element and bool indicating
+   * insertion (true) vs assignment (false)
+   * @throws std::runtime_error if the array is full and key doesn't exist
+   */
+  template <typename M>
+  std::pair<iterator, bool> insert_or_assign(const Key& key, M&& value);
+
+  /**
    * Find an element by key.
    *
    * @param key The key to search for
