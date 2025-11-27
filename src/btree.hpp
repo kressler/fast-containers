@@ -199,7 +199,7 @@ class btree {
    */
   class iterator {
    public:
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag;
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
@@ -226,12 +226,11 @@ class btree {
       ++(*leaf_it_);
       // If we've reached the end of this leaf, move to next leaf
       if (*leaf_it_ == leaf_node_->data.end()) {
-        leaf_node_ = leaf_node_->next_leaf;
-        if (leaf_node_ != nullptr) {
+        if (leaf_node_->next_leaf != nullptr) {
+          leaf_node_ = leaf_node_->next_leaf;
           leaf_it_ = leaf_node_->data.begin();
-        } else {
-          leaf_it_.reset();
         }
+        // else: stay at end() position (rightmost_leaf, data.end())
       }
       return *this;
     }
@@ -239,6 +238,41 @@ class btree {
     iterator operator++(int) {
       iterator tmp = *this;
       ++(*this);
+      return tmp;
+    }
+
+    iterator& operator--() {
+      assert(leaf_node_ != nullptr &&
+             "Cannot decrement default-constructed iterator");
+
+      // Check if we're at end() (one past the last element)
+      if (*leaf_it_ == leaf_node_->data.end()) {
+        // Move to the last element of the current leaf
+        auto end_it = leaf_node_->data.end();
+        --end_it;
+        leaf_it_ = end_it;
+        return *this;
+      }
+
+      // Check if we're at the beginning of the current leaf
+      if (*leaf_it_ == leaf_node_->data.begin()) {
+        // Move to previous leaf
+        leaf_node_ = leaf_node_->prev_leaf;
+        assert(leaf_node_ != nullptr && "Decrementing past begin()");
+        // Move to the last element of the previous leaf
+        auto end_it = leaf_node_->data.end();
+        --end_it;
+        leaf_it_ = end_it;
+      } else {
+        // Decrement within current leaf
+        --(*leaf_it_);
+      }
+      return *this;
+    }
+
+    iterator operator--(int) {
+      iterator tmp = *this;
+      --(*this);
       return tmp;
     }
 
@@ -263,12 +297,18 @@ class btree {
     iterator(LeafNode* node,
              typename ordered_array<Key, Value, LeafNodeSize, Compare,
                                     SearchModeT, MoveModeT>::iterator it)
-        : leaf_node_(node), leaf_it_(it) {}
+        : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
+
+    iterator(const btree* tree, LeafNode* node,
+             typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                    SearchModeT, MoveModeT>::iterator it)
+        : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     LeafNode* leaf_node_;
     std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
                                          SearchModeT, MoveModeT>::iterator>
         leaf_it_;
+    const btree* tree_;
   };
 
   using const_iterator = iterator;  // For now, treat as const
@@ -280,7 +320,7 @@ class btree {
    */
   class reverse_iterator {
    public:
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag;
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
@@ -288,7 +328,7 @@ class btree {
         typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
                                MoveModeT>::iterator::reference;
 
-    reverse_iterator() : leaf_node_(nullptr) {}
+    reverse_iterator() : leaf_node_(nullptr), tree_(nullptr) {}
 
     reference operator*() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
@@ -329,6 +369,39 @@ class btree {
       return tmp;
     }
 
+    reverse_iterator& operator--() {
+      // Handle decrementing from rend() iterator
+      if (leaf_node_ == nullptr) {
+        assert(tree_ != nullptr &&
+               "Cannot decrement default-constructed iterator");
+        // Move to the first element (smallest in sorted order)
+        leaf_node_ = tree_->leftmost_leaf_;
+        leaf_it_ = leaf_node_->data.begin();
+        return *this;
+      }
+
+      // Check if we're at the end of the current leaf
+      auto end_it = leaf_node_->data.end();
+      --end_it;  // Move to last valid element
+      if (*leaf_it_ == end_it) {
+        // Move to next leaf
+        leaf_node_ = leaf_node_->next_leaf;
+        assert(leaf_node_ != nullptr && "Decrementing past rbegin()");
+        // Move to the first element of the next leaf
+        leaf_it_ = leaf_node_->data.begin();
+      } else {
+        // Increment within current leaf (moving forward in sorted order)
+        ++(*leaf_it_);
+      }
+      return *this;
+    }
+
+    reverse_iterator operator--(int) {
+      reverse_iterator tmp = *this;
+      --(*this);
+      return tmp;
+    }
+
     bool operator==(const reverse_iterator& other) const {
       // If both are end iterators (leaf_node_ == nullptr), they're equal
       if (leaf_node_ == nullptr && other.leaf_node_ == nullptr) {
@@ -353,12 +426,22 @@ class btree {
         LeafNode* node,
         typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
                                MoveModeT>::iterator it)
-        : leaf_node_(node), leaf_it_(it) {}
+        : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
+
+    reverse_iterator(
+        const btree* tree, LeafNode* node,
+        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                               MoveModeT>::iterator it)
+        : leaf_node_(node), leaf_it_(it), tree_(tree) {}
+
+    reverse_iterator(const btree* tree, LeafNode* node)
+        : leaf_node_(node), leaf_it_(std::nullopt), tree_(tree) {}
 
     LeafNode* leaf_node_;
     std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
                                          SearchModeT, MoveModeT>::iterator>
         leaf_it_;
+    const btree* tree_;
   };
 
   using const_reverse_iterator = reverse_iterator;  // For now, treat as const
@@ -378,7 +461,12 @@ class btree {
    * Returns an iterator to one past the last element.
    * Complexity: O(1)
    */
-  iterator end() { return iterator(); }
+  iterator end() {
+    if (size_ == 0) {
+      return iterator();
+    }
+    return iterator(rightmost_leaf_, rightmost_leaf_->data.end());
+  }
 
   /**
    * Returns a const_iterator to the first element.
@@ -395,7 +483,12 @@ class btree {
    * Returns a const_iterator to one past the last element.
    * Complexity: O(1)
    */
-  const_iterator end() const { return const_iterator(); }
+  const_iterator end() const {
+    if (size_ == 0) {
+      return const_iterator();
+    }
+    return const_iterator(rightmost_leaf_, rightmost_leaf_->data.end());
+  }
 
   /**
    * Returns a const_iterator to the first element.
@@ -420,14 +513,14 @@ class btree {
     }
     auto it = rightmost_leaf_->data.end();
     --it;  // Move to last valid element
-    return reverse_iterator(rightmost_leaf_, it);
+    return reverse_iterator(this, rightmost_leaf_, it);
   }
 
   /**
    * Returns a reverse_iterator to the element following the last element of
    * the reversed container. Complexity: O(1)
    */
-  reverse_iterator rend() { return reverse_iterator(); }
+  reverse_iterator rend() { return reverse_iterator(this, nullptr); }
 
   /**
    * Returns a const_reverse_iterator to the first element of the reversed
@@ -439,14 +532,16 @@ class btree {
     }
     auto it = rightmost_leaf_->data.end();
     --it;  // Move to last valid element
-    return const_reverse_iterator(rightmost_leaf_, it);
+    return const_reverse_iterator(this, rightmost_leaf_, it);
   }
 
   /**
    * Returns a const_reverse_iterator to the element following the last element
    * of the reversed container. Complexity: O(1)
    */
-  const_reverse_iterator rend() const { return const_reverse_iterator(); }
+  const_reverse_iterator rend() const {
+    return const_reverse_iterator(this, nullptr);
+  }
 
   /**
    * Returns a const_reverse_iterator to the first element of the reversed

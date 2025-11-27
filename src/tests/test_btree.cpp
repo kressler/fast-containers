@@ -3825,3 +3825,279 @@ TEMPLATE_TEST_CASE("btree reverse iterators with std::greater",
     REQUIRE(reverse_keys == std::vector<int>{1, 3, 5, 7, 9});
   }
 }
+
+TEMPLATE_TEST_CASE("btree bidirectional forward iterator",
+                   "[btree][iterators][bidirectional]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 4, 8, std::less<int>, Mode> tree;
+
+  SECTION("bidirectional_iterator_tag is set") {
+    using iterator = decltype(tree.begin());
+    REQUIRE(std::is_same_v<typename iterator::iterator_category,
+                           std::bidirectional_iterator_tag>);
+  }
+
+  SECTION("decrement from end() to last element") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    auto it = tree.end();
+    --it;
+    REQUIRE(it->first == 3);
+    REQUIRE(it->second == "three");
+  }
+
+  SECTION("decrement through single leaf") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    auto it = tree.end();
+    --it;
+    REQUIRE(it->first == 3);
+    --it;
+    REQUIRE(it->first == 2);
+    --it;
+    REQUIRE(it->first == 1);
+    REQUIRE(it == tree.begin());
+  }
+
+  SECTION("decrement through multiple leaves") {
+    // Insert enough elements to span multiple leaves (leaf size is 4)
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // Start from end and decrement through all elements
+    std::vector<int> keys;
+    for (auto it = tree.end(); it != tree.begin();) {
+      --it;
+      keys.push_back(it->first);
+    }
+
+    // Should get keys in reverse: 10, 9, 8, ..., 2, 1
+    std::vector<int> expected = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+    REQUIRE(keys == expected);
+  }
+
+  SECTION("mixed increment and decrement") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    auto it = tree.begin();
+    ++it;  // Now at 2
+    ++it;  // Now at 3
+    REQUIRE(it->first == 3);
+
+    --it;  // Back to 2
+    REQUIRE(it->first == 2);
+
+    --it;  // Back to 1
+    REQUIRE(it->first == 1);
+    REQUIRE(it == tree.begin());
+
+    ++it;  // Forward to 2
+    REQUIRE(it->first == 2);
+  }
+
+  SECTION("postfix decrement operator") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    auto it = tree.end();
+    auto prev = it--;
+    REQUIRE(prev == tree.end());
+    REQUIRE(it->first == 3);
+
+    prev = it--;
+    REQUIRE(prev->first == 3);
+    REQUIRE(it->first == 2);
+  }
+
+  SECTION("reverse traverse gives correct sequence") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // Reverse traversal using decrement
+    std::vector<int> keys;
+    for (auto it = tree.end(); it != tree.begin();) {
+      --it;
+      keys.push_back(it->first);
+    }
+
+    // Should get keys in reverse: 10, 9, 8, ..., 2, 1
+    std::vector<int> expected = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+    REQUIRE(keys == expected);
+  }
+}
+
+TEMPLATE_TEST_CASE("btree bidirectional reverse iterator",
+                   "[btree][iterators][bidirectional][reverse]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 4, 8, std::less<int>, Mode> tree;
+
+  SECTION("bidirectional_iterator_tag is set") {
+    using reverse_iterator = decltype(tree.rbegin());
+    REQUIRE(std::is_same_v<typename reverse_iterator::iterator_category,
+                           std::bidirectional_iterator_tag>);
+  }
+
+  SECTION("decrement from rend() behaves correctly") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    // rbegin points to largest (3), rend is past smallest (1)
+    // Decrementing rend() should give us smallest element (1)
+    auto rit = tree.rbegin();
+    ++rit;  // Now at 2
+    ++rit;  // Now at 1
+    ++rit;  // Now at rend()
+
+    --rit;  // Back to 1
+    REQUIRE(rit->first == 1);
+  }
+
+  SECTION("decrement through single leaf") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    auto rit = tree.rbegin();
+    REQUIRE(rit->first == 3);
+
+    ++rit;  // Forward in reverse order -> 2
+    REQUIRE(rit->first == 2);
+
+    --rit;  // Back to 3
+    REQUIRE(rit->first == 3);
+    REQUIRE(rit == tree.rbegin());
+  }
+
+  SECTION("decrement through multiple leaves") {
+    // Insert enough elements to span multiple leaves
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // Go forward in reverse order (10 -> 1), then back using decrement
+    auto rit = tree.rbegin();
+    REQUIRE(rit->first == 10);
+
+    for (int i = 0; i < 5; ++i) {
+      ++rit;
+    }
+    REQUIRE(rit->first == 5);
+
+    // Now decrement back
+    for (int i = 0; i < 5; ++i) {
+      --rit;
+    }
+    REQUIRE(rit->first == 10);
+    REQUIRE(rit == tree.rbegin());
+  }
+
+  SECTION("mixed increment and decrement") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    auto rit = tree.rbegin();  // At 10
+    ++rit;                     // At 9
+    ++rit;                     // At 8
+    REQUIRE(rit->first == 8);
+
+    --rit;  // Back to 9
+    REQUIRE(rit->first == 9);
+
+    --rit;  // Back to 10
+    REQUIRE(rit->first == 10);
+    REQUIRE(rit == tree.rbegin());
+
+    ++rit;  // Forward to 9
+    REQUIRE(rit->first == 9);
+  }
+
+  SECTION("postfix decrement operator") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    auto rit = tree.rbegin();  // At 3
+    ++rit;                     // At 2
+
+    auto prev = rit--;
+    REQUIRE(prev->first == 2);
+    REQUIRE(rit->first == 3);
+    REQUIRE(rit == tree.rbegin());
+  }
+}
+
+TEMPLATE_TEST_CASE("btree bidirectional iterator with std::greater",
+                   "[btree][iterators][bidirectional][comparator]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 4, 8, std::greater<int>, Mode> tree;
+
+  SECTION("forward iterator decrement with descending order") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // Tree order: 10, 9, 8, ..., 2, 1
+    auto it = tree.end();
+    --it;
+    REQUIRE(it->first == 1);  // Last in descending order
+
+    --it;
+    REQUIRE(it->first == 2);
+
+    --it;
+    REQUIRE(it->first == 3);
+  }
+
+  SECTION("reverse iterator decrement with descending order") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // rbegin() points to smallest value (1)
+    // Incrementing goes to larger values: 1 -> 2 -> 3...
+    auto rit = tree.rbegin();
+    REQUIRE(rit->first == 1);
+
+    ++rit;
+    REQUIRE(rit->first == 2);
+
+    --rit;  // Back to 1
+    REQUIRE(rit->first == 1);
+    REQUIRE(rit == tree.rbegin());
+  }
+
+  SECTION("full bidirectional traversal with std::greater") {
+    for (int i = 1; i <= 10; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    // Forward: 10, 9, 8, ..., 2, 1 (descending)
+    std::vector<int> forward_keys;
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      forward_keys.push_back(it->first);
+    }
+    REQUIRE(forward_keys == std::vector<int>{10, 9, 8, 7, 6, 5, 4, 3, 2, 1});
+
+    // Backward using decrement: 1, 2, 3, ..., 10
+    std::vector<int> backward_keys;
+    for (auto it = tree.end(); it != tree.begin();) {
+      --it;
+      backward_keys.push_back(it->first);
+    }
+    REQUIRE(backward_keys == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+  }
+}
