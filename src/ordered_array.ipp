@@ -253,6 +253,51 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::try_emplace(
 }
 
 /**
+ * insert_or_assign - inserts a new element or assigns to an existing one.
+ * Key difference from insert(): overwrites existing values instead of leaving
+ * them unchanged.
+ */
+template <typename Key, typename Value, std::size_t Length, typename Compare,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+  requires ComparatorCompatible<Key, Compare>
+template <typename M>
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
+                                 MoveModeT>::iterator,
+          bool>
+ordered_array<Key, Value, Length, Compare, SearchModeT,
+              MoveModeT>::insert_or_assign(const Key& key, M&& value) {
+  // Find the position where the key should be inserted
+  auto pos = lower_bound_key(key);
+
+  // Calculate index
+  size_type idx = pos - keys_.begin();
+
+  // Check if key already exists - if so, ASSIGN the new value
+  if (idx < size_ && keys_[idx] == key) {
+    values_[idx] = std::forward<M>(value);
+    return {iterator(this, idx), false};  // false = assignment, not insertion
+  }
+
+  // Key doesn't exist - insert new element
+  // Check if array is full
+  if (size_ >= Length) {
+    throw std::runtime_error("Cannot insert: array is full");
+  }
+
+  // Shift elements to the right to make space in both arrays
+  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+
+  // Insert the key and value
+  keys_[idx] = key;
+  values_[idx] = std::forward<M>(value);
+
+  ++size_;
+
+  return {iterator(this, idx), true};  // true = insertion
+}
+
+/**
  * Erase an element by iterator.
  * More efficient than key-based erase when you already have an iterator.
  *

@@ -4623,3 +4623,231 @@ TEMPLATE_TEST_CASE("btree try_emplace", "[btree][try_emplace]",
     REQUIRE(it->second.data == vec);
   }
 }
+
+TEMPLATE_TEST_CASE("btree insert_or_assign", "[btree][insert_or_assign]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("insert_or_assign - insert new element") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it, inserted] = tree.insert_or_assign(5, 50);
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("insert_or_assign - assign to existing element") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert initial element
+    auto [it1, ins1] = tree.insert_or_assign(5, 50);
+    REQUIRE(ins1);
+    REQUIRE(it1->second == 50);
+
+    // Assign new value to existing key
+    auto [it2, ins2] = tree.insert_or_assign(5, 999);
+
+    REQUIRE(!ins2);  // false = assignment, not insertion
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it2->first == 5);
+    REQUIRE(it2->second == 999);  // Value was updated!
+    REQUIRE(it1 == it2);          // Same element
+  }
+
+  SECTION("insert_or_assign - multiple elements") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it1, ins1] = tree.insert_or_assign(1, 10);
+    auto [it2, ins2] = tree.insert_or_assign(2, 20);
+    auto [it3, ins3] = tree.insert_or_assign(3, 30);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("insert_or_assign - update all values") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert initial values
+    for (int i = 1; i <= 10; ++i) {
+      auto [it, inserted] = tree.insert_or_assign(i, i * 10);
+      REQUIRE(inserted);
+    }
+    REQUIRE(tree.size() == 10);
+
+    // Update all values with insert_or_assign
+    for (int i = 1; i <= 10; ++i) {
+      auto [it, inserted] = tree.insert_or_assign(i, i * 100);
+      REQUIRE(!inserted);  // Assignment, not insertion
+      REQUIRE(it->second == i * 100);
+    }
+    REQUIRE(tree.size() == 10);  // Size unchanged
+
+    // Verify all values were updated
+    for (int i = 1; i <= 10; ++i) {
+      REQUIRE(tree.find(i)->second == i * 100);
+    }
+  }
+
+  SECTION("insert_or_assign - mixed insert and assign") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert some elements
+    tree.insert_or_assign(2, 20);
+    tree.insert_or_assign(4, 40);
+    tree.insert_or_assign(6, 60);
+
+    REQUIRE(tree.size() == 3);
+
+    // Mix of inserts (odd numbers) and assigns (even numbers)
+    auto [it1, ins1] = tree.insert_or_assign(1, 10);   // insert
+    auto [it2, ins2] = tree.insert_or_assign(2, 200);  // assign
+    auto [it3, ins3] = tree.insert_or_assign(3, 30);   // insert
+    auto [it4, ins4] = tree.insert_or_assign(4, 400);  // assign
+    auto [it5, ins5] = tree.insert_or_assign(5, 50);   // insert
+    auto [it6, ins6] = tree.insert_or_assign(6, 600);  // assign
+
+    REQUIRE(ins1);   // inserted
+    REQUIRE(!ins2);  // assigned
+    REQUIRE(ins3);   // inserted
+    REQUIRE(!ins4);  // assigned
+    REQUIRE(ins5);   // inserted
+    REQUIRE(!ins6);  // assigned
+
+    REQUIRE(tree.size() == 6);
+
+    // Verify all values
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 200);
+    REQUIRE(tree.find(3)->second == 30);
+    REQUIRE(tree.find(4)->second == 400);
+    REQUIRE(tree.find(5)->second == 50);
+    REQUIRE(tree.find(6)->second == 600);
+  }
+
+  SECTION("insert_or_assign - large tree with splits") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert enough elements to force multiple splits
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.insert_or_assign(i, i * 10);
+      REQUIRE(inserted);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Update all values using insert_or_assign
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.insert_or_assign(i, i * 1000);
+      REQUIRE(!inserted);  // All should be assignments
+      REQUIRE(it->second == i * 1000);
+    }
+
+    REQUIRE(tree.size() == 100);  // Size unchanged
+
+    // Verify all elements have updated values
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 1000);
+    }
+  }
+
+  SECTION("insert_or_assign - comparison with insert behavior") {
+    // Demonstrate difference between insert() and insert_or_assign()
+
+    // Test insert() - leaves existing values unchanged
+    {
+      btree<int, int, 4, 4, std::less<int>, Mode> tree;
+      tree.insert(5, 50);
+
+      auto [it, inserted] = tree.insert(5, 999);
+      REQUIRE(!inserted);
+      REQUIRE(it->second == 50);  // insert() leaves value unchanged
+    }
+
+    // Test insert_or_assign() - updates existing values
+    {
+      btree<int, int, 4, 4, std::less<int>, Mode> tree;
+      tree.insert(5, 50);
+
+      auto [it, inserted] = tree.insert_or_assign(5, 999);
+      REQUIRE(!inserted);
+      REQUIRE(it->second == 999);  // insert_or_assign() updates value
+    }
+  }
+
+  SECTION("insert_or_assign - string values") {
+    btree<int, std::string, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert initial value
+    auto [it1, ins1] = tree.insert_or_assign(5, "hello");
+    REQUIRE(ins1);
+    REQUIRE(it1->second == "hello");
+
+    // Assign new value
+    auto [it2, ins2] = tree.insert_or_assign(5, "world");
+    REQUIRE(!ins2);
+    REQUIRE(it2->second == "world");
+
+    // Verify assignment worked
+    REQUIRE(tree.find(5)->second == "world");
+    REQUIRE(tree.size() == 1);
+  }
+
+  SECTION("insert_or_assign - string keys") {
+    // Note: SIMD mode doesn't support std::string keys, so use Binary mode
+    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary>
+        tree;
+
+    auto [it1, ins1] = tree.insert_or_assign("apple", 1);
+    auto [it2, ins2] = tree.insert_or_assign("banana", 2);
+    auto [it3, ins3] = tree.insert_or_assign("cherry", 3);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    // Assign new values
+    auto [it4, ins4] = tree.insert_or_assign("apple", 100);
+    auto [it5, ins5] = tree.insert_or_assign("banana", 200);
+
+    REQUIRE(!ins4);
+    REQUIRE(!ins5);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find("apple")->second == 100);
+    REQUIRE(tree.find("banana")->second == 200);
+    REQUIRE(tree.find("cherry")->second == 3);
+  }
+
+  SECTION("insert_or_assign - return value consistency") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert: should return (iterator, true)
+    auto [it1, ins1] = tree.insert_or_assign(5, 50);
+    REQUIRE(ins1 == true);
+    REQUIRE(it1->first == 5);
+    REQUIRE(it1->second == 50);
+
+    // Assign: should return (iterator, false)
+    auto [it2, ins2] = tree.insert_or_assign(5, 999);
+    REQUIRE(ins2 == false);
+    REQUIRE(it2->first == 5);
+    REQUIRE(it2->second == 999);
+    REQUIRE(it1 == it2);  // Same element
+  }
+}

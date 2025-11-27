@@ -459,6 +459,51 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   return {iterator(leaf, leaf_it), inserted};
 }
 
+// insert_or_assign
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          MoveMode MoveModeT, typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+template <typename M>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
+                         SearchModeT, MoveModeT, Allocator>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      MoveModeT, Allocator>::insert_or_assign(const Key& key, M&& value) {
+  // Find the appropriate leaf for the key
+  LeafNode* leaf = find_leaf_for_key(key);
+
+  // Use lower_bound to find position - single search for both existence check
+  // and insertion point
+  auto pos = leaf->data.lower_bound(key);
+
+  // Check if key already exists - if so, ASSIGN to it
+  if (pos != leaf->data.end() && pos->first == key) {
+    pos->second = std::forward<M>(value);
+    return {iterator(leaf, pos), false};  // false = assignment, not insertion
+  }
+
+  // Key doesn't exist - insert new element
+  // If leaf is full, we need to split
+  if (leaf->data.size() >= LeafNodeSize) {
+    return split_leaf(leaf, key, std::forward<M>(value));
+  }
+
+  // Leaf has space - use insert_or_assign
+  auto [leaf_it, inserted] =
+      leaf->data.insert_or_assign(key, std::forward<M>(value));
+  if (inserted) {
+    size_++;
+
+    // If we inserted at the beginning and leaf has a parent, update parent key
+    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
+      update_parent_key_recursive(leaf, key);
+    }
+  }
+
+  return {iterator(leaf, leaf_it), inserted};
+}
+
 // operator[]
 template <typename Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
