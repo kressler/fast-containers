@@ -3636,3 +3636,192 @@ TEST_CASE("btree with std::greater (descending order)", "[btree][comparator]") {
     }
   }
 }
+
+TEMPLATE_TEST_CASE("btree cbegin/cend const iterators", "[btree][iterators]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 32, 32, std::less<int>, Mode> tree;
+
+  SECTION("cbegin/cend on empty tree") {
+    REQUIRE(tree.cbegin() == tree.cend());
+    REQUIRE(tree.cbegin() == tree.end());
+  }
+
+  SECTION("cbegin/cend with elements") {
+    tree.insert(5, "five");
+    tree.insert(3, "three");
+    tree.insert(7, "seven");
+    tree.insert(1, "one");
+    tree.insert(9, "nine");
+
+    REQUIRE(tree.size() == 5);
+
+    // Verify cbegin points to smallest element
+    auto it = tree.cbegin();
+    REQUIRE(it != tree.cend());
+    REQUIRE(it->first == 1);
+    REQUIRE(it->second == "one");
+
+    // Iterate through all elements using cbegin/cend
+    std::vector<int> keys;
+    for (auto cit = tree.cbegin(); cit != tree.cend(); ++cit) {
+      keys.push_back(cit->first);
+    }
+
+    REQUIRE(keys == std::vector<int>{1, 3, 5, 7, 9});
+  }
+
+  SECTION("cbegin/cend compatibility with begin/end") {
+    tree.insert(10, "ten");
+    tree.insert(20, "twenty");
+
+    // cbegin should match begin for const access
+    REQUIRE(tree.cbegin()->first == tree.begin()->first);
+
+    // Verify iteration produces same results
+    std::vector<int> keys_regular;
+    std::vector<int> keys_const;
+
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      keys_regular.push_back(it->first);
+    }
+
+    for (auto cit = tree.cbegin(); cit != tree.cend(); ++cit) {
+      keys_const.push_back(cit->first);
+    }
+
+    REQUIRE(keys_regular == keys_const);
+  }
+}
+
+TEMPLATE_TEST_CASE("btree reverse iterators", "[btree][iterators][reverse]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 32, 32, std::less<int>, Mode> tree;
+
+  SECTION("rbegin/rend on empty tree") {
+    REQUIRE(tree.rbegin() == tree.rend());
+  }
+
+  SECTION("rbegin/rend with single element") {
+    tree.insert(42, "forty-two");
+
+    auto rit = tree.rbegin();
+    REQUIRE(rit != tree.rend());
+    REQUIRE(rit->first == 42);
+    REQUIRE(rit->second == "forty-two");
+
+    ++rit;
+    REQUIRE(rit == tree.rend());
+  }
+
+  SECTION("rbegin/rend iterate in reverse order") {
+    tree.insert(5, "five");
+    tree.insert(3, "three");
+    tree.insert(7, "seven");
+    tree.insert(1, "one");
+    tree.insert(9, "nine");
+
+    REQUIRE(tree.size() == 5);
+
+    // Verify rbegin points to largest element
+    auto rit = tree.rbegin();
+    REQUIRE(rit != tree.rend());
+    REQUIRE(rit->first == 9);
+    REQUIRE(rit->second == "nine");
+
+    // Collect all keys in reverse order
+    std::vector<int> keys;
+    for (auto it = tree.rbegin(); it != tree.rend(); ++it) {
+      keys.push_back(it->first);
+    }
+
+    REQUIRE(keys == std::vector<int>{9, 7, 5, 3, 1});
+  }
+
+  SECTION("rbegin/rend with many elements across multiple leaves") {
+    // Insert enough elements to span multiple leaves
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, "value" + std::to_string(i));
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Verify reverse iteration produces descending order
+    std::vector<int> keys;
+    for (auto rit = tree.rbegin(); rit != tree.rend(); ++rit) {
+      keys.push_back(rit->first);
+    }
+
+    REQUIRE(keys.size() == 100);
+    for (size_t i = 0; i < keys.size(); ++i) {
+      REQUIRE(keys[i] == 99 - static_cast<int>(i));
+    }
+  }
+
+  SECTION("crbegin/crend const reverse iterators") {
+    tree.insert(10, "ten");
+    tree.insert(20, "twenty");
+    tree.insert(30, "thirty");
+
+    // Use const reverse iterators
+    std::vector<int> keys;
+    for (auto crit = tree.crbegin(); crit != tree.crend(); ++crit) {
+      keys.push_back(crit->first);
+    }
+
+    REQUIRE(keys == std::vector<int>{30, 20, 10});
+  }
+
+  SECTION("reverse iteration matches forward iteration reversed") {
+    for (int i = 1; i <= 50; ++i) {
+      tree.insert(i, std::to_string(i));
+    }
+
+    // Collect keys in forward order
+    std::vector<int> forward_keys;
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      forward_keys.push_back(it->first);
+    }
+
+    // Collect keys in reverse order
+    std::vector<int> reverse_keys;
+    for (auto rit = tree.rbegin(); rit != tree.rend(); ++rit) {
+      reverse_keys.push_back(rit->first);
+    }
+
+    // Reverse the reverse_keys and compare
+    std::reverse(reverse_keys.begin(), reverse_keys.end());
+    REQUIRE(forward_keys == reverse_keys);
+  }
+}
+
+TEMPLATE_TEST_CASE("btree reverse iterators with std::greater",
+                   "[btree][iterators][reverse][comparator]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  // Tree with descending order (std::greater)
+  btree<int, std::string, 32, 32, std::greater<int>, Mode> tree;
+
+  SECTION("rbegin/rend iterate from smallest to largest") {
+    tree.insert(5, "five");
+    tree.insert(3, "three");
+    tree.insert(7, "seven");
+    tree.insert(1, "one");
+    tree.insert(9, "nine");
+
+    // Forward iteration: 9, 7, 5, 3, 1 (descending)
+    std::vector<int> forward_keys;
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      forward_keys.push_back(it->first);
+    }
+    REQUIRE(forward_keys == std::vector<int>{9, 7, 5, 3, 1});
+
+    // Reverse iteration: 1, 3, 5, 7, 9 (ascending - reverse of descending)
+    std::vector<int> reverse_keys;
+    for (auto rit = tree.rbegin(); rit != tree.rend(); ++rit) {
+      reverse_keys.push_back(rit->first);
+    }
+    REQUIRE(reverse_keys == std::vector<int>{1, 3, 5, 7, 9});
+  }
+}

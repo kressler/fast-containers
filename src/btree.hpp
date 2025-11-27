@@ -274,6 +274,96 @@ class btree {
   using const_iterator = iterator;  // For now, treat as const
 
   /**
+   * Reverse iterator for btree.
+   * Iterates through elements in reverse sorted order using the leaf node
+   * chain.
+   */
+  class reverse_iterator {
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = btree::value_type;
+    using pointer = value_type*;
+    using reference =
+        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                               MoveModeT>::iterator::reference;
+
+    reverse_iterator() : leaf_node_(nullptr) {}
+
+    reference operator*() const {
+      assert(leaf_node_ != nullptr && "Dereferencing end iterator");
+      return *leaf_it_.value();
+    }
+
+    typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                           MoveModeT>::iterator::arrow_proxy
+    operator->() const {
+      assert(leaf_node_ != nullptr && "Dereferencing end iterator");
+      return leaf_it_.value().operator->();
+    }
+
+    reverse_iterator& operator++() {
+      assert(leaf_node_ != nullptr && "Incrementing end iterator");
+      // Check if we're at the beginning of the current leaf
+      if (*leaf_it_ == leaf_node_->data.begin()) {
+        // Move to previous leaf
+        leaf_node_ = leaf_node_->prev_leaf;
+        if (leaf_node_ != nullptr) {
+          // Start at the end of the previous leaf
+          auto end_it = leaf_node_->data.end();
+          --end_it;  // Move to last valid element
+          leaf_it_ = end_it;
+        } else {
+          leaf_it_.reset();
+        }
+      } else {
+        // Decrement within current leaf
+        --(*leaf_it_);
+      }
+      return *this;
+    }
+
+    reverse_iterator operator++(int) {
+      reverse_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const reverse_iterator& other) const {
+      // If both are end iterators (leaf_node_ == nullptr), they're equal
+      if (leaf_node_ == nullptr && other.leaf_node_ == nullptr) {
+        return true;
+      }
+      // If only one is end iterator, they're not equal
+      if (leaf_node_ == nullptr || other.leaf_node_ == nullptr) {
+        return false;
+      }
+      // Both valid - compare leaf node and position
+      return leaf_node_ == other.leaf_node_ && *leaf_it_ == *other.leaf_it_;
+    }
+
+    bool operator!=(const reverse_iterator& other) const {
+      return !(*this == other);
+    }
+
+   private:
+    friend class btree;
+
+    reverse_iterator(
+        LeafNode* node,
+        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
+                               MoveModeT>::iterator it)
+        : leaf_node_(node), leaf_it_(it) {}
+
+    LeafNode* leaf_node_;
+    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                         SearchModeT, MoveModeT>::iterator>
+        leaf_it_;
+  };
+
+  using const_reverse_iterator = reverse_iterator;  // For now, treat as const
+
+  /**
    * Returns an iterator to the first element.
    * Complexity: O(1) - uses cached leftmost leaf pointer
    */
@@ -306,6 +396,69 @@ class btree {
    * Complexity: O(1)
    */
   const_iterator end() const { return const_iterator(); }
+
+  /**
+   * Returns a const_iterator to the first element.
+   * Complexity: O(1)
+   */
+  const_iterator cbegin() const { return begin(); }
+
+  /**
+   * Returns a const_iterator to one past the last element.
+   * Complexity: O(1)
+   */
+  const_iterator cend() const { return end(); }
+
+  /**
+   * Returns a reverse_iterator to the first element of the reversed container.
+   * (i.e., the last element of the non-reversed container)
+   * Complexity: O(1) - uses cached rightmost leaf pointer
+   */
+  reverse_iterator rbegin() {
+    if (size_ == 0) {
+      return rend();
+    }
+    auto it = rightmost_leaf_->data.end();
+    --it;  // Move to last valid element
+    return reverse_iterator(rightmost_leaf_, it);
+  }
+
+  /**
+   * Returns a reverse_iterator to the element following the last element of
+   * the reversed container. Complexity: O(1)
+   */
+  reverse_iterator rend() { return reverse_iterator(); }
+
+  /**
+   * Returns a const_reverse_iterator to the first element of the reversed
+   * container. Complexity: O(1)
+   */
+  const_reverse_iterator rbegin() const {
+    if (size_ == 0) {
+      return rend();
+    }
+    auto it = rightmost_leaf_->data.end();
+    --it;  // Move to last valid element
+    return const_reverse_iterator(rightmost_leaf_, it);
+  }
+
+  /**
+   * Returns a const_reverse_iterator to the element following the last element
+   * of the reversed container. Complexity: O(1)
+   */
+  const_reverse_iterator rend() const { return const_reverse_iterator(); }
+
+  /**
+   * Returns a const_reverse_iterator to the first element of the reversed
+   * container. Complexity: O(1)
+   */
+  const_reverse_iterator crbegin() const { return rbegin(); }
+
+  /**
+   * Returns a const_reverse_iterator to the element following the last element
+   * of the reversed container. Complexity: O(1)
+   */
+  const_reverse_iterator crend() const { return rend(); }
 
   /**
    * Finds an element with the given key.
