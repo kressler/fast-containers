@@ -190,6 +190,20 @@ class ordered_array {
                                         const Value& value);
 
   /**
+   * Inserts a new element if the key does not exist.
+   * Constructs the value in-place using the provided arguments.
+   * If the key already exists, does nothing (does not construct the value).
+   *
+   * @param key The key to insert
+   * @param args Arguments to forward to the Value constructor
+   * @return Pair of iterator to inserted/existing element and bool indicating
+   * success
+   * @throws std::runtime_error if the array is full
+   */
+  template <typename... Args>
+  std::pair<iterator, bool> try_emplace(const Key& key, Args&&... args);
+
+  /**
    * Find an element by key.
    *
    * @param key The key to search for
