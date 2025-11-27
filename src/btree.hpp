@@ -656,6 +656,24 @@ class btree {
   iterator emplace_hint(const_iterator hint, Args&&... args);
 
   /**
+   * Inserts a new element if the key does not exist.
+   * Constructs the value in-place using the provided arguments.
+   * If the key already exists, does nothing (does not construct the value).
+   *
+   * This is more efficient than emplace() when the key might already exist,
+   * as it avoids constructing the value unnecessarily.
+   *
+   * @param key The key to insert
+   * @param args Arguments to forward to the Value constructor
+   * @return Pair of iterator to inserted/existing element and bool indicating
+   * success
+   *
+   * Complexity: O(log n)
+   */
+  template <typename... Args>
+  std::pair<iterator, bool> try_emplace(const Key& key, Args&&... args);
+
+  /**
    * Accesses or inserts an element with the specified key.
    * If the key exists, returns a reference to the associated value.
    * If the key does not exist, inserts a new element with default-constructed

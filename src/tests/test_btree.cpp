@@ -4365,3 +4365,261 @@ TEMPLATE_TEST_CASE("btree range constructor", "[btree][constructor]",
     }
   }
 }
+
+// Helper class to track construction calls
+struct ConstructionTracker {
+  static inline int default_constructions = 0;
+  static inline int value_constructions = 0;
+  static inline int copy_constructions = 0;
+  static inline int move_constructions = 0;
+
+  int value;
+
+  static void reset() {
+    default_constructions = 0;
+    value_constructions = 0;
+    copy_constructions = 0;
+    move_constructions = 0;
+  }
+
+  ConstructionTracker() : value(0) { ++default_constructions; }
+
+  explicit ConstructionTracker(int v) : value(v) { ++value_constructions; }
+
+  ConstructionTracker(const ConstructionTracker& other) : value(other.value) {
+    ++copy_constructions;
+  }
+
+  ConstructionTracker(ConstructionTracker&& other) noexcept
+      : value(other.value) {
+    ++move_constructions;
+  }
+
+  ConstructionTracker& operator=(const ConstructionTracker&) = default;
+  ConstructionTracker& operator=(ConstructionTracker&&) = default;
+};
+
+TEMPLATE_TEST_CASE("btree try_emplace", "[btree][try_emplace]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("try_emplace - insert new element") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it, inserted] = tree.try_emplace(5, 50);
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second == 50);
+  }
+
+  SECTION("try_emplace - existing element does not construct value") {
+    btree<int, ConstructionTracker, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert initial element
+    ConstructionTracker::reset();
+    auto [it1, ins1] = tree.try_emplace(5, 50);
+    REQUIRE(ins1);
+    REQUIRE(ConstructionTracker::value_constructions == 1);
+
+    // Try to insert duplicate - should NOT construct new value
+    ConstructionTracker::reset();
+    auto [it2, ins2] = tree.try_emplace(5, 999);
+
+    REQUIRE(!ins2);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it2->first == 5);
+    REQUIRE(it2->second.value == 50);  // Original value unchanged
+    REQUIRE(ConstructionTracker::value_constructions ==
+            0);  // Key benefit: no construction!
+  }
+
+  SECTION("try_emplace - multiple arguments forwarding") {
+    // Use a type that takes multiple constructor arguments
+    struct MultiArg {
+      int a;
+      int b;
+      std::string c;
+
+      MultiArg() : a(0), b(0), c() {}
+      MultiArg(int x, int y, std::string z) : a(x), b(y), c(z) {}
+    };
+
+    btree<int, MultiArg, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it, inserted] = tree.try_emplace(5, 10, 20, "test");
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->first == 5);
+    REQUIRE(it->second.a == 10);
+    REQUIRE(it->second.b == 20);
+    REQUIRE(it->second.c == "test");
+  }
+
+  SECTION("try_emplace - zero arguments (default construction)") {
+    btree<int, ConstructionTracker, 4, 4, std::less<int>, Mode> tree;
+
+    ConstructionTracker::reset();
+    auto [it, inserted] = tree.try_emplace(5);
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(ConstructionTracker::default_constructions == 1);
+    REQUIRE(it->second.value == 0);
+  }
+
+  SECTION("try_emplace - multiple elements") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it1, ins1] = tree.try_emplace(1, 10);
+    auto [it2, ins2] = tree.try_emplace(2, 20);
+    auto [it3, ins3] = tree.try_emplace(3, 30);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find(1)->second == 10);
+    REQUIRE(tree.find(2)->second == 20);
+    REQUIRE(tree.find(3)->second == 30);
+  }
+
+  SECTION("try_emplace - string values with in-place construction") {
+    btree<int, std::string, 4, 4, std::less<int>, Mode> tree;
+
+    // Construct string in-place from const char* (avoiding temporary string)
+    auto [it, inserted] = tree.try_emplace(5, "hello world");
+
+    REQUIRE(inserted);
+    REQUIRE(tree.size() == 1);
+    REQUIRE(it->second == "hello world");
+  }
+
+  SECTION("try_emplace - large tree with splits") {
+    btree<int, ConstructionTracker, 4, 4, std::less<int>, Mode> tree;
+
+    // Insert enough elements to force multiple splits
+    ConstructionTracker::reset();
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.try_emplace(i, i * 10);
+      REQUIRE(inserted);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second.value == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+    // Each successful try_emplace should construct exactly one value
+    REQUIRE(ConstructionTracker::value_constructions == 100);
+
+    // Verify all elements
+    for (int i = 1; i <= 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second.value == i * 10);
+    }
+
+    // Try to insert duplicates - should not construct any values
+    ConstructionTracker::reset();
+    for (int i = 1; i <= 100; ++i) {
+      auto [it, inserted] = tree.try_emplace(i, 999);
+      REQUIRE(!inserted);
+      REQUIRE(it->second.value == i * 10);  // Original value unchanged
+    }
+    REQUIRE(ConstructionTracker::value_constructions ==
+            0);  // No constructions for duplicates
+  }
+
+  SECTION("try_emplace - comparison with emplace behavior") {
+    // Demonstrate that emplace ALWAYS constructs, try_emplace does not
+
+    // Test emplace - constructs even when key exists
+    {
+      btree<int, ConstructionTracker, 4, 4, std::less<int>, Mode> tree;
+      tree.insert(5, ConstructionTracker(50));
+
+      ConstructionTracker::reset();
+      auto [it, inserted] = tree.emplace(5, 999);
+
+      REQUIRE(!inserted);
+      REQUIRE(it->second.value == 50);
+      // emplace constructs the pair first, then discards it
+      // (Note: current implementation might optimize this)
+    }
+
+    // Test try_emplace - does NOT construct when key exists
+    {
+      btree<int, ConstructionTracker, 4, 4, std::less<int>, Mode> tree;
+      tree.insert(5, ConstructionTracker(50));
+
+      ConstructionTracker::reset();
+      auto [it, inserted] = tree.try_emplace(5, 999);
+
+      REQUIRE(!inserted);
+      REQUIRE(it->second.value == 50);
+      REQUIRE(ConstructionTracker::value_constructions ==
+              0);  // try_emplace avoids construction
+    }
+  }
+
+  SECTION("try_emplace - return value on duplicate") {
+    btree<int, int, 4, 4, std::less<int>, Mode> tree;
+
+    auto [it1, ins1] = tree.try_emplace(5, 50);
+    REQUIRE(ins1);
+    REQUIRE(it1->second == 50);
+
+    auto [it2, ins2] = tree.try_emplace(5, 999);
+    REQUIRE(!ins2);
+    REQUIRE(it2->first == 5);
+    REQUIRE(it2->second == 50);  // Returns iterator to existing element
+    REQUIRE(it1 == it2);         // Same element
+  }
+
+  SECTION("try_emplace - string keys") {
+    // Note: SIMD mode doesn't support std::string keys, so use Binary mode
+    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary>
+        tree;
+
+    auto [it1, ins1] = tree.try_emplace("apple", 1);
+    auto [it2, ins2] = tree.try_emplace("banana", 2);
+    auto [it3, ins3] = tree.try_emplace("cherry", 3);
+
+    REQUIRE(ins1);
+    REQUIRE(ins2);
+    REQUIRE(ins3);
+    REQUIRE(tree.size() == 3);
+
+    REQUIRE(tree.find("apple")->second == 1);
+    REQUIRE(tree.find("banana")->second == 2);
+    REQUIRE(tree.find("cherry")->second == 3);
+
+    // Try duplicate
+    auto [it4, ins4] = tree.try_emplace("apple", 999);
+    REQUIRE(!ins4);
+    REQUIRE(it4->second == 1);
+  }
+
+  SECTION("try_emplace - with complex value types") {
+    struct ComplexValue {
+      std::string name;
+      std::vector<int> data;
+
+      ComplexValue() : name(), data() {}
+      ComplexValue(std::string n, std::vector<int> d)
+          : name(std::move(n)), data(std::move(d)) {}
+    };
+
+    btree<int, ComplexValue, 4, 4, std::less<int>, Mode> tree;
+
+    std::vector<int> vec{1, 2, 3, 4, 5};
+    auto [it, inserted] = tree.try_emplace(5, "test", vec);
+
+    REQUIRE(inserted);
+    REQUIRE(it->second.name == "test");
+    REQUIRE(it->second.data == vec);
+  }
+}

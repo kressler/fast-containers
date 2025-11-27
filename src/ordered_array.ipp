@@ -208,6 +208,51 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert_hint(
 }
 
 /**
+ * try_emplace - constructs value in-place if key doesn't exist.
+ * Key advantage: avoids value construction when key already exists.
+ */
+template <typename Key, typename Value, std::size_t Length, typename Compare,
+          SearchMode SearchModeT, MoveMode MoveModeT>
+  requires ComparatorCompatible<Key, Compare>
+template <typename... Args>
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
+                                 MoveModeT>::iterator,
+          bool>
+ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::try_emplace(
+    const Key& key, Args&&... args) {
+  // Check if array is full
+  if (size_ >= Length) {
+    throw std::runtime_error("Cannot insert: array is full");
+  }
+
+  // Find the position where the key should be inserted
+  auto pos = lower_bound_key(key);
+
+  // Calculate index
+  size_type idx = pos - keys_.begin();
+
+  // Check if key already exists - CRITICAL: don't construct value!
+  if (idx < size_ && keys_[idx] == key) {
+    return {iterator(this, idx), false};
+  }
+
+  // Shift elements to the right to make space in both arrays
+  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+
+  // Insert the key
+  keys_[idx] = key;
+
+  // Construct the value IN-PLACE using the provided arguments
+  // This is the key difference from insert() - no temporary value created!
+  std::construct_at(&values_[idx], std::forward<Args>(args)...);
+
+  ++size_;
+
+  return {iterator(this, idx), true};
+}
+
+/**
  * Erase an element by iterator.
  * More efficient than key-based erase when you already have an iterator.
  *
