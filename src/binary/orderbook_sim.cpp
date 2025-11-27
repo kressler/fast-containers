@@ -285,6 +285,7 @@ int main(int argc, char** argv) {
     for (const auto& name : names) {
       benchmarkers.at(name)(results[name]);
     }
+    ++seed;
   }
 
   unsigned int dummy;
