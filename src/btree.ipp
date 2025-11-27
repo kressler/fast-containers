@@ -139,6 +139,35 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   return *this;
 }
 
+// Initializer list constructor
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          MoveMode MoveModeT, typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      MoveModeT, Allocator>::btree(std::initializer_list<value_type> init,
+                                    const Allocator& alloc)
+    : btree(alloc) {
+  for (const auto& elem : init) {
+    insert(elem.first, elem.second);
+  }
+}
+
+// Range constructor
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          MoveMode MoveModeT, typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+template <typename InputIt>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      MoveModeT, Allocator>::btree(InputIt first, InputIt last,
+                                    const Allocator& alloc)
+    : btree(alloc) {
+  for (auto it = first; it != last; ++it) {
+    insert(it->first, it->second);
+  }
+}
+
 // swap
 template <typename Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
@@ -393,6 +422,35 @@ Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // Try to insert with default-constructed value
   // If key exists, insert returns the existing element
   auto [it, inserted] = insert(key, Value{});
+  return it->second;
+}
+
+// at (non-const)
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          MoveMode MoveModeT, typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+Value& btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+             MoveModeT, Allocator>::at(const Key& key) {
+  auto it = find(key);
+  if (it == end()) {
+    throw std::out_of_range("btree::at: key not found");
+  }
+  return it->second;
+}
+
+// at (const)
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          MoveMode MoveModeT, typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+const Value&
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      MoveModeT, Allocator>::at(const Key& key) const {
+  auto it = find(key);
+  if (it == end()) {
+    throw std::out_of_range("btree::at: key not found");
+  }
   return it->second;
 }
 

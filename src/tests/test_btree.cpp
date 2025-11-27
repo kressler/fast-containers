@@ -1,5 +1,6 @@
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <map>
 #include <string>
 
 #include "../btree.hpp"
@@ -4099,5 +4100,268 @@ TEMPLATE_TEST_CASE("btree bidirectional iterator with std::greater",
       backward_keys.push_back(it->first);
     }
     REQUIRE(backward_keys == std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+  }
+}
+
+TEMPLATE_TEST_CASE("btree contains() method", "[btree][contains]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 32, 32, std::less<int>, Mode> tree;
+
+  SECTION("empty tree") {
+    REQUIRE_FALSE(tree.contains(1));
+    REQUIRE_FALSE(tree.contains(42));
+  }
+
+  SECTION("contains existing keys") {
+    tree.insert(1, "one");
+    tree.insert(3, "three");
+    tree.insert(5, "five");
+
+    REQUIRE(tree.contains(1));
+    REQUIRE(tree.contains(3));
+    REQUIRE(tree.contains(5));
+  }
+
+  SECTION("does not contain missing keys") {
+    tree.insert(1, "one");
+    tree.insert(3, "three");
+    tree.insert(5, "five");
+
+    REQUIRE_FALSE(tree.contains(0));
+    REQUIRE_FALSE(tree.contains(2));
+    REQUIRE_FALSE(tree.contains(4));
+    REQUIRE_FALSE(tree.contains(6));
+  }
+
+  SECTION("after erase") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    REQUIRE(tree.contains(2));
+    tree.erase(2);
+    REQUIRE_FALSE(tree.contains(2));
+    REQUIRE(tree.contains(1));
+    REQUIRE(tree.contains(3));
+  }
+
+  SECTION("large tree") {
+    for (int i = 0; i < 1000; i += 2) {
+      tree.insert(i, "value");
+    }
+
+    for (int i = 0; i < 1000; i += 2) {
+      REQUIRE(tree.contains(i));
+      REQUIRE_FALSE(tree.contains(i + 1));
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("btree at() method", "[btree][at]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+  btree<int, std::string, 32, 32, std::less<int>, Mode> tree;
+
+  SECTION("throws on empty tree") {
+    REQUIRE_THROWS_AS(tree.at(1), std::out_of_range);
+    REQUIRE_THROWS_AS(tree.at(42), std::out_of_range);
+  }
+
+  SECTION("returns value for existing key") {
+    tree.insert(1, "one");
+    tree.insert(3, "three");
+    tree.insert(5, "five");
+
+    REQUIRE(tree.at(1) == "one");
+    REQUIRE(tree.at(3) == "three");
+    REQUIRE(tree.at(5) == "five");
+  }
+
+  SECTION("throws for missing key") {
+    tree.insert(1, "one");
+    tree.insert(3, "three");
+    tree.insert(5, "five");
+
+    REQUIRE_THROWS_AS(tree.at(0), std::out_of_range);
+    REQUIRE_THROWS_AS(tree.at(2), std::out_of_range);
+    REQUIRE_THROWS_AS(tree.at(4), std::out_of_range);
+    REQUIRE_THROWS_AS(tree.at(6), std::out_of_range);
+  }
+
+  SECTION("modifiable through non-const at()") {
+    tree.insert(1, "one");
+    tree.at(1) = "ONE";
+    REQUIRE(tree.at(1) == "ONE");
+  }
+
+  SECTION("const at() works") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+
+    const auto& const_tree = tree;
+    REQUIRE(const_tree.at(1) == "one");
+    REQUIRE(const_tree.at(2) == "two");
+    REQUIRE_THROWS_AS(const_tree.at(3), std::out_of_range);
+  }
+
+  SECTION("exception message contains context") {
+    try {
+      tree.at(42);
+      FAIL("Expected std::out_of_range to be thrown");
+    } catch (const std::out_of_range& e) {
+      std::string msg = e.what();
+      REQUIRE(msg.find("btree::at") != std::string::npos);
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("btree initializer_list constructor", "[btree][constructor]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("empty initializer list") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(
+        std::initializer_list<std::pair<int, std::string>>{});
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+  }
+
+  SECTION("single element") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree = {{1, "one"}};
+    REQUIRE(tree.size() == 1);
+    REQUIRE(tree.contains(1));
+    REQUIRE(tree.at(1) == "one");
+  }
+
+  SECTION("multiple elements") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree = {
+        {1, "one"}, {2, "two"}, {3, "three"}, {5, "five"}, {7, "seven"}};
+
+    REQUIRE(tree.size() == 5);
+    REQUIRE(tree.at(1) == "one");
+    REQUIRE(tree.at(2) == "two");
+    REQUIRE(tree.at(3) == "three");
+    REQUIRE(tree.at(5) == "five");
+    REQUIRE(tree.at(7) == "seven");
+  }
+
+  SECTION("duplicate keys - last value wins") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree = {
+        {1, "first"}, {2, "two"}, {1, "second"}};
+
+    REQUIRE(tree.size() == 2);
+    // First {1, "first"} inserted, then {1, "second"} doesn't insert (key
+    // exists)
+    REQUIRE(tree.at(1) == "first");
+    REQUIRE(tree.at(2) == "two");
+  }
+
+  SECTION("unordered elements get sorted") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree = {
+        {5, "five"}, {1, "one"}, {3, "three"}, {2, "two"}, {4, "four"}};
+
+    std::vector<int> keys;
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+      keys.push_back(it->first);
+    }
+    REQUIRE(keys == std::vector<int>{1, 2, 3, 4, 5});
+  }
+
+  SECTION("large initializer list") {
+    btree<int, int, 4, 8, std::less<int>, Mode> tree;
+    std::initializer_list<std::pair<int, int>> init;
+    std::vector<std::pair<int, int>> data;
+    for (int i = 0; i < 100; ++i) {
+      data.push_back({i, i * 10});
+    }
+    tree =
+        btree<int, int, 4, 8, std::less<int>, Mode>(data.begin(), data.end());
+
+    REQUIRE(tree.size() == 100);
+    for (int i = 0; i < 100; ++i) {
+      REQUIRE(tree.at(i) == i * 10);
+    }
+  }
+}
+
+TEMPLATE_TEST_CASE("btree range constructor", "[btree][constructor]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+  constexpr SearchMode Mode = TestType::value;
+
+  SECTION("from empty vector") {
+    std::vector<std::pair<int, std::string>> vec;
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(vec.begin(),
+                                                               vec.end());
+    REQUIRE(tree.empty());
+  }
+
+  SECTION("from vector") {
+    std::vector<std::pair<int, std::string>> vec = {
+        {1, "one"}, {2, "two"}, {3, "three"}};
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(vec.begin(),
+                                                               vec.end());
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.at(1) == "one");
+    REQUIRE(tree.at(2) == "two");
+    REQUIRE(tree.at(3) == "three");
+  }
+
+  SECTION("from std::map") {
+    std::map<int, std::string> map = {
+        {5, "five"}, {1, "one"}, {3, "three"}, {2, "two"}};
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(map.begin(),
+                                                               map.end());
+
+    REQUIRE(tree.size() == 4);
+    REQUIRE(tree.at(1) == "one");
+    REQUIRE(tree.at(2) == "two");
+    REQUIRE(tree.at(3) == "three");
+    REQUIRE(tree.at(5) == "five");
+  }
+
+  SECTION("from another btree") {
+    btree<int, std::string, 32, 32, std::less<int>, Mode> source;
+    source.insert(1, "one");
+    source.insert(2, "two");
+    source.insert(3, "three");
+
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(source.begin(),
+                                                               source.end());
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.at(1) == "one");
+    REQUIRE(tree.at(2) == "two");
+    REQUIRE(tree.at(3) == "three");
+  }
+
+  SECTION("partial range from vector") {
+    std::vector<std::pair<int, std::string>> vec = {
+        {1, "one"}, {2, "two"}, {3, "three"}, {4, "four"}, {5, "five"}};
+
+    btree<int, std::string, 32, 32, std::less<int>, Mode> tree(vec.begin() + 1,
+                                                               vec.begin() + 4);
+
+    REQUIRE(tree.size() == 3);
+    REQUIRE(tree.at(2) == "two");
+    REQUIRE(tree.at(3) == "three");
+    REQUIRE(tree.at(4) == "four");
+    REQUIRE_FALSE(tree.contains(1));
+    REQUIRE_FALSE(tree.contains(5));
+  }
+
+  SECTION("large range") {
+    std::vector<std::pair<int, int>> vec;
+    for (int i = 0; i < 1000; ++i) {
+      vec.push_back({i, i * 2});
+    }
+
+    btree<int, int, 4, 8, std::less<int>, Mode> tree(vec.begin(), vec.end());
+
+    REQUIRE(tree.size() == 1000);
+    for (int i = 0; i < 1000; ++i) {
+      REQUIRE(tree.at(i) == i * 2);
+    }
   }
 }
