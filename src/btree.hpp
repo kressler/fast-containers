@@ -31,8 +31,8 @@ namespace kressler::fast_containers {
  */
 template <typename Key, typename Value, std::size_t LeafNodeSize = 64,
           std::size_t InternalNodeSize = 64, typename Compare = std::less<Key>,
-          SearchMode SearchModeT = SearchMode::Binary,
-          MoveMode MoveModeT = MoveMode::SIMD,
+          SearchMode SearchModeT = SearchMode::Linear,
+          MoveMode MoveModeT = MoveMode::Standard,
           typename Allocator = std::allocator<std::pair<Key, Value>>>
   requires ComparatorCompatible<Key, Compare>
 class btree {
