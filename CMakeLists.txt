@@ -114,30 +114,6 @@ endif()
 # Add Catch2 testing framework
 add_subdirectory(third_party/catch2)
 
-# Add Google Benchmark
-set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark tests" FORCE)
-set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable gtest tests" FORCE)
-# Disable -Werror in Google Benchmark when ASAN is enabled to avoid false positives
-if(ENABLE_ASAN)
-    set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "Disable -Werror for ASAN builds" FORCE)
-endif()
-add_subdirectory(third_party/benchmark)
-
-# Add Abseil library
-set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "Use C++23 for Abseil" FORCE)
-add_subdirectory(third_party/abseil-cpp)
-
-# Add Lyra commandline parser (header-only)
-add_library(lyra INTERFACE)
-target_include_directories(lyra INTERFACE third_party/lyra/include)
-
-# Add ankerl::unordered_dense (header-only)
-add_library(unordered_dense INTERFACE)
-target_include_directories(unordered_dense INTERFACE third_party/unordered_dense/include)
-
-add_library(histograms INTERFACE)
-target_include_directories(histograms INTERFACE third_party/histograms/src)
-
 # Enable testing
 enable_testing()
 
