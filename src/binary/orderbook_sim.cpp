@@ -197,11 +197,42 @@ int main(int argc, char** argv) {
        }},
       {"btree_0_64_64_linear_std_hp",
        [&](TimingStats& stats) -> void {
-         auto alloc = make_two_pool_allocator<std::array<int64_t, 2>,
-                                              std::array<std::byte, 256>>(
+         auto alloc = make_two_pool_allocator<BookKey, BookData<0>>(
              64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
          benchmarker(
              btree<BookKey, BookData<0>, 64, 64, std::less<>,
+                   SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
+                 alloc},
+             stats);
+       }},
+      {"btree_0_128_128_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(btree<BookKey, BookData<0>, 128, 128, std::less<>,
+                           SearchMode::Linear, MoveMode::Standard>{},
+                     stats);
+       }},
+      {"btree_0_128_128_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_two_pool_allocator<BookKey, BookData<0>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(
+             btree<BookKey, BookData<0>, 128, 128, std::less<>,
+                   SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
+                 alloc},
+             stats);
+       }},
+      {"btree_0_256_256_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(btree<BookKey, BookData<0>, 256, 256, std::less<>,
+                           SearchMode::Linear, MoveMode::Standard>{},
+                     stats);
+       }},
+      {"btree_0_256_256_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_two_pool_allocator<BookKey, BookData<0>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(
+             btree<BookKey, BookData<0>, 256, 256, std::less<>,
                    SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
                  alloc},
              stats);
@@ -231,11 +262,42 @@ int main(int argc, char** argv) {
        }},
       {"btree_256_8_64_linear_std_hp",
        [&](TimingStats& stats) -> void {
-         auto alloc = make_two_pool_allocator<std::array<int64_t, 2>,
-                                              std::array<std::byte, 256>>(
+         auto alloc = make_two_pool_allocator<BookKey, BookData<256>>(
              64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
          benchmarker(
              btree<BookKey, BookData<256>, 8, 64, std::less<>,
+                   SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
+                 alloc},
+             stats);
+       }},
+      {"btree_256_8_128_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(btree<BookKey, BookData<256>, 8, 128, std::less<>,
+                           SearchMode::Linear, MoveMode::Standard>{},
+                     stats);
+       }},
+      {"btree_256_8_128_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_two_pool_allocator<BookKey, BookData<256>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(
+             btree<BookKey, BookData<256>, 8, 128, std::less<>,
+                   SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
+                 alloc},
+             stats);
+       }},
+      {"btree_256_8_256_linear_std",
+       [&](TimingStats& stats) -> void {
+         benchmarker(btree<BookKey, BookData<256>, 8, 256, std::less<>,
+                           SearchMode::Linear, MoveMode::Standard>{},
+                     stats);
+       }},
+      {"btree_256_8_256_linear_std_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_two_pool_allocator<BookKey, BookData<256>>(
+             64ul * 1024ul * 1024ul, 64ul * 1024ul * 1024ul);
+         benchmarker(
+             btree<BookKey, BookData<256>, 8, 256, std::less<>,
                    SearchMode::Linear, MoveMode::Standard, decltype(alloc)>{
                  alloc},
              stats);
