@@ -82,7 +82,10 @@ void run_benchmark(auto& tree, TimingStats& stats, uint64_t seed,
   uint64_t priority = 0;
 
   auto get_price = [&]() -> uint64_t {
-    return 3ul * geometric_dist(rng) + (uniform_dist(rng) % 1000);
+    const uint64_t which = uniform_dist(rng) % 10;
+    if (which == 0)
+      return uniform_dist(rng) % 1000;
+    return geometric_dist(rng);
   };
 
   auto get_new_order = [&]() -> BookKey {
