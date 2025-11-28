@@ -1,7 +1,22 @@
 # Fast Containers - C++ SIMD Containers
 
+## Repository Split (November 2025)
+
+**IMPORTANT**: This repository has been split into two separate repositories to minimize dependencies for the core library:
+
+1. **fast-containers** (this repository): Core library with unit tests
+   - Dependencies: Catch2 only (1 submodule)
+   - Contains: ordered_array, btree, allocators, and tests
+
+2. **fast-containers-benchmarks** (separate repository): Benchmarks and stress tests
+   - Dependencies: benchmark, abseil-cpp, lyra, unordered_dense, histograms (5 submodules)
+   - Uses fast-containers as a git submodule
+   - Contains: All Google Benchmark tests, btree_benchmark, btree_stress, etc.
+
+**Reference**: The original combined repository state is preserved in the `pre-split-backup` branch.
+
 ## Stack
-- C++23, CMake 3.30+, Catch2 v3.11.0, Google Benchmark v1.9.4, Lyra 1.6.1, Histograms (header-only)
+- C++23, CMake 3.30+, Catch2 v3.11.0
 - Style: Google C++ (clang-format), 80 chars, 2 spaces, `int* ptr`
 
 ## Structure
@@ -11,8 +26,9 @@ src/
   ordered_array.ipp (implementation) # 958 lines
   btree.hpp (interface)              # 667 lines
   btree.ipp (implementation)         # 1532 lines
-  tests/, benchmarks/, binary/
-third_party/{catch2/, benchmark/, lyra/, histograms/, unordered_dense/, abseil-cpp/}  # submodules
+  hugepage_allocator.hpp, policy_based_hugepage_allocator.hpp
+  tests/
+third_party/catch2/  # submodule
 hooks/, install-hooks.sh
 ```
 
