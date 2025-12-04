@@ -175,7 +175,7 @@ TEST_CASE("btree with HugePageAllocator - basic operations",
           "[btree][hugepage_allocator]") {
   using TreeType =
       btree<int, std::string, 16, 16, std::less<int>, SearchMode::Binary,
-            MoveMode::SIMD, HugePageAllocator<std::pair<int, std::string>>>;
+            HugePageAllocator<std::pair<int, std::string>>>;
 
   // Create allocator with 10MB pool (enough for testing)
   HugePageAllocator<std::pair<int, std::string>> alloc(10 * 1024 * 1024, false);
@@ -284,7 +284,7 @@ TEST_CASE("btree with HugePageAllocator - large dataset",
           "[btree][hugepage_allocator]") {
   using TreeType =
       btree<int64_t, int64_t, 64, 64, std::less<int64_t>, SearchMode::SIMD,
-            MoveMode::SIMD, HugePageAllocator<std::pair<int64_t, int64_t>>>;
+            HugePageAllocator<std::pair<int64_t, int64_t>>>;
 
   // Create allocator with 100MB pool
   HugePageAllocator<std::pair<int64_t, int64_t>> alloc(100 * 1024 * 1024,
@@ -544,7 +544,7 @@ TEST_CASE("HugePageAllocator - NUMA awareness", "[hugepage_allocator][numa]") {
     AllocType alloc(256 * 1024 * 1024, true, 64 * 1024 * 1024, true);
 
     btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
-          MoveMode::Standard, AllocType>
+          AllocType>
         tree(alloc);
 
     // Insert elements

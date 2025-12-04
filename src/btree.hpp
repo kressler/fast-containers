@@ -26,13 +26,11 @@ namespace kressler::fast_containers {
  * @tparam Compare The comparison function object type (defaults to
  * std::less<Key>)
  * @tparam SearchModeT Search mode passed through to ordered_array
- * @tparam MoveModeT Move mode passed through to ordered_array
  * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
  */
 template <typename Key, typename Value, std::size_t LeafNodeSize = 64,
           std::size_t InternalNodeSize = 64, typename Compare = std::less<Key>,
           SearchMode SearchModeT = SearchMode::Linear,
-          MoveMode MoveModeT = MoveMode::Standard,
           typename Allocator = std::allocator<std::pair<Key, Value>>>
   requires ComparatorCompatible<Key, Compare>
 class btree {
@@ -72,8 +70,7 @@ class btree {
   struct InternalNode;
 
   struct LeafNode {
-    ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT, MoveModeT>
-        data;
+    ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT> data;
     LeafNode* next_leaf;
     LeafNode* prev_leaf;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
@@ -88,11 +85,9 @@ class btree {
    */
   struct InternalNode {
     union {
-      ordered_array<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT,
-                    MoveModeT>
+      ordered_array<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT>
           leaf_children;
-      ordered_array<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT,
-                    MoveModeT>
+      ordered_array<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
           internal_children;
     };
     bool children_are_leaves;
@@ -218,9 +213,8 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference =
-        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                               MoveModeT>::iterator::reference;
+    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                             SearchModeT>::iterator::reference;
 
     iterator() : leaf_node_(nullptr) {}
 
@@ -229,8 +223,8 @@ class btree {
       return *leaf_it_.value();
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                           MoveModeT>::iterator::arrow_proxy
+    typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                           SearchModeT>::iterator::arrow_proxy
     operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
       return leaf_it_.value().operator->();
@@ -311,17 +305,17 @@ class btree {
 
     iterator(LeafNode* node,
              typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT, MoveModeT>::iterator it)
+                                    SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
     iterator(const btree* tree, LeafNode* node,
              typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT, MoveModeT>::iterator it)
+                                    SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     LeafNode* leaf_node_;
     std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT, MoveModeT>::iterator>
+                                         SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };
@@ -339,9 +333,8 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference =
-        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                               MoveModeT>::iterator::reference;
+    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                             SearchModeT>::iterator::reference;
 
     reverse_iterator() : leaf_node_(nullptr), tree_(nullptr) {}
 
@@ -350,8 +343,8 @@ class btree {
       return *leaf_it_.value();
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                           MoveModeT>::iterator::arrow_proxy
+    typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                           SearchModeT>::iterator::arrow_proxy
     operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
       return leaf_it_.value().operator->();
@@ -437,16 +430,14 @@ class btree {
    private:
     friend class btree;
 
-    reverse_iterator(
-        LeafNode* node,
-        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                               MoveModeT>::iterator it)
+    reverse_iterator(LeafNode* node,
+                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                            SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
-    reverse_iterator(
-        const btree* tree, LeafNode* node,
-        typename ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT,
-                               MoveModeT>::iterator it)
+    reverse_iterator(const btree* tree, LeafNode* node,
+                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
+                                            SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     reverse_iterator(const btree* tree, LeafNode* node)
@@ -454,7 +445,7 @@ class btree {
 
     LeafNode* leaf_node_;
     std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT, MoveModeT>::iterator>
+                                         SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };

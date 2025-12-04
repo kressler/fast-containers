@@ -25,12 +25,6 @@ enum class SearchMode {
   SIMD     // SIMD-accelerated linear search for small arrays
 };
 
-// Enum to control data movement strategy
-enum class MoveMode {
-  Standard,  // Use std::move/std::move_backward
-  SIMD       // Use SIMD-accelerated moves (default)
-};
-
 // Concept to enforce that a comparator is compatible with a key type
 template <typename Key, typename Compare>
 concept ComparatorCompatible = requires(Compare comp, Key a, Key b) {
@@ -77,12 +71,10 @@ concept SIMDSearchable = std::is_trivially_copyable_v<T> && SimdPrimitive<T>;
  * default-constructible)
  * @tparam Length The maximum number of elements
  * @tparam SearchModeT The search mode (Binary, Linear, or SIMD)
- * @tparam MoveModeT The data movement mode (Standard or SIMD, defaults to SIMD)
  */
 template <typename Key, typename Value, std::size_t Length,
           typename Compare = std::less<Key>,
-          SearchMode SearchModeT = SearchMode::Binary,
-          MoveMode MoveModeT = MoveMode::SIMD>
+          SearchMode SearchModeT = SearchMode::Binary>
   requires ComparatorCompatible<Key, Compare>
 class ordered_array {
  private:
@@ -91,8 +83,7 @@ class ordered_array {
   class ordered_array_iterator;
 
   // Allow different instantiations to access each other's private members
-  template <typename K, typename V, std::size_t L, typename C, SearchMode SM,
-            MoveMode MM>
+  template <typename K, typename V, std::size_t L, typename C, SearchMode SM>
     requires ComparatorCompatible<K, C>
   friend class ordered_array;
 
@@ -383,8 +374,9 @@ class ordered_array {
    * Complexity: O(n) where n is the number of elements moved
    */
   template <std::size_t OutputLength>
-  void split_at(iterator pos, ordered_array<Key, Value, OutputLength, Compare,
-                                            SearchModeT, MoveModeT>& output);
+  void split_at(
+      iterator pos,
+      ordered_array<Key, Value, OutputLength, Compare, SearchModeT>& output);
 
   /**
    * Append all elements from another array to the end of this array.
@@ -402,8 +394,8 @@ class ordered_array {
    * Complexity: O(n) where n is the size of other
    */
   template <std::size_t OtherLength>
-  void append(ordered_array<Key, Value, OtherLength, Compare, SearchModeT,
-                            MoveModeT>&& other);
+  void append(
+      ordered_array<Key, Value, OtherLength, Compare, SearchModeT>&& other);
 
   /**
    * Transfer elements from the beginning of source array to the end of
@@ -423,9 +415,9 @@ class ordered_array {
    * Complexity: O(m) where m is count
    */
   template <std::size_t SourceLength>
-  void transfer_prefix_from(ordered_array<Key, Value, SourceLength, Compare,
-                                          SearchModeT, MoveModeT>& source,
-                            size_type count);
+  void transfer_prefix_from(
+      ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+      size_type count);
 
   /**
    * Transfer elements from the end of source array to the beginning of this
@@ -447,9 +439,9 @@ class ordered_array {
    * count
    */
   template <std::size_t SourceLength>
-  void transfer_suffix_from(ordered_array<Key, Value, SourceLength, Compare,
-                                          SearchModeT, MoveModeT>& source,
-                            size_type count);
+  void transfer_suffix_from(
+      ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+      size_type count);
 
  private:
 #ifdef __AVX2__
@@ -669,15 +661,14 @@ class ordered_array {
 
 // Non-member operator+ for iterator + difference
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT, bool IsConst>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                       MoveModeT>::template ordered_array_iterator<IsConst>
-operator+(typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                                 MoveModeT>::
+          SearchMode SearchModeT, bool IsConst>
+typename ordered_array<Key, Value, Length, Compare,
+                       SearchModeT>::template ordered_array_iterator<IsConst>
+operator+(typename ordered_array<Key, Value, Length, Compare, SearchModeT>::
               template ordered_array_iterator<IsConst>::difference_type n,
           const typename ordered_array<
-              Key, Value, Length, Compare, SearchModeT,
-              MoveModeT>::template ordered_array_iterator<IsConst>& it) {
+              Key, Value, Length, Compare,
+              SearchModeT>::template ordered_array_iterator<IsConst>& it) {
   return it + n;
 }
 

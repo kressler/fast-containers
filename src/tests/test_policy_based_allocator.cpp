@@ -204,8 +204,7 @@ TEST_CASE("PolicyBasedHugePageAllocator - btree integration",
       PolicyBasedHugePageAllocator<std::pair<int, std::string>, TwoPoolPolicy>;
   AllocType alloc(policy);
 
-  btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
-        MoveMode::Standard, AllocType>
+  btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary, AllocType>
       tree(alloc);
 
   SECTION("Single btree uses both pools") {
@@ -237,7 +236,7 @@ TEST_CASE("PolicyBasedHugePageAllocator - btree integration",
 
   SECTION("Multiple btrees share pools") {
     using BTreeType = btree<int, std::string, 32, 32, std::less<int>,
-                            SearchMode::Binary, MoveMode::Standard, AllocType>;
+                            SearchMode::Binary, AllocType>;
 
     BTreeType tree1(alloc);
     BTreeType tree2(alloc);
@@ -290,8 +289,7 @@ TEST_CASE("PolicyBasedHugePageAllocator - direct pool statistics access",
       PolicyBasedHugePageAllocator<std::pair<int, std::string>, TwoPoolPolicy>;
   AllocType alloc(policy);
 
-  btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
-        MoveMode::Standard, AllocType>
+  btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary, AllocType>
       tree(alloc);
 
   // Insert elements
@@ -370,7 +368,7 @@ TEST_CASE("make_two_pool_allocator factory function", "[policy][factory]") {
 
     using AllocType = decltype(alloc);
     btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
-          MoveMode::Standard, AllocType>
+          AllocType>
         tree(alloc);
 
     // Insert data
@@ -423,7 +421,7 @@ TEST_CASE("make_single_pool_allocator factory function", "[policy][factory]") {
 
     using AllocType = decltype(alloc);
     btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
-          MoveMode::Standard, AllocType>
+          AllocType>
         tree(alloc);
 
     // Insert data
@@ -460,7 +458,7 @@ TEST_CASE("Factory functions - pool sharing", "[policy][factory]") {
 
     using AllocType = decltype(alloc);
     using BTreeType = btree<int, std::string, 32, 32, std::less<int>,
-                            SearchMode::Binary, MoveMode::Standard, AllocType>;
+                            SearchMode::Binary, AllocType>;
 
     BTreeType tree1(alloc);
     BTreeType tree2(alloc);
@@ -487,7 +485,7 @@ TEST_CASE("Factory functions - pool sharing", "[policy][factory]") {
 
     using AllocType = decltype(alloc);
     using BTreeType = btree<int, std::string, 32, 32, std::less<int>,
-                            SearchMode::Binary, MoveMode::Standard, AllocType>;
+                            SearchMode::Binary, AllocType>;
 
     BTreeType tree1(alloc);
     BTreeType tree2(alloc);
