@@ -43,9 +43,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
     : size_(other.size_), comp_(std::move(other.comp_)) {
   // Move the active elements
   if (size_ > 0) {
-    move_elements_forward(other.keys_.data(), other.keys_.data() + size_,
+    std::move(other.keys_.data(), other.keys_.data() + size_,
                       keys_.data());
-    move_elements_forward(other.values_.data(), other.values_.data() + size_,
+    std::move(other.values_.data(), other.values_.data() + size_,
                       values_.data());
   }
   // Leave other in valid empty state
@@ -96,9 +96,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
     size_ = other.size_;
     // Move the active elements
     if (size_ > 0) {
-      move_elements_forward(other.keys_.data(), other.keys_.data() + size_,
+      std::move(other.keys_.data(), other.keys_.data() + size_,
                         keys_.data());
-      move_elements_forward(other.values_.data(), other.values_.data() + size_,
+      std::move(other.values_.data(), other.values_.data() + size_,
                         values_.data());
     }
     // Leave other in valid empty state
@@ -145,8 +145,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
   }
 
   // Shift elements to the right to make space in both arrays
-  move_elements_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  move_elements_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the new elements
   keys_[idx] = key;
@@ -194,8 +194,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
   }
 
   // Shift elements to the right to make space in both arrays
-  move_elements_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  move_elements_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the new elements
   keys_[idx] = key;
@@ -234,8 +234,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
   }
 
   // Shift elements to the right to make space in both arrays
-  move_elements_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  move_elements_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the key
   keys_[idx] = key;
@@ -280,8 +280,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(const 
   }
 
   // Shift elements to the right to make space in both arrays
-  move_elements_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  move_elements_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the key and value
   keys_[idx] = key;
@@ -308,8 +308,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
 
   size_type idx = pos.index();
   // Shift elements to the left to fill the gap in both arrays
-  move_elements_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
-  move_elements_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
+  std::move(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
+  std::move(&values_[idx + 1], &values_[size_], &values_[idx]);
   --size_;
 
   // Return iterator to element following the erased element
@@ -368,8 +368,8 @@ Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
   size_type idx = pos - keys_.begin();
 
   // Shift elements to make space in both arrays
-  move_elements_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  move_elements_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert with default-constructed value
   keys_[idx] = key;
@@ -547,8 +547,8 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
 
   // Move elements from [split_idx, size_) to output
   if (num_to_move > 0) {
-    move_elements_forward(&keys_[split_idx], &keys_[size_], output.keys_.data());
-    move_elements_forward(&values_[split_idx], &values_[size_],
+    std::move(&keys_[split_idx], &keys_[size_], output.keys_.data());
+    std::move(&values_[split_idx], &values_[size_],
                       output.values_.data());
     output.size_ = num_to_move;
   }
@@ -591,9 +591,9 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::append(
 
   // Append other's elements to the end of this array
   if (other.size_ > 0) {
-    move_elements_forward(other.keys_.data(), other.keys_.data() + other.size_,
+    std::move(other.keys_.data(), other.keys_.data() + other.size_,
                       &keys_[size_]);
-    move_elements_forward(other.values_.data(), other.values_.data() + other.size_,
+    std::move(other.values_.data(), other.values_.data() + other.size_,
                       &values_[size_]);
     size_ += other.size_;
 
@@ -650,16 +650,16 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
   }
 
   // Copy prefix from source to end of this array (append)
-  move_elements_forward(source.keys_.data(), source.keys_.data() + count,
+  std::move(source.keys_.data(), source.keys_.data() + count,
                     &keys_[size_]);
-  move_elements_forward(source.values_.data(), source.values_.data() + count,
+  std::move(source.values_.data(), source.values_.data() + count,
                     &values_[size_]);
 
   // Shift remaining elements in source left to fill the gap
   if (count < source.size_) {
-    move_elements_forward(&source.keys_[count], &source.keys_[source.size_],
+    std::move(&source.keys_[count], &source.keys_[source.size_],
                       source.keys_.data());
-    move_elements_forward(&source.values_[count], &source.values_[source.size_],
+    std::move(&source.values_[count], &source.values_[source.size_],
                       source.values_.data());
   }
 
@@ -719,17 +719,17 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 
   // Shift current elements right to make space for incoming suffix
   if (size_ > 0) {
-    move_elements_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
-    move_elements_backward(&values_[0], &values_[size_], &values_[size_ + count]);
+    std::move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
+    std::move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
   }
 
   // Calculate starting position of suffix in source
   size_type suffix_start = source.size_ - count;
 
   // Copy suffix from source to beginning of this array (prepend)
-  move_elements_forward(&source.keys_[suffix_start], &source.keys_[source.size_],
+  std::move(&source.keys_[suffix_start], &source.keys_[source.size_],
                     keys_.data());
-  move_elements_forward(&source.values_[suffix_start],
+  std::move(&source.values_[suffix_start],
                     &source.values_[source.size_], values_.data());
 
   // Update sizes (no need to shift source - we took from the end)
@@ -1314,50 +1314,8 @@ auto ordered_array<Key, Value, Length, Compare,
 #endif
 
 // ============================================================================
-// Private Helper Methods - SIMD Data Movement
+// Private Helper Methods
 // ============================================================================
-
-/**
- * Move elements backward (towards higher indices) using SIMD when possible.
- * Used for insert operations to shift elements right and make space.
- *
- * @tparam T The element type
- * @param first Start of the source range
- * @param last End of the source range
- * @param dest_last End of the destination range
- */
-template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT>
-  requires ComparatorCompatible<Key, Compare>
-template <typename T>
-void ordered_array<Key, Value, Length, Compare,
-                   SearchModeT>::move_elements_backward(T* first, T* last,
-                                                    T* dest_last) {
-  // Compiler automatically vectorizes std::move_backward with AVX-optimized
-  // memcpy from glibc. Manual SIMD doesn't provide additional benefit.
-  std::move_backward(first, last, dest_last);
-}
-
-/**
- * Move elements forward (towards lower indices) using SIMD when possible.
- * Used for erase operations to shift elements left and fill gaps.
- *
- * @tparam T The element type
- * @param first Start of the source range
- * @param last End of the source range
- * @param dest_first Start of the destination range
- */
-template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT>
-  requires ComparatorCompatible<Key, Compare>
-template <typename T>
-void ordered_array<Key, Value, Length, Compare,
-                   SearchModeT>::move_elements_forward(T* first, T* last,
-                                                   T* dest_first) {
-  // Compiler automatically vectorizes std::move with AVX-optimized
-  // memcpy from glibc. Manual SIMD doesn't provide additional benefit.
-  std::move(first, last, dest_first);
-}
 
 /**
  * Find the insertion position for a key using the configured search mode.

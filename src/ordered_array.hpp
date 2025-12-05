@@ -479,30 +479,6 @@ class ordered_array {
 #endif
 
   /**
-   * Move elements backward (towards higher indices) using SIMD when possible.
-   * Used for insert operations to shift elements right and make space.
-   *
-   * @tparam T The element type
-   * @param first Start of the source range
-   * @param last End of the source range
-   * @param dest_last End of the destination range
-   */
-  template <typename T>
-  void move_elements_backward(T* first, T* last, T* dest_last);
-
-  /**
-   * Move elements forward (towards lower indices) using SIMD when possible.
-   * Used for erase operations to shift elements left and fill gaps.
-   *
-   * @tparam T The element type
-   * @param first Start of the source range
-   * @param last End of the source range
-   * @param dest_first Start of the destination range
-   */
-  template <typename T>
-  void move_elements_forward(T* first, T* last, T* dest_first);
-
-  /**
    * Find the insertion position for a key using the configured search mode.
    * Returns an iterator to the first element not less than the given key.
    *
