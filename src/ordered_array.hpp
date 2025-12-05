@@ -488,7 +488,7 @@ class ordered_array {
    * @param dest_last End of the destination range
    */
   template <typename T>
-  void simd_move_backward(T* first, T* last, T* dest_last);
+  void move_elements_backward(T* first, T* last, T* dest_last);
 
   /**
    * Move elements forward (towards lower indices) using SIMD when possible.
@@ -500,7 +500,7 @@ class ordered_array {
    * @param dest_first Start of the destination range
    */
   template <typename T>
-  void simd_move_forward(T* first, T* last, T* dest_first);
+  void move_elements_forward(T* first, T* last, T* dest_first);
 
   /**
    * Find the insertion position for a key using the configured search mode.
