@@ -116,15 +116,12 @@ TEMPLATE_TEST_CASE("btree works with different template parameters",
 
 TEST_CASE("btree works with different MoveMode", "[btree][movemode]") {
   SECTION("Standard MoveMode") {
-    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary,
-          MoveMode::Standard>
-        tree;
+    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary> tree;
     REQUIRE(tree.empty());
   }
 
   SECTION("SIMD MoveMode") {
-    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary, MoveMode::SIMD>
-        tree;
+    btree<int, int, 64, 64, std::less<int>, SearchMode::Binary> tree;
     REQUIRE(tree.empty());
   }
 }
@@ -3526,9 +3523,7 @@ TEST_CASE("btree with SIMD search mode and int keys", "[btree][simd]") {
 
 TEST_CASE("btree with std::greater (descending order)", "[btree][comparator]") {
   SECTION("Binary search mode") {
-    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Binary,
-          MoveMode::SIMD>
-        tree;
+    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Binary> tree;
 
     // Insert elements (they should be stored in descending order)
     tree.insert(5, "five");
@@ -3573,9 +3568,7 @@ TEST_CASE("btree with std::greater (descending order)", "[btree][comparator]") {
   }
 
   SECTION("Linear search mode") {
-    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Linear,
-          MoveMode::SIMD>
-        tree;
+    btree<int, std::string, 64, 64, std::greater<int>, SearchMode::Linear> tree;
 
     tree.insert(15, "fifteen");
     tree.insert(25, "twenty-five");
@@ -3601,9 +3594,7 @@ TEST_CASE("btree with std::greater (descending order)", "[btree][comparator]") {
   }
 
   SECTION("Large tree with many elements") {
-    btree<int, int, 16, 16, std::greater<int>, SearchMode::Binary,
-          MoveMode::SIMD>
-        tree;
+    btree<int, int, 16, 16, std::greater<int>, SearchMode::Binary> tree;
 
     // Insert 100 elements
     for (int i = 0; i < 100; ++i) {
@@ -4587,8 +4578,7 @@ TEMPLATE_TEST_CASE("btree try_emplace", "[btree][try_emplace]",
 
   SECTION("try_emplace - string keys") {
     // Note: SIMD mode doesn't support std::string keys, so use Binary mode
-    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary,
-          MoveMode::SIMD>
+    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary>
         tree;
 
     auto [it1, ins1] = tree.try_emplace("apple", 1);
@@ -4816,8 +4806,7 @@ TEMPLATE_TEST_CASE("btree insert_or_assign", "[btree][insert_or_assign]",
 
   SECTION("insert_or_assign - string keys") {
     // Note: SIMD mode doesn't support std::string keys, so use Binary mode
-    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary,
-          MoveMode::SIMD>
+    btree<std::string, int, 4, 4, std::less<std::string>, SearchMode::Binary>
         tree;
 
     auto [it1, ins1] = tree.insert_or_assign("apple", 1);

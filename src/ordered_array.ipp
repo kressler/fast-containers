@@ -15,9 +15,9 @@ namespace kressler::fast_containers {
  * @param other The ordered array to copy from
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::ordered_array(
+ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
     const ordered_array& other)
     : size_(other.size_), comp_(other.comp_) {
   // Copy only the active elements
@@ -36,16 +36,16 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::ordered_arra
  * @param other The ordered array to move from (will be left empty)
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::ordered_array(
+ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
     ordered_array&& other) noexcept
     : size_(other.size_), comp_(std::move(other.comp_)) {
   // Move the active elements
   if (size_ > 0) {
-    simd_move_forward(other.keys_.data(), other.keys_.data() + size_,
+    std::move(other.keys_.data(), other.keys_.data() + size_,
                       keys_.data());
-    simd_move_forward(other.values_.data(), other.values_.data() + size_,
+    std::move(other.values_.data(), other.values_.data() + size_,
                       values_.data());
   }
   // Leave other in valid empty state
@@ -60,10 +60,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::ordered_arra
  * @return Reference to this array
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>&
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::operator=(
+ordered_array<Key, Value, Length, Compare, SearchModeT>&
+ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
     const ordered_array& other) {
   if (this != &other) {
     size_ = other.size_;
@@ -87,18 +87,18 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::operator=(
  * @return Reference to this array
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>&
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::operator=(
+ordered_array<Key, Value, Length, Compare, SearchModeT>&
+ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
     ordered_array&& other) noexcept {
   if (this != &other) {
     size_ = other.size_;
     // Move the active elements
     if (size_ > 0) {
-      simd_move_forward(other.keys_.data(), other.keys_.data() + size_,
+      std::move(other.keys_.data(), other.keys_.data() + size_,
                         keys_.data());
-      simd_move_forward(other.values_.data(), other.values_.data() + size_,
+      std::move(other.values_.data(), other.values_.data() + size_,
                         values_.data());
     }
     // Leave other in valid empty state
@@ -122,12 +122,11 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::operator=(
  * @throws std::runtime_error if the array is full
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                                 MoveModeT>::iterator,
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
           bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert(
+ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
     const Key& key, const Value& value) {
   // Check if array is full
   if (size_ >= Length) {
@@ -146,8 +145,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert(
   }
 
   // Shift elements to the right to make space in both arrays
-  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the new elements
   keys_[idx] = key;
@@ -169,12 +168,11 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert(
  * success
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                                 MoveModeT>::iterator,
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
           bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert_hint(
+ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
     iterator hint, const Key& key, const Value& value) {
   // Check if array is full
   if (size_ >= Length) {
@@ -196,8 +194,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert_hint(
   }
 
   // Shift elements to the right to make space in both arrays
-  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the new elements
   keys_[idx] = key;
@@ -212,13 +210,12 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::insert_hint(
  * Key advantage: avoids value construction when key already exists.
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename... Args>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                                 MoveModeT>::iterator,
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
           bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::try_emplace(
+ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
     const Key& key, Args&&... args) {
   // Check if array is full
   if (size_ >= Length) {
@@ -237,8 +234,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::try_emplace(
   }
 
   // Shift elements to the right to make space in both arrays
-  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the key
   keys_[idx] = key;
@@ -258,14 +255,12 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::try_emplace(
  * them unchanged.
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename M>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                                 MoveModeT>::iterator,
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
           bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT,
-              MoveModeT>::insert_or_assign(const Key& key, M&& value) {
+ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(const Key& key, M&& value) {
   // Find the position where the key should be inserted
   auto pos = lower_bound_key(key);
 
@@ -285,8 +280,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT,
   }
 
   // Shift elements to the right to make space in both arrays
-  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert the key and value
   keys_[idx] = key;
@@ -305,16 +300,16 @@ ordered_array<Key, Value, Length, Compare, SearchModeT,
  * @return Iterator to the element following the erased element
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::erase(iterator pos) {
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
   size_type idx = pos.index();
   // Shift elements to the left to fill the gap in both arrays
-  simd_move_forward(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
-  simd_move_forward(&values_[idx + 1], &values_[size_], &values_[idx]);
+  std::move(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
+  std::move(&values_[idx + 1], &values_[size_], &values_[idx]);
   --size_;
 
   // Return iterator to element following the erased element
@@ -331,10 +326,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::erase(iterat
  * @return The number of elements erased (0 or 1)
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::size_type
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::erase(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::size_type
+ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(
     const Key& key) {
   auto it = find(key);
   if (it != end()) {
@@ -354,9 +349,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::erase(
  * @throws std::runtime_error if insertion is needed but array is full
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-Value& ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::operator[](
+Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
     const Key& key) {
   auto it = find(key);
   if (it != end()) {
@@ -373,8 +368,8 @@ Value& ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::opera
   size_type idx = pos - keys_.begin();
 
   // Shift elements to make space in both arrays
-  simd_move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  simd_move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
 
   // Insert with default-constructed value
   keys_[idx] = key;
@@ -395,10 +390,10 @@ Value& ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::opera
  * @return Iterator to the found element, or end() if not found
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::find(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
     const Key& key) {
   auto pos = lower_bound_key(key);
   size_type idx = pos - keys_.begin();
@@ -416,11 +411,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::find(
  * @return Const iterator to the found element, or end() if not found
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                       MoveModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::find(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
     const Key& key) const {
   auto pos = lower_bound_key(key);
   size_type idx = pos - keys_.begin();
@@ -438,10 +432,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::find(
  * @return Iterator to the first element >= key, or end() if all elements < key
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_bound(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) {
   auto pos = lower_bound_key(key);
   size_type idx = pos - keys_.begin();
@@ -456,11 +450,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_bound(
  * < key
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                       MoveModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_bound(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) const {
   auto pos = lower_bound_key(key);
   size_type idx = pos - keys_.begin();
@@ -474,10 +467,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_bound(
  * @return Iterator to the first element > key, or end() if all elements <= key
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::upper_bound(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::upper_bound(
     const Key& key) {
   auto it = lower_bound(key);
   if (it != end() && it->first == key) {
@@ -494,11 +487,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::upper_bound(
  * <= key
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT,
-                       MoveModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::upper_bound(
+typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
+ordered_array<Key, Value, Length, Compare, SearchModeT>::upper_bound(
     const Key& key) const {
   auto it = lower_bound(key);
   if (it != end() && it->first == key) {
@@ -527,12 +519,12 @@ ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::upper_bound(
  * Complexity: O(n) where n is the number of elements moved
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t OutputLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::split_at(
+void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
     iterator pos,
-    ordered_array<Key, Value, OutputLength, Compare, SearchModeT, MoveModeT>& output) {
+    ordered_array<Key, Value, OutputLength, Compare, SearchModeT>& output) {
   // Debug assertion: iterator must belong to this array
   assert(pos.array_ == this && "Iterator does not belong to this array");
 
@@ -555,8 +547,8 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::split_a
 
   // Move elements from [split_idx, size_) to output
   if (num_to_move > 0) {
-    simd_move_forward(&keys_[split_idx], &keys_[size_], output.keys_.data());
-    simd_move_forward(&values_[split_idx], &values_[size_],
+    std::move(&keys_[split_idx], &keys_[size_], output.keys_.data());
+    std::move(&values_[split_idx], &values_[size_],
                       output.values_.data());
     output.size_ = num_to_move;
   }
@@ -581,11 +573,11 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::split_a
  * Complexity: O(n) where n is the size of other
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t OtherLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::append(
-    ordered_array<Key, Value, OtherLength, Compare, SearchModeT, MoveModeT>&& other) {
+void ordered_array<Key, Value, Length, Compare, SearchModeT>::append(
+    ordered_array<Key, Value, OtherLength, Compare, SearchModeT>&& other) {
   // Check capacity constraint
   if (size_ + other.size_ > Length) {
     throw std::runtime_error("Cannot append: combined size exceeds capacity");
@@ -599,9 +591,9 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::append(
 
   // Append other's elements to the end of this array
   if (other.size_ > 0) {
-    simd_move_forward(other.keys_.data(), other.keys_.data() + other.size_,
+    std::move(other.keys_.data(), other.keys_.data() + other.size_,
                       &keys_[size_]);
-    simd_move_forward(other.values_.data(), other.values_.data() + other.size_,
+    std::move(other.values_.data(), other.values_.data() + other.size_,
                       &values_[size_]);
     size_ += other.size_;
 
@@ -628,12 +620,12 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::append(
  * Complexity: O(m) where m is count
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
+void ordered_array<Key, Value, Length, Compare, SearchModeT>::
     transfer_prefix_from(
-        ordered_array<Key, Value, SourceLength, Compare, SearchModeT, MoveModeT>& source,
+        ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
         size_type count) {
   // Validate count
   if (count > source.size_) {
@@ -658,16 +650,16 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
   }
 
   // Copy prefix from source to end of this array (append)
-  simd_move_forward(source.keys_.data(), source.keys_.data() + count,
+  std::move(source.keys_.data(), source.keys_.data() + count,
                     &keys_[size_]);
-  simd_move_forward(source.values_.data(), source.values_.data() + count,
+  std::move(source.values_.data(), source.values_.data() + count,
                     &values_[size_]);
 
   // Shift remaining elements in source left to fill the gap
   if (count < source.size_) {
-    simd_move_forward(&source.keys_[count], &source.keys_[source.size_],
+    std::move(&source.keys_[count], &source.keys_[source.size_],
                       source.keys_.data());
-    simd_move_forward(&source.values_[count], &source.values_[source.size_],
+    std::move(&source.values_[count], &source.values_[source.size_],
                       source.values_.data());
   }
 
@@ -696,12 +688,12 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
  * count
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
+void ordered_array<Key, Value, Length, Compare, SearchModeT>::
     transfer_suffix_from(
-        ordered_array<Key, Value, SourceLength, Compare, SearchModeT, MoveModeT>& source,
+        ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
         size_type count) {
   // Validate count
   if (count > source.size_) {
@@ -727,17 +719,17 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
 
   // Shift current elements right to make space for incoming suffix
   if (size_ > 0) {
-    simd_move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
-    simd_move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
+    std::move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
+    std::move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
   }
 
   // Calculate starting position of suffix in source
   size_type suffix_start = source.size_ - count;
 
   // Copy suffix from source to beginning of this array (prepend)
-  simd_move_forward(&source.keys_[suffix_start], &source.keys_[source.size_],
+  std::move(&source.keys_[suffix_start], &source.keys_[source.size_],
                     keys_.data());
-  simd_move_forward(&source.values_[suffix_start],
+  std::move(&source.values_[suffix_start],
                     &source.values_[source.size_], values_.data());
 
   // Update sizes (no need to shift source - we took from the end)
@@ -756,12 +748,12 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::
  * char Compares 32 keys at a time using AVX2
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 1)
-auto ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_lower_bound_1byte(const K& key) const {
+auto ordered_array<Key, Value, Length, Compare,
+                   SearchModeT>::simd_lower_bound_1byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "1-byte SIMD search requires primitive type (int8_t, uint8_t, "
                 "char, signed char, unsigned char)");
@@ -853,12 +845,12 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
  * Compares 16 keys at a time using AVX2
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 2)
-auto ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_lower_bound_2byte(const K& key) const {
+auto ordered_array<Key, Value, Length, Compare,
+                   SearchModeT>::simd_lower_bound_2byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "2-byte SIMD search requires primitive type (int16_t, "
                 "uint16_t, short, unsigned short)");
@@ -976,12 +968,12 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
  * Compares 8 keys at a time using AVX2
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 4)
-auto ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_lower_bound_4byte(const K& key) const {
+auto ordered_array<Key, Value, Length, Compare,
+                   SearchModeT>::simd_lower_bound_4byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "4-byte SIMD search requires primitive type (int32_t, "
                 "uint32_t, int, unsigned int, float)");
@@ -1163,12 +1155,12 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
  * Compares 4 keys at a time using AVX2
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 8)
-auto ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_lower_bound_8byte(const K& key) const {
+auto ordered_array<Key, Value, Length, Compare,
+                   SearchModeT>::simd_lower_bound_8byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "8-byte SIMD search requires primitive type (int64_t, "
                 "uint64_t, long, unsigned long, double)");
@@ -1322,146 +1314,8 @@ auto ordered_array<Key, Value, Length, Compare, SearchModeT,
 #endif
 
 // ============================================================================
-// Private Helper Methods - SIMD Data Movement
+// Private Helper Methods
 // ============================================================================
-
-/**
- * Move elements backward (towards higher indices) using SIMD when possible.
- * Used for insert operations to shift elements right and make space.
- *
- * @tparam T The element type
- * @param first Start of the source range
- * @param last End of the source range
- * @param dest_last End of the destination range
- */
-template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, Compare>
-template <typename T>
-void ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_move_backward(T* first, T* last,
-                                                  T* dest_last) {
-  if constexpr (MoveModeT == MoveMode::Standard) {
-    // Use standard library move
-    std::move_backward(first, last, dest_last);
-    return;
-  }
-
-#ifdef __AVX2__
-  if constexpr (MoveModeT == MoveMode::SIMD &&
-                std::is_trivially_copyable_v<T>) {
-    // Work with bytes - cast to char* for simplicity
-    size_type num_bytes = (last - first) * sizeof(T);
-    if (num_bytes == 0)
-      return;
-
-    // Work backwards to avoid overwriting source data
-    char* src = reinterpret_cast<char*>(last);
-    char* dst = reinterpret_cast<char*>(dest_last);
-
-    // Move 32-byte blocks (256-bit AVX2)
-    while (num_bytes >= 32) {
-      src -= 32;
-      dst -= 32;
-      __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-      _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
-      num_bytes -= 32;
-    }
-
-    // Move 16-byte blocks (128-bit SSE)
-    if (num_bytes >= 16) {
-      src -= 16;
-      dst -= 16;
-      __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
-      _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
-      num_bytes -= 16;
-    }
-
-    // Move remaining bytes one at a time
-    while (num_bytes > 0) {
-      --src;
-      --dst;
-      *dst = *src;
-      --num_bytes;
-    }
-  } else {
-    // Non-trivially copyable: use std::move_backward
-    std::move_backward(first, last, dest_last);
-  }
-#else
-  // No AVX2: fall back to std::move_backward
-  std::move_backward(first, last, dest_last);
-#endif
-}
-
-/**
- * Move elements forward (towards lower indices) using SIMD when possible.
- * Used for erase operations to shift elements left and fill gaps.
- *
- * @tparam T The element type
- * @param first Start of the source range
- * @param last End of the source range
- * @param dest_first Start of the destination range
- */
-template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
-  requires ComparatorCompatible<Key, Compare>
-template <typename T>
-void ordered_array<Key, Value, Length, Compare, SearchModeT,
-                   MoveModeT>::simd_move_forward(T* first, T* last,
-                                                 T* dest_first) {
-  if constexpr (MoveModeT == MoveMode::Standard) {
-    // Use standard library move
-    std::move(first, last, dest_first);
-    return;
-  }
-
-#ifdef __AVX2__
-  if constexpr (MoveModeT == MoveMode::SIMD &&
-                std::is_trivially_copyable_v<T>) {
-    // Work with bytes - cast to char* for simplicity
-    size_type num_bytes = (last - first) * sizeof(T);
-    if (num_bytes == 0)
-      return;
-
-    // Work forwards (safe since dest < src for erase operations)
-    char* src = reinterpret_cast<char*>(first);
-    char* dst = reinterpret_cast<char*>(dest_first);
-
-    // Move 32-byte blocks (256-bit AVX2)
-    while (num_bytes >= 32) {
-      __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-      _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), data);
-      src += 32;
-      dst += 32;
-      num_bytes -= 32;
-    }
-
-    // Move 16-byte blocks (128-bit SSE)
-    if (num_bytes >= 16) {
-      __m128i data = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
-      _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), data);
-      src += 16;
-      dst += 16;
-      num_bytes -= 16;
-    }
-
-    // Move remaining bytes one at a time
-    while (num_bytes > 0) {
-      *dst = *src;
-      ++src;
-      ++dst;
-      --num_bytes;
-    }
-  } else {
-    // Non-trivially copyable: use std::move
-    std::move(first, last, dest_first);
-  }
-#else
-  // No AVX2: fall back to std::move
-  std::move(first, last, dest_first);
-#endif
-}
 
 /**
  * Find the insertion position for a key using the configured search mode.
@@ -1471,9 +1325,9 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT,
  * @return Iterator to the insertion position
  */
 template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT, MoveMode MoveModeT>
+          SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-auto ordered_array<Key, Value, Length, Compare, SearchModeT, MoveModeT>::lower_bound_key(
+auto ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound_key(
     const Key& key) const {
   if constexpr (SearchModeT == SearchMode::Linear) {
     // Linear search: scan from beginning until we find key >= search key
