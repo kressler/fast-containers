@@ -14,6 +14,26 @@
 namespace kressler::fast_containers {
 
 /**
+ * Type trait to detect if an allocator provides value pooling.
+ *
+ * This trait checks if the allocator (or its policy) has a
+ * provides_value_pool constant. If not present, defaults to false.
+ * This allows using allocators that don't know about value pooling
+ * (e.g., std::allocator, jemalloc) without requiring modifications.
+ */
+template <typename T, typename = void>
+struct allocator_provides_value_pool : std::false_type {};
+
+template <typename T>
+struct allocator_provides_value_pool<
+    T, std::void_t<decltype(T::provides_value_pool)>>
+    : std::integral_constant<bool, T::provides_value_pool> {};
+
+template <typename T>
+inline constexpr bool allocator_provides_value_pool_v =
+    allocator_provides_value_pool<T>::value;
+
+/**
  * A B+ Tree that uses ordered_array as the underlying storage for nodes.
  * All data is stored in leaf nodes, which form a doubly-linked list for
  * efficient sequential traversal. Internal nodes store only keys and pointers
@@ -43,6 +63,15 @@ class btree {
   using allocator_type = Allocator;
   using key_compare = Compare;
 
+  // Detect if allocator provides value pooling
+  static constexpr bool allocator_provides_value_pool =
+      allocator_provides_value_pool_v<Allocator>;
+
+  // Determine stored value type: Value* if pooled, Value if inline
+  // This is the type actually stored in ordered_array within leaf nodes
+  using stored_value_type =
+      std::conditional_t<allocator_provides_value_pool, Value*, Value>;
+
   // Compile-time check: SIMD search mode requires a SIMD-searchable key type
   static_assert(
       SearchModeT != SearchMode::SIMD || SIMDSearchable<Key>,
@@ -65,12 +94,18 @@ class btree {
   /**
    * Leaf node - stores actual key-value pairs in an ordered_array.
    * Forms a doubly-linked list with other leaf nodes for iteration.
+   *
+   * When value pooling is enabled (allocator_provides_value_pool = true),
+   * the ordered_array stores Value* (pointers to values) instead of Value
+   * directly. This reduces data movement during insert/erase/split/merge
+   * operations, as only pointers are moved rather than the values themselves.
    */
   // Forward declaration for LeafNode to use in InternalNode
   struct InternalNode;
 
   struct LeafNode {
-    ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT> data;
+    ordered_array<Key, stored_value_type, LeafNodeSize, Compare, SearchModeT>
+        data;
     LeafNode* next_leaf;
     LeafNode* prev_leaf;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
