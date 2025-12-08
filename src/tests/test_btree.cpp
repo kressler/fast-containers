@@ -4,6 +4,7 @@
 #include <string>
 
 #include "../btree.hpp"
+#include "../policy_based_hugepage_allocator.hpp"
 
 using namespace kressler::fast_containers;
 
@@ -4846,5 +4847,236 @@ TEMPLATE_TEST_CASE("btree insert_or_assign", "[btree][insert_or_assign]",
     REQUIRE(it2->first == 5);
     REQUIRE(it2->second == 999);
     REQUIRE(it1 == it2);  // Same element
+  }
+}
+
+// ============================================================================
+// Tests for Pooled Values (Three-Pool Allocator)
+// ============================================================================
+
+TEST_CASE("btree with pooled values - basic operations",
+          "[btree][pooled][three-pool]") {
+  // Create three-pool allocator for int keys and int values
+  // Pools: 1MB leaf, 1MB internal, 1MB values
+  auto alloc = make_three_pool_allocator<int, int>(
+      1024 * 1024,  // leaf pool
+      1024 * 1024,  // internal pool
+      1024 * 1024,  // value pool
+      false);       // use regular malloc (not hugepages) for testing
+
+  using TreeType = btree<int, int, 16, 64, std::less<int>, SearchMode::Linear,
+                         decltype(alloc)>;
+  TreeType tree(alloc);
+
+  SECTION("Insert and find with pooled values") {
+    // Insert elements
+    for (int i = 0; i < 100; ++i) {
+      auto [it, inserted] = tree.insert(i, i * 10);
+      REQUIRE(inserted);
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Find all elements
+    for (int i = 0; i < 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->first == i);
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("Erase with pooled values") {
+    // Insert elements
+    for (int i = 0; i < 50; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Erase half
+    for (int i = 0; i < 25; ++i) {
+      size_t erased = tree.erase(i);
+      REQUIRE(erased == 1);
+    }
+
+    REQUIRE(tree.size() == 25);
+
+    // Verify remaining elements
+    for (int i = 25; i < 50; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+
+    // Verify erased elements are gone
+    for (int i = 0; i < 25; ++i) {
+      REQUIRE(tree.find(i) == tree.end());
+    }
+  }
+
+  SECTION("Clear with pooled values") {
+    // Insert elements
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    REQUIRE(tree.size() == 100);
+
+    // Clear all
+    tree.clear();
+
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+
+    // Re-insert after clear
+    for (int i = 0; i < 50; ++i) {
+      tree.insert(i, i * 20);
+    }
+
+    REQUIRE(tree.size() == 50);
+  }
+
+  SECTION("Split operations with pooled values") {
+    // Insert enough elements to trigger splits (leaf size = 16)
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Verify all elements are accessible
+    for (int i = 0; i < 100; ++i) {
+      auto it = tree.find(i);
+      REQUIRE(it != tree.end());
+      REQUIRE(it->second == i * 10);
+    }
+  }
+
+  SECTION("Iteration with pooled values") {
+    // Insert elements
+    for (int i = 0; i < 50; ++i) {
+      tree.insert(i, i * 10);
+    }
+
+    // Forward iteration
+    int expected = 0;
+    for (auto pair : tree) {
+      REQUIRE(pair.first == expected);
+      REQUIRE(pair.second == expected * 10);
+      ++expected;
+    }
+    REQUIRE(expected == 50);
+
+    // Reverse iteration
+    expected = 49;
+    for (auto it = tree.rbegin(); it != tree.rend(); ++it) {
+      REQUIRE(it->first == expected);
+      REQUIRE(it->second == expected * 10);
+      --expected;
+    }
+    REQUIRE(expected == -1);
+  }
+}
+
+TEST_CASE("btree with pooled values - string values",
+          "[btree][pooled][three-pool][string]") {
+  // Test with non-trivial values (std::string)
+  auto alloc = make_three_pool_allocator<int, std::string>(
+      1024 * 1024,  // leaf pool
+      1024 * 1024,  // internal pool
+      1024 * 1024,  // value pool
+      false);       // use regular malloc for testing
+
+  using TreeType = btree<int, std::string, 16, 64, std::less<int>,
+                         SearchMode::Linear, decltype(alloc)>;
+  TreeType tree(alloc);
+
+  SECTION("Insert and find strings") {
+    tree.insert(1, "one");
+    tree.insert(2, "two");
+    tree.insert(3, "three");
+
+    REQUIRE(tree.size() == 3);
+
+    auto it1 = tree.find(1);
+    REQUIRE(it1 != tree.end());
+    REQUIRE(it1->second == "one");
+
+    auto it2 = tree.find(2);
+    REQUIRE(it2 != tree.end());
+    REQUIRE(it2->second == "two");
+
+    auto it3 = tree.find(3);
+    REQUIRE(it3 != tree.end());
+    REQUIRE(it3->second == "three");
+  }
+
+  SECTION("Erase strings properly destroys values") {
+    for (int i = 0; i < 50; ++i) {
+      tree.insert(i, std::string("value_") + std::to_string(i));
+    }
+
+    // Erase all
+    for (int i = 0; i < 50; ++i) {
+      tree.erase(i);
+    }
+
+    REQUIRE(tree.empty());
+  }
+
+  SECTION("Clear with string values") {
+    for (int i = 0; i < 100; ++i) {
+      tree.insert(i, std::string("value_") + std::to_string(i));
+    }
+
+    tree.clear();
+    REQUIRE(tree.empty());
+  }
+}
+
+TEST_CASE("btree with pooled values - edge cases",
+          "[btree][pooled][three-pool][edge]") {
+  auto alloc = make_three_pool_allocator<int, int>(1024 * 1024, 1024 * 1024,
+                                                   1024 * 1024, false);
+
+  using TreeType = btree<int, int, 4, 8, std::less<int>, SearchMode::Linear,
+                         decltype(alloc)>;
+  TreeType tree(alloc);
+
+  SECTION("Empty tree operations") {
+    REQUIRE(tree.empty());
+    REQUIRE(tree.size() == 0);
+    REQUIRE(tree.find(1) == tree.end());
+    REQUIRE(tree.erase(1) == 0);
+
+    tree.clear();  // Clear on empty tree
+    REQUIRE(tree.empty());
+  }
+
+  SECTION("Single element") {
+    tree.insert(42, 420);
+    REQUIRE(tree.size() == 1);
+
+    auto it = tree.find(42);
+    REQUIRE(it != tree.end());
+    REQUIRE(it->second == 420);
+
+    tree.erase(42);
+    REQUIRE(tree.empty());
+  }
+
+  SECTION("Repeated insert/erase cycles") {
+    for (int cycle = 0; cycle < 10; ++cycle) {
+      // Insert
+      for (int i = 0; i < 20; ++i) {
+        tree.insert(i, i * 100);
+      }
+      REQUIRE(tree.size() == 20);
+
+      // Erase all
+      for (int i = 0; i < 20; ++i) {
+        tree.erase(i);
+      }
+      REQUIRE(tree.empty());
+    }
   }
 }

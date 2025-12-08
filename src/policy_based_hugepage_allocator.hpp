@@ -8,28 +8,10 @@
 namespace kressler::fast_containers {
 
 /**
- * Type trait to detect if an allocator provides value pooling.
- *
- * This trait checks if the allocator (or its policy) has a
- * provides_value_pool constant. If not present, defaults to false.
- * This allows using allocators that don't know about value pooling
- * (e.g., std::allocator, jemalloc) without requiring modifications.
- */
-template <typename T, typename = void>
-struct allocator_provides_value_pool : std::false_type {};
-
-template <typename T>
-struct allocator_provides_value_pool<
-    T, std::void_t<decltype(T::provides_value_pool)>>
-    : std::integral_constant<bool, T::provides_value_pool> {};
-
-template <typename T>
-inline constexpr bool allocator_provides_value_pool_v =
-    allocator_provides_value_pool<T>::value;
-
-/**
  * Type trait to detect if a type has next_leaf member (LeafNode
  * characteristic).
+ * Note: allocator_provides_value_pool trait is defined in btree.hpp
+ * to avoid circular dependencies.
  */
 template <typename T, typename = void>
 struct has_next_leaf : std::false_type {};
