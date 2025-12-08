@@ -352,7 +352,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Leaf has space - insert using hint to avoid re-searching
-  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, value);
+  // Convert Value to stored_value_type (Value* if pooled, Value if inline)
+  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, make_stored_value(value));
   if (inserted) {
     size_++;
 
@@ -594,6 +595,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // This allows us to avoid saving next_key when not needed (important for
   // large keys) Early return if root is leaf (no rebalancing ever needed)
   if (root_is_leaf_ && leaf == leaf_root_) {
+    // Destroy stored value (deallocates if pooled)
+    destroy_stored_value(leaf_it->second);
     auto next_in_leaf = leaf->data.erase(leaf_it);
     size_--;
     // Root can have any size, no underflow handling needed
@@ -624,6 +627,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Erase from leaf using iterator (no search needed!)
   // Returns iterator to next element in this leaf
+  // Destroy stored value (deallocates if pooled)
+  destroy_stored_value(leaf_it->second);
   auto next_in_leaf = leaf->data.erase(leaf_it);
   size_--;
 
@@ -748,6 +753,11 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
   requires ComparatorCompatible<Key, Compare>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            Allocator>::deallocate_leaf_node(LeafNode* node) {
+  // Destroy all stored values (deallocates from pool if pooled)
+  for (auto it = node->data.begin(); it != node->data.end(); ++it) {
+    destroy_stored_value(it->second);
+  }
+
   using leaf_alloc_traits = std::allocator_traits<decltype(leaf_alloc_)>;
   leaf_alloc_traits::destroy(leaf_alloc_, node);
   leaf_alloc_.deallocate(node, 1);
@@ -778,7 +788,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   if (root_is_leaf_) {
-    // Just clear the root leaf's data
+    // Destroy all stored values (deallocates from pool if pooled)
+    for (auto it = leaf_root_->data.begin(); it != leaf_root_->data.end(); ++it) {
+      destroy_stored_value(it->second);
+    }
+    // Clear the root leaf's data
     leaf_root_->data.clear();
   } else {
     // Deallocate internal tree and reset to empty leaf root
@@ -881,7 +895,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Insert the new key-value pair into appropriate leaf
   LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
-  auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
+  // Convert Value to stored_value_type (Value* if pooled, Value if inline)
+  auto [leaf_it, inserted] = target_leaf->data.insert(key, make_stored_value(value));
 
   // Handle duplicate key case
   if (!inserted) {
