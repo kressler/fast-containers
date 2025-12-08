@@ -83,6 +83,9 @@ struct TwoPoolPolicy {
       return leaf_pool_;
     }
   }
+
+  // Value pooling not supported
+  static constexpr bool provides_value_pool = false;
 };
 
 /**
@@ -108,6 +111,88 @@ struct SinglePoolPolicy {
   std::shared_ptr<HugePagePool> get_pool_for_type() const {
     return pool_;
   }
+
+  // Value pooling not supported
+  static constexpr bool provides_value_pool = false;
+};
+
+/**
+ * Three-pool policy: separate pools for leaf nodes, internal nodes, and values.
+ *
+ * This policy maintains three separate HugePagePool instances:
+ * - leaf_pool: for types that have next_leaf member (leaf nodes)
+ * - internal_pool: for types that have children_are_leaves member (internal
+ * nodes)
+ * - value_pool: for value types (when using pointer-based values)
+ *
+ * Benefits over TwoPoolPolicy:
+ * - Separate value storage reduces data movement in leaf nodes
+ * - Values never move during splits/merges
+ * - Allows larger leaf nodes (similar size to internal nodes)
+ * - Better cache behavior due to symmetric node layout
+ */
+template <typename Value>
+struct ThreePoolPolicy {
+  std::shared_ptr<HugePagePool> leaf_pool_;
+  std::shared_ptr<HugePagePool> internal_pool_;
+  std::shared_ptr<HugePagePool> value_pool_;
+
+  /**
+   * Construct policy with three separate pools.
+   *
+   * @param leaf_pool Pool for leaf nodes
+   * @param internal_pool Pool for internal nodes
+   * @param value_pool Pool for values
+   */
+  ThreePoolPolicy(std::shared_ptr<HugePagePool> leaf_pool,
+                  std::shared_ptr<HugePagePool> internal_pool,
+                  std::shared_ptr<HugePagePool> value_pool)
+      : leaf_pool_(std::move(leaf_pool)),
+        internal_pool_(std::move(internal_pool)),
+        value_pool_(std::move(value_pool)) {}
+
+  /**
+   * Get the appropriate pool for type T.
+   * - If T has next_leaf member → leaf_pool
+   * - If T has children_are_leaves member → internal_pool
+   * - If T is Value type → value_pool
+   * - Otherwise → leaf_pool (default)
+   */
+  template <typename T>
+  std::shared_ptr<HugePagePool> get_pool_for_type() const {
+    if constexpr (has_next_leaf_v<T>) {
+      return leaf_pool_;
+    } else if constexpr (has_children_are_leaves_v<T>) {
+      return internal_pool_;
+    } else if constexpr (std::is_same_v<T, Value>) {
+      return value_pool_;
+    } else {
+      // Default: use leaf pool
+      return leaf_pool_;
+    }
+  }
+
+  /**
+   * Allocate a value from the value pool.
+   */
+  Value* allocate_value() {
+    static constexpr size_t alignment =
+        alignof(Value) > 64 ? alignof(Value) : 64;
+    void* ptr = value_pool_->allocate(sizeof(Value), alignment);
+    return static_cast<Value*>(ptr);
+  }
+
+  /**
+   * Deallocate a value to the value pool.
+   */
+  void deallocate_value(Value* ptr) {
+    if (ptr) {
+      value_pool_->deallocate(ptr, sizeof(Value));
+    }
+  }
+
+  // Value pooling supported
+  static constexpr bool provides_value_pool = true;
 };
 
 /**
@@ -375,6 +460,77 @@ auto make_single_pool_allocator(std::size_t pool_size,
   SinglePoolPolicy policy(pool);
   using ValueType = std::pair<Key, Value>;
   return PolicyBasedHugePageAllocator<ValueType, SinglePoolPolicy>(policy);
+}
+
+/**
+ * Factory function to create a three-pool allocator for btrees with pooled
+ * values.
+ *
+ * This is a convenience function that simplifies the creation of a
+ * PolicyBasedHugePageAllocator with ThreePoolPolicy. It creates three separate
+ * pools (one for leaf nodes, one for internal nodes, one for values) and wraps
+ * them in the appropriate allocator.
+ *
+ * This allocator enables pointer-based values in leaf nodes, which reduces data
+ * movement during insert/erase/split/merge operations. Values are stored in a
+ * separate pool and leaf nodes only store pointers to them.
+ *
+ * Example usage:
+ * ```cpp
+ * auto alloc = make_three_pool_allocator<int, std::string>(
+ *     512 * 1024 * 1024,  // leaf pool size
+ *     256 * 1024 * 1024,  // internal pool size
+ *     128 * 1024 * 1024,  // value pool size
+ *     true);              // use hugepages
+ *
+ * btree<int, std::string, 48, 64, std::less<int>, SearchMode::Binary,
+ *       MoveMode::Standard, decltype(alloc)> tree(alloc);
+ * // Btree automatically uses pooled values (stores Value* instead of Value)
+ *
+ * // Access statistics from pools via get_policy()
+ * auto& policy = alloc.get_policy();
+ * std::cout << "Leaf allocations: " << policy.leaf_pool_->get_allocations()
+ *           << "\n";
+ * std::cout << "Internal allocations: "
+ *           << policy.internal_pool_->get_allocations() << "\n";
+ * std::cout << "Value allocations: " << policy.value_pool_->get_allocations()
+ *           << "\n";
+ * ```
+ *
+ * @tparam Key The key type for the btree
+ * @tparam Value The value type for the btree
+ * @param leaf_pool_size Size of the leaf node pool in bytes
+ * @param internal_pool_size Size of the internal node pool in bytes
+ * @param value_pool_size Size of the value pool in bytes
+ * @param use_hugepages If true, attempt to use hugepages (default: true)
+ * @param leaf_growth_size Size of additional leaf pool regions when pool grows
+ * (default: 64MB)
+ * @param internal_growth_size Size of additional internal pool regions when
+ * pool grows (default: 64MB)
+ * @param value_growth_size Size of additional value pool regions when pool
+ * grows (default: 64MB)
+ * @param use_numa If true and NUMA available, allocate on local NUMA node
+ * (default: false)
+ * @return PolicyBasedHugePageAllocator configured with three pools
+ */
+template <typename Key, typename Value>
+auto make_three_pool_allocator(
+    std::size_t leaf_pool_size, std::size_t internal_pool_size,
+    std::size_t value_pool_size, bool use_hugepages = true,
+    std::size_t leaf_growth_size = 64 * 1024 * 1024,
+    std::size_t internal_growth_size = 64 * 1024 * 1024,
+    std::size_t value_growth_size = 64 * 1024 * 1024, bool use_numa = false) {
+  auto leaf_pool = std::make_shared<HugePagePool>(leaf_pool_size, use_hugepages,
+                                                  leaf_growth_size, use_numa);
+  auto internal_pool = std::make_shared<HugePagePool>(
+      internal_pool_size, use_hugepages, internal_growth_size, use_numa);
+  auto value_pool = std::make_shared<HugePagePool>(
+      value_pool_size, use_hugepages, value_growth_size, use_numa);
+
+  ThreePoolPolicy<Value> policy(leaf_pool, internal_pool, value_pool);
+  using ValueType = std::pair<Key, Value>;
+  return PolicyBasedHugePageAllocator<ValueType, ThreePoolPolicy<Value>>(
+      policy);
 }
 
 }  // namespace kressler::fast_containers
