@@ -248,21 +248,62 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                             SearchModeT>::iterator::reference;
+
+    /**
+     * Reference proxy that wraps ordered_array iterator and handles
+     * pointer dereferencing for pooled values.
+     * Exposes first and second as public fields for compatibility.
+     */
+    class reference_proxy {
+     public:
+      using ordered_array_iterator =
+          typename ordered_array<Key, stored_value_type, LeafNodeSize, Compare,
+                                 SearchModeT>::iterator;
+
+      const Key& first;
+      Value& second;
+
+      reference_proxy(ordered_array_iterator it)
+          : first(it->first), second([&it]() -> Value& {
+              if constexpr (allocator_provides_value_pool) {
+                return *(it->second);  // Dereference pointer
+              } else {
+                return const_cast<Value&>(it->second);  // Direct access
+              }
+            }()) {}
+    };
+
+    using reference = reference_proxy;
+
+    /**
+     * Arrow proxy for iterator -> operator.
+     * Provides member access to the key-value pair.
+     */
+    class arrow_proxy {
+     public:
+      const Key& first;
+      Value& second;
+
+      arrow_proxy(const Key& k, Value& v) : first(k), second(v) {}
+
+      arrow_proxy* operator->() { return this; }
+    };
 
     iterator() : leaf_node_(nullptr) {}
 
     reference operator*() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
-      return *leaf_it_.value();
+      return reference(leaf_it_.value());
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                           SearchModeT>::iterator::arrow_proxy
-    operator->() const {
+    arrow_proxy operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
-      return leaf_it_.value().operator->();
+      auto it = leaf_it_.value();
+      if constexpr (allocator_provides_value_pool) {
+        return arrow_proxy(it->first, *(it->second));
+      } else {
+        return arrow_proxy(it->first, const_cast<Value&>(it->second));
+      }
     }
 
     iterator& operator++() {
@@ -339,18 +380,18 @@ class btree {
     friend class btree;
 
     iterator(LeafNode* node,
-             typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT>::iterator it)
+             typename ordered_array<Key, stored_value_type, LeafNodeSize,
+                                    Compare, SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
     iterator(const btree* tree, LeafNode* node,
-             typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT>::iterator it)
+             typename ordered_array<Key, stored_value_type, LeafNodeSize,
+                                    Compare, SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     LeafNode* leaf_node_;
-    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT>::iterator>
+    std::optional<typename ordered_array<Key, stored_value_type, LeafNodeSize,
+                                         Compare, SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };
@@ -368,21 +409,24 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                             SearchModeT>::iterator::reference;
+    using reference = typename iterator::reference_proxy;
 
     reverse_iterator() : leaf_node_(nullptr), tree_(nullptr) {}
 
     reference operator*() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
-      return *leaf_it_.value();
+      return reference(leaf_it_.value());
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                           SearchModeT>::iterator::arrow_proxy
-    operator->() const {
+    typename iterator::arrow_proxy operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
-      return leaf_it_.value().operator->();
+      auto it = leaf_it_.value();
+      if constexpr (allocator_provides_value_pool) {
+        return typename iterator::arrow_proxy(it->first, *(it->second));
+      } else {
+        return typename iterator::arrow_proxy(it->first,
+                                              const_cast<Value&>(it->second));
+      }
     }
 
     reverse_iterator& operator++() {
@@ -465,22 +509,24 @@ class btree {
    private:
     friend class btree;
 
-    reverse_iterator(LeafNode* node,
-                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                            SearchModeT>::iterator it)
+    reverse_iterator(
+        LeafNode* node,
+        typename ordered_array<Key, stored_value_type, LeafNodeSize, Compare,
+                               SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
-    reverse_iterator(const btree* tree, LeafNode* node,
-                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                            SearchModeT>::iterator it)
+    reverse_iterator(
+        const btree* tree, LeafNode* node,
+        typename ordered_array<Key, stored_value_type, LeafNodeSize, Compare,
+                               SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     reverse_iterator(const btree* tree, LeafNode* node)
         : leaf_node_(node), leaf_it_(std::nullopt), tree_(tree) {}
 
     LeafNode* leaf_node_;
-    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT>::iterator>
+    std::optional<typename ordered_array<Key, stored_value_type, LeafNodeSize,
+                                         Compare, SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };
@@ -856,6 +902,92 @@ class btree {
   [[no_unique_address]]
   typename std::allocator_traits<Allocator>::template rebind_alloc<InternalNode>
       internal_alloc_;
+
+  /**
+   * Helper methods for value pool management (when allocator provides pooling).
+   * These methods handle allocation/deallocation and conversion between Value
+   * and stored_value_type (Value* for pooled, Value for inline).
+   */
+
+  /**
+   * Allocates a value from the pool and constructs it.
+   * Only used when allocator_provides_value_pool is true.
+   */
+  Value* allocate_and_construct_value(const Value& value) {
+    if constexpr (allocator_provides_value_pool) {
+      // Allocate from pool using the allocator's policy
+      Value* ptr = leaf_alloc_.allocate_value();
+      // Construct value in-place
+      new (ptr) Value(value);
+      return ptr;
+    } else {
+      // This branch should never execute due to usage pattern,
+      // but return nullptr for safety
+      return nullptr;
+    }
+  }
+
+  /**
+   * Destroys and deallocates a value back to the pool.
+   * Only used when allocator_provides_value_pool is true.
+   */
+  void destroy_and_deallocate_value(Value* ptr) {
+    if constexpr (allocator_provides_value_pool) {
+      if (ptr) {
+        // Destroy value
+        ptr->~Value();
+        // Return to pool
+        leaf_alloc_.deallocate_value(ptr);
+      }
+    }
+  }
+
+  /**
+   * Converts a Value to stored_value_type for insertion.
+   * Returns Value* (allocated from pool) if pooled, Value otherwise.
+   */
+  stored_value_type make_stored_value(const Value& value) {
+    if constexpr (allocator_provides_value_pool) {
+      return allocate_and_construct_value(value);
+    } else {
+      return value;
+    }
+  }
+
+  /**
+   * Gets a reference to the actual Value from stored_value_type.
+   * Dereferences pointer if pooled, returns directly if inline.
+   */
+  Value& get_value_ref(stored_value_type& stored) {
+    if constexpr (allocator_provides_value_pool) {
+      return *stored;  // Dereference pointer
+    } else {
+      return stored;  // Already a Value
+    }
+  }
+
+  /**
+   * Gets a const reference to the actual Value from stored_value_type.
+   * Dereferences pointer if pooled, returns directly if inline.
+   */
+  const Value& get_value_ref(const stored_value_type& stored) const {
+    if constexpr (allocator_provides_value_pool) {
+      return *stored;  // Dereference pointer
+    } else {
+      return stored;  // Already a Value
+    }
+  }
+
+  /**
+   * Destroys a stored value (deallocates if pooled).
+   * Used when removing elements or clearing the tree.
+   */
+  void destroy_stored_value(stored_value_type& stored) {
+    if constexpr (allocator_provides_value_pool) {
+      destroy_and_deallocate_value(stored);
+    }
+    // Inline values are destroyed automatically
+  }
 
   /**
    * Recursively deallocate all nodes in the tree.
