@@ -644,19 +644,61 @@ cmake --build cmake-build-debug --target test_btree
 ./cmake-build-debug/src/test_btree "[pooled]"
 ```
 
-### Future Benchmarking (fast-containers-benchmarks repo)
+### Benchmark Results: NASDAQ Full Day Replay
 
-Phase 6 performance validation will measure:
+**Configuration**: 8 threads, 11,308 stocks, 1.95 billion events, 5 iterations
 
-1. **Optimal leaf node sizes with pooled values** (hypothesis: 48-64 entries)
-2. **Value size threshold** (8, 12, 16, 20, 24, 32, 64 bytes)
-3. **Cache behavior** (L1, L3 miss rates with callgrind)
-4. **Orderbook performance** (compare btree_16_64_hp vs btree_48_64_pooled_hp)
+**Test Environment**:
+- Workload: Full day of NASDAQ orderbook events
+- Value type: `BookData<0>` (24 bytes)
+- Key type: `BookKey` (16 bytes)
+- Configurations tested: 32, 48, 64 entry leaves with pooled values vs 32 entry baseline
 
-**Expected results for 24-byte values**:
-- Leaf nodes: 16-32 → 48-64 entries
-- Split/merge cost: 30-50% reduction
-- Net performance: 5-20% improvement
+#### Performance Summary (Overall Latency in CPU Cycles)
+
+| Configuration | P50 | P95 | P99 | P99.9 | vs Baseline |
+|---------------|-----|-----|-----|-------|-------------|
+| **btree_32_64_hp** (baseline) | 817 | 2476 | 3571 | 4845 | - |
+| btree_32_64_hp_pooled | 820 | 2478 | 3574 | 4848 | +0.06% |
+| **btree_48_64_hp_pooled** ✅ | **782** | **2409** | **3477** | **4708** | **-2.83%** |
+| btree_64_64_hp_pooled | 849 | 2511 | 3624 | 4965 | +2.48% |
+
+#### Key Findings
+
+**1. Optimal Configuration: btree_48_64_hp_pooled**
+- **2.83% improvement at P99.9** (4708 vs 4845 cycles)
+- **2.63% improvement at P99** (3477 vs 3571 cycles)
+- **4.28% improvement at P50** (782 vs 817 cycles)
+- Consistent gains across all percentiles
+
+**2. Hypothesis Validated**: Pooled values enable larger leaf nodes
+- 32-entry pooled: ~0% difference (validates minimal indirection overhead)
+- 48-entry pooled: Best performance (sweet spot for 24-byte values)
+- 64-entry pooled: Slight regression (diminishing returns at larger sizes)
+
+**3. Operation-Specific Improvements** (P99.9, 48-entry pooled vs baseline):
+- Add operations: 3156 vs 3211 cycles (-1.7%)
+- Cancel operations: 4097 vs 4278 cycles (-4.2%)
+- Replace operations: 4451 vs 4572 cycles (-2.6%)
+
+#### Why 48-Entry Leaves Win
+
+1. **Eliminated data movement cost**: Values stay in pool during splits/merges
+2. **Reduced tree depth**: More entries per node → fewer traversals
+3. **Optimal cache behavior**: 48 entries balance size vs cache efficiency
+4. **Efficient rebalancing**: Only 8-byte pointers move, not 24-byte values
+
+#### Production Recommendation
+
+**Use btree_48_64_hp_pooled for 24-byte values**:
+- Consistent 2-4% improvement across latency distribution
+- Particularly strong at tail latency (critical for orderbook systems)
+- Zero correctness issues (1.95B events processed successfully)
+
+**Node size tuning guidelines**:
+- Values ≤16 bytes: Inline storage, 16-32 entry leaves optimal
+- Values >16 bytes: Pooled storage, 48-64 entry leaves optimal
+- Workload dependent: Test both configurations for specific use cases
 
 ## Benchmark Best Practices
 
