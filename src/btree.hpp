@@ -14,6 +14,68 @@
 namespace kressler::fast_containers {
 
 /**
+ * Calculate optimal internal node size based on key size.
+ * Targets ~1KB memory footprint (16 cache lines) for optimal cache efficiency.
+ *
+ * @tparam Key The key type
+ * @return Optimal number of entries for internal nodes
+ *
+ * Formula validated empirically across 8, 16, 24, 32-byte keys:
+ *   Target: 1024 bytes
+ *   Entry size: sizeof(Key) + sizeof(void*) (child pointer)
+ *   Rounded to multiple of 8 for SIMD efficiency
+ *   Clamped to [16, 64] to prevent degenerate trees and bound search cost
+ *
+ * See Issue #90 for empirical validation.
+ */
+template <typename Key>
+constexpr std::size_t default_internal_node_size() {
+  constexpr std::size_t target_bytes = 1024;  // 16 cache lines
+  constexpr std::size_t entry_size = sizeof(Key) + sizeof(void*);
+  constexpr std::size_t calculated = target_bytes / entry_size;
+
+  // Round to nearest multiple of 8 for SIMD efficiency
+  constexpr std::size_t rounded = ((calculated + 4) / 8) * 8;
+
+  // Clamp to reasonable bounds
+  // Min 16: Prevents degenerate trees with huge keys
+  // Max 64: Keeps binary search cost bounded (6 comparisons)
+  return std::clamp(rounded, std::size_t(16), std::size_t(64));
+}
+
+/**
+ * Calculate optimal leaf node size based on key and value sizes.
+ * Targets ~1KB memory footprint (16 cache lines) for optimal cache efficiency.
+ *
+ * @tparam Key The key type
+ * @tparam Value The value type
+ * @return Optimal number of entries for leaf nodes
+ *
+ * Formula follows same principle as internal nodes:
+ *   Target: 1024 bytes
+ *   Entry size: sizeof(Key) + sizeof(Value)
+ *   Rounded to multiple of 8 for SIMD efficiency
+ *   Clamped to [8, 64] to prevent extremes
+ *
+ * Note: For pooled values (pointer-based), use sizeof(void*) instead of
+ * sizeof(Value).
+ */
+template <typename Key, typename Value>
+constexpr std::size_t default_leaf_node_size() {
+  constexpr std::size_t target_bytes = 1024;  // 16 cache lines
+  constexpr std::size_t entry_size = sizeof(Key) + sizeof(Value);
+  constexpr std::size_t calculated = target_bytes / entry_size;
+
+  // Round to nearest multiple of 8 for SIMD efficiency
+  constexpr std::size_t rounded = ((calculated + 4) / 8) * 8;
+
+  // Clamp to reasonable bounds
+  // Min 8: Prevents tiny nodes with huge values
+  // Max 64: Keeps data movement cost reasonable during splits
+  return std::clamp(rounded, std::size_t(8), std::size_t(64));
+}
+
+/**
  * A B+ Tree that uses ordered_array as the underlying storage for nodes.
  * All data is stored in leaf nodes, which form a doubly-linked list for
  * efficient sequential traversal. Internal nodes store only keys and pointers
@@ -22,14 +84,18 @@ namespace kressler::fast_containers {
  * @tparam Key The key type (must be ComparatorCompatible with Compare)
  * @tparam Value The value type
  * @tparam LeafNodeSize Maximum number of key-value pairs in each leaf node
+ *         (defaults to optimal size based on key+value size, targeting ~1KB)
  * @tparam InternalNodeSize Maximum number of children in each internal node
+ *         (defaults to optimal size based on key size, targeting ~1KB)
  * @tparam Compare The comparison function object type (defaults to
  * std::less<Key>)
  * @tparam SearchModeT Search mode passed through to ordered_array
  * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
  */
-template <typename Key, typename Value, std::size_t LeafNodeSize = 64,
-          std::size_t InternalNodeSize = 64, typename Compare = std::less<Key>,
+template <typename Key, typename Value,
+          std::size_t LeafNodeSize = default_leaf_node_size<Key, Value>(),
+          std::size_t InternalNodeSize = default_internal_node_size<Key>(),
+          typename Compare = std::less<Key>,
           SearchMode SearchModeT = SearchMode::Linear,
           typename Allocator = std::allocator<std::pair<Key, Value>>>
   requires ComparatorCompatible<Key, Compare>
