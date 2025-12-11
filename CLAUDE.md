@@ -287,6 +287,53 @@ return it->second;
 - **Rebalancing**: Hysteresis thresholds prevent thrashing
 - **Underflow handling**: Borrow from siblings → Merge → Cascade up tree
 
+### Default Node Size Heuristics (Issue #90)
+
+Empirically validated node size formulas for optimal cache efficiency:
+
+#### Internal Nodes: Target 1KB (16 cache lines)
+```cpp
+constexpr std::size_t target_bytes = 1024;
+constexpr std::size_t entry_size = sizeof(Key) + sizeof(void*);  // Key + child pointer
+optimal_size = clamp(round_to_8(1024 / entry_size), 16, 64);
+```
+
+**Rationale**: Internal nodes only move 8-byte pointers during splits → cheap, strict cache alignment optimal
+
+**Phase 2 Results** (varying key sizes, fixed leaf 16, internal [8-64]):
+- 8-byte key: 64 entries (1,024B) optimal
+- 16-byte key: 40 entries (960B) optimal
+- 24-byte key: 32 entries (1,024B) optimal
+- 32-byte key: 24 entries (960B) optimal
+
+#### Leaf Nodes: Target 2KB (32 cache lines)
+```cpp
+constexpr std::size_t target_bytes = 2048;
+constexpr std::size_t entry_size = sizeof(Key) + sizeof(Value);
+optimal_size = clamp(round_to_8(2048 / entry_size), 8, 64);
+```
+
+**Rationale**: Leaf nodes move entire values during splits → expensive, larger nodes amortize split cost
+
+**Phase 3 Results** (16-byte key, varying value sizes, leaf [8-48]):
+| Value Size | Entry Size | Empirical Optimal | Formula Prediction | Match |
+|------------|------------|-------------------|-------------------|--------|
+| 24 bytes   | 40 bytes   | 32 entries (1,280B) | 48 entries (1,920B) | Conservative |
+| 32 bytes   | 48 bytes   | 32 entries (1,536B) | 40 entries (1,920B) | Conservative |
+| 64 bytes   | 80 bytes   | 24 entries (1,920B) | 24 entries (1,920B) | ✓ Exact |
+| 128 bytes  | 144 bytes  | 16 entries (2,304B) | 16 entries (2,304B) | ✓ Exact |
+| 256 bytes  | 272 bytes  | 8 entries (2,176B)  | 8 entries (2,176B)  | ✓ Exact |
+
+**Validation** (24-byte value, 5-pass interleaved A/B test):
+- 24 entries: 4990 cycles median (range [4973-4997], spread 24 cycles)
+- **32 entries**: **4961 cycles median** (range [4945-4970], spread 25 cycles) ✓ **Winner by 0.58%**
+
+**Key Findings**:
+1. **2× target difference**: Internal (1KB) vs Leaf (2KB) due to data movement cost
+2. **Formula accuracy**: Exact for 64-256 byte values, conservative for 24-32 byte values
+3. **Trade-off**: Larger leaf nodes reduce split frequency at cost of more data movement per split
+4. **Threshold**: ~64 bytes is inflection point where formula transitions from conservative to exact
+
 ### Phases 10-15: std::map API Compatibility (PRs #40-45)
 
 #### Phase 10: operator[] - Insert/Access with Default Construction
