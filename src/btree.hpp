@@ -51,18 +51,23 @@ constexpr std::size_t default_internal_node_size() {
  * @tparam Value The value type
  * @return Optimal number of entries for leaf nodes
  *
- * Formula follows same principle as internal nodes:
- *   Target: 1024 bytes
+ * Formula targets 2048 bytes (32 cache lines), empirically validated:
  *   Entry size: sizeof(Key) + sizeof(Value)
  *   Rounded to multiple of 8 for SIMD efficiency
  *   Clamped to [8, 64] to prevent extremes
+ *
+ * Rationale (Issue #90, Phase 3 testing):
+ * - Leaf nodes move entire values during splits (expensive)
+ * - Larger nodes reduce split frequency → amortizes data movement cost
+ * - Internal nodes move only 8-byte pointers → can use smaller 1KB target
+ * - Empirical testing shows 2KB optimal for values 24-128 bytes
  *
  * Note: For pooled values (pointer-based), use sizeof(void*) instead of
  * sizeof(Value).
  */
 template <typename Key, typename Value>
 constexpr std::size_t default_leaf_node_size() {
-  constexpr std::size_t target_bytes = 1024;  // 16 cache lines
+  constexpr std::size_t target_bytes = 2048;  // 32 cache lines
   constexpr std::size_t entry_size = sizeof(Key) + sizeof(Value);
   constexpr std::size_t calculated = target_bytes / entry_size;
 
@@ -84,7 +89,7 @@ constexpr std::size_t default_leaf_node_size() {
  * @tparam Key The key type (must be ComparatorCompatible with Compare)
  * @tparam Value The value type
  * @tparam LeafNodeSize Maximum number of key-value pairs in each leaf node
- *         (defaults to optimal size based on key+value size, targeting ~1KB)
+ *         (defaults to optimal size based on key+value size, targeting ~2KB)
  * @tparam InternalNodeSize Maximum number of children in each internal node
  *         (defaults to optimal size based on key size, targeting ~1KB)
  * @tparam Compare The comparison function object type (defaults to
