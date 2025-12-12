@@ -1507,61 +1507,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
          "merge_with_left_sibling requires left sibling");
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    // Special case: if node is empty, just remove it from parent
-    // TODO: Could we avoid this case? I.e. if an erase would leave a node
-    // empty, delete the node rather than erasing and then trying to borrow or
-    // merge? Does this case actually happen in practice?
-    if (node->data.empty()) {
-      // Find this node in parent by iterating (can't use key lookup)
-      InternalNode* parent = node->parent;
-      assert(parent != nullptr && "Merging non-root leaf should have parent");
-      auto& parent_children = parent->leaf_children;
-
-      // Linear search for this node
-      auto it = parent_children.begin();
-      while (it != parent_children.end() && it->second != node) {
-        ++it;
-      }
-      assert(it != parent_children.end() && "Empty node should be in parent");
-      parent_children.erase(it->first);
-
-      // Update leaf chain
-      if (node->prev_leaf) {
-        node->prev_leaf->next_leaf = node->next_leaf;
-      }
-      if (node->next_leaf) {
-        node->next_leaf->prev_leaf = node->prev_leaf;
-      }
-      if (leftmost_leaf_ == node) {
-        leftmost_leaf_ = node->next_leaf;
-      }
-      if (rightmost_leaf_ == node) {
-        rightmost_leaf_ = node->prev_leaf;
-      }
-
-      deallocate_leaf_node(node);
-
-      // Check if parent underflowed
-      const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-      const size_type parent_underflow_threshold =
-          min_internal_size() > internal_hysteresis()
-              ? min_internal_size() - internal_hysteresis()
-              : 0;
-      if (!parent_is_root &&
-          parent_children.size() < parent_underflow_threshold) {
-        // Recursive underflow - discard iterator (internal node)
-        handle_underflow(parent, std::nullopt, false);
-      } else if (parent_is_root && parent_children.size() == 1) {
-        LeafNode* new_root = parent_children.begin()->second;
-        new_root->parent = nullptr;
-        root_is_leaf_ = true;
-        leaf_root_ = new_root;
-        deallocate_internal_node(parent);
-      }
-      // next_key can't exist in empty node - return nullopt
-      return {left_sibling, std::nullopt};
-    }
-
     // Capture node's minimum key BEFORE transferring data
     const Key node_min = node->data.begin()->first;
 
@@ -1718,62 +1663,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
          "merge_with_right_sibling requires right sibling");
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    // Special case: if node is empty, just remove it from parent
-    // TODO: Same as above, could we avoid this case?
-    if (node->data.empty()) {
-      // Find this node in parent by iterating (can't use key lookup)
-      InternalNode* parent = node->parent;
-      assert(parent != nullptr && "Merging non-root leaf should have parent");
-      auto& parent_children = parent->leaf_children;
-
-      // Linear search for this node
-      auto it = parent_children.begin();
-      while (it != parent_children.end() && it->second != node) {
-        ++it;
-      }
-      assert(it != parent_children.end() && "Empty node should be in parent");
-      parent_children.erase(it->first);
-
-      // Update leaf chain
-      if (node->prev_leaf) {
-        node->prev_leaf->next_leaf = node->next_leaf;
-      }
-      if (node->next_leaf) {
-        node->next_leaf->prev_leaf = node->prev_leaf;
-      }
-      if (leftmost_leaf_ == node) {
-        leftmost_leaf_ = node->next_leaf;
-      }
-      if (rightmost_leaf_ == node) {
-        rightmost_leaf_ = node->prev_leaf;
-      }
-
-      deallocate_leaf_node(node);
-
-      // Check if parent underflowed
-      const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-      const size_type parent_underflow_threshold =
-          min_internal_size() > internal_hysteresis()
-              ? min_internal_size() - internal_hysteresis()
-              : 0;
-      if (!parent_is_root &&
-          parent_children.size() < parent_underflow_threshold) {
-        // Recursive underflow - discard iterator (internal node)
-        handle_underflow(parent, std::nullopt, false);
-      } else if (parent_is_root && parent_children.size() == 1) {
-        LeafNode* new_root = parent_children.begin()->second;
-        new_root->parent = nullptr;
-        root_is_leaf_ = true;
-        leaf_root_ = new_root;
-        deallocate_internal_node(parent);
-      }
-
-      // Index would be in right_sibling but we're returning right_sibling
-      // Can't track index - would need to search in right_sibling
-      // This case is rare (empty node), so acceptable to return nullopt
-      return {right_sibling, std::nullopt};
-    }
-
     // Capture right sibling's minimum key BEFORE transferring data
     const Key right_sibling_min = right_sibling->data.begin()->first;
 

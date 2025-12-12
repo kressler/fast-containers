@@ -139,6 +139,20 @@ class btree {
       "Supported types: int32_t, uint32_t, int64_t, uint64_t, float, double. "
       "For other types, use SearchMode::Binary or SearchMode::Linear.");
 
+  // Compile-time check: Minimum node sizes prevent edge cases
+  // With hysteresis, underflow_threshold = NodeSize/2 - NodeSize/4 = NodeSize/4
+  // For a node with size=1 to not trigger underflow: 1 >= NodeSize/4
+  // This holds only when NodeSize <= 4, which creates empty node edge cases
+  // during merge operations. Enforcing NodeSize >= 8 eliminates this
+  // complexity.
+  static_assert(
+      LeafNodeSize >= 8,
+      "LeafNodeSize must be at least 8 to avoid empty node edge cases "
+      "during merge operations.");
+  static_assert(InternalNodeSize >= 8,
+                "InternalNodeSize must be at least 8 to avoid empty node edge "
+                "cases during merge operations.");
+
   /**
    * Compares value_type (pairs) by their keys.
    * Used by value_comp() to provide pair comparison.
