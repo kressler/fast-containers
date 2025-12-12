@@ -888,10 +888,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
   auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
 
-  // Handle duplicate key case
-  if (!inserted) {
-    return {iterator(target_leaf, leaf_it), false};
-  }
+  // Key is guaranteed not to exist (checked by insert() before calling split_leaf)
+  assert(inserted && "split_leaf: key should not exist in tree");
 
   size_++;
 
