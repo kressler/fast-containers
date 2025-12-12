@@ -134,10 +134,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
   }
 
   // Find the position where the key should be inserted
-  auto pos = lower_bound_key(key);
+  const auto pos = lower_bound_key(key);
 
   // Calculate index
-  size_type idx = pos - keys_.begin();
+  const size_type idx = pos - keys_.begin();
 
   // Check if key already exists
   if (idx < size_ && keys_[idx] == key) {
@@ -180,7 +180,7 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
   }
 
   // Get the index from the hint
-  size_type idx = hint.index_;
+  const size_type idx = hint.index_;
 
   // Verify the hint is valid (optional debug check)
   // In release builds, we trust the hint for performance
@@ -223,10 +223,10 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
   }
 
   // Find the position where the key should be inserted
-  auto pos = lower_bound_key(key);
+  const auto pos = lower_bound_key(key);
 
   // Calculate index
-  size_type idx = pos - keys_.begin();
+  const size_type idx = pos - keys_.begin();
 
   // Check if key already exists - CRITICAL: don't construct value!
   if (idx < size_ && keys_[idx] == key) {
@@ -262,10 +262,10 @@ std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iter
           bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(const Key& key, M&& value) {
   // Find the position where the key should be inserted
-  auto pos = lower_bound_key(key);
+  const auto pos = lower_bound_key(key);
 
   // Calculate index
-  size_type idx = pos - keys_.begin();
+  const size_type idx = pos - keys_.begin();
 
   // Check if key already exists - if so, ASSIGN the new value
   if (idx < size_ && keys_[idx] == key) {
@@ -306,7 +306,7 @@ typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
 ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
-  size_type idx = pos.index();
+  const size_type idx = pos.index();
   // Shift elements to the left to fill the gap in both arrays
   std::move(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
   std::move(&values_[idx + 1], &values_[size_], &values_[idx]);
@@ -331,7 +331,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::size_type
 ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(
     const Key& key) {
-  auto it = find(key);
+  const auto it = find(key);
   if (it != end()) {
     erase(it);  // Call iterator-based erase
     return 1;
@@ -353,7 +353,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
     const Key& key) {
-  auto it = find(key);
+  const auto it = find(key);
   if (it != end()) {
     return it.value_ref();
   }
@@ -364,7 +364,7 @@ Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
   }
 
   // Find insertion position
-  auto pos = lower_bound_key(key);
+  const auto pos = lower_bound_key(key);
   size_type idx = pos - keys_.begin();
 
   // Shift elements to make space in both arrays
@@ -395,8 +395,8 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
 ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
     const Key& key) {
-  auto pos = lower_bound_key(key);
-  size_type idx = pos - keys_.begin();
+  const auto pos = lower_bound_key(key);
+  const size_type idx = pos - keys_.begin();
 
   if (idx < size_ && keys_[idx] == key) {
     return iterator(this, idx);
@@ -416,8 +416,8 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
 ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
     const Key& key) const {
-  auto pos = lower_bound_key(key);
-  size_type idx = pos - keys_.begin();
+  const auto pos = lower_bound_key(key);
+  const size_type idx = pos - keys_.begin();
 
   if (idx < size_ && keys_[idx] == key) {
     return const_iterator(this, idx);
@@ -437,8 +437,8 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
 ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) {
-  auto pos = lower_bound_key(key);
-  size_type idx = pos - keys_.begin();
+  const auto pos = lower_bound_key(key);
+  const size_type idx = pos - keys_.begin();
   return iterator(this, idx);
 }
 
@@ -455,8 +455,8 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
 ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) const {
-  auto pos = lower_bound_key(key);
-  size_type idx = pos - keys_.begin();
+  const auto pos = lower_bound_key(key);
+  const size_type idx = pos - keys_.begin();
   return const_iterator(this, idx);
 }
 
@@ -534,10 +534,10 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
   }
 
   // Calculate the split index
-  size_type split_idx = pos.index_;
+  const size_type split_idx = pos.index_;
 
   // Calculate how many elements to move
-  size_type num_to_move = size_ - split_idx;
+  const size_type num_to_move = size_ - split_idx;
 
   // Check if output has sufficient capacity
   if (num_to_move > output.capacity()) {
@@ -679,7 +679,7 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
   }
 
   // Calculate starting position of suffix in source
-  size_type suffix_start = source.size_ - count;
+  const size_type suffix_start = source.size_ - count;
 
   // Copy suffix from source to beginning of this array (prepend)
   std::move(&source.keys_[suffix_start], &source.keys_[source.size_],
