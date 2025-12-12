@@ -321,6 +321,8 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, Allocator>::iterator>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::equal_range(const Key& key) {
+  // TODO: Couldn't this be done more efficiently by just calling lower bound,
+  // copying the iterator, and conditionally incrementing it?
   return {lower_bound(key), upper_bound(key)};
 }
 
@@ -641,6 +643,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
     // Search for next element
     if (next_key.has_value()) {
+      // TODO: Rather than searching, handle_underflow (or its callees) know how
+      // the merge/borrow was performed. Couldn't it return an iterator to that?
+      //
       // Optimization: Search in result_leaf first (O(log m) where m ≈ 64-128)
       // This is much faster than tree-wide search (O(log n))
       auto leaf_it = result_leaf->data.find(*next_key);
@@ -894,7 +899,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   insert_into_parent(leaf, promoted_key, new_leaf);
 
   // If we inserted into the left half, update parent key if necessary
-  // Note: Parent keys can be stale from previous non-split inserts
   if (target_leaf == leaf) {
     const Key& new_left_min = leaf->data.begin()->first;
     update_parent_key_recursive(leaf, new_left_min);
@@ -1401,6 +1405,9 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Special case: if node is empty, just remove it from parent
+    // TODO: Could we avoid this case? I.e. if an erase would leave a node
+    // empty, delete the node rather than erasing and then trying to borrow or
+    // merge? Does this case actually happen in practice?
     if (node->data.empty()) {
       // Find this node in parent by iterating (can't use key lookup)
       InternalNode* parent = node->parent;
@@ -1577,6 +1584,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Special case: if node is empty, just remove it from parent
+    // TODO: Same as above, could we avoid this case?
     if (node->data.empty()) {
       // Find this node in parent by iterating (can't use key lookup)
       InternalNode* parent = node->parent;

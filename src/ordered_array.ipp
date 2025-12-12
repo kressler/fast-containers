@@ -558,51 +558,6 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
 }
 
 /**
- * Append all elements from another array to the end of this array.
- * The other array is left empty after the operation.
- *
- * Precondition (debug mode only): All keys in other must be greater than
- * all keys in this array.
- *
- * Note: Invalidates all iterators to both arrays.
- *
- * @tparam OtherLength The capacity of the other array
- * @param other The array to append (rvalue reference, will be emptied)
- * @throws std::runtime_error if combined size exceeds capacity
- *
- * Complexity: O(n) where n is the size of other
- */
-template <typename Key, typename Value, std::size_t Length, typename Compare,
-          SearchMode SearchModeT>
-  requires ComparatorCompatible<Key, Compare>
-template <std::size_t OtherLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT>::append(
-    ordered_array<Key, Value, OtherLength, Compare, SearchModeT>&& other) {
-  // Check capacity constraint
-  if (size_ + other.size_ > Length) {
-    throw std::runtime_error("Cannot append: combined size exceeds capacity");
-  }
-
-  // Debug assertion: ordering precondition
-  // All keys in other must be > all keys in this
-  assert((empty() || other.empty() || comp_(keys_[size_ - 1], other.keys_[0])) &&
-         "Ordering precondition violated: all keys in other must be > all "
-         "keys in this");
-
-  // Append other's elements to the end of this array
-  if (other.size_ > 0) {
-    std::move(other.keys_.data(), other.keys_.data() + other.size_,
-                      &keys_[size_]);
-    std::move(other.values_.data(), other.values_.data() + other.size_,
-                      &values_[size_]);
-    size_ += other.size_;
-
-    // Leave other in empty state
-    other.size_ = 0;
-  }
-}
-
-/**
  * Transfer elements from the beginning of source array to the end of
  * this array (append behavior).
  *

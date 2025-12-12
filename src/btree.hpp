@@ -2,23 +2,20 @@
 
 #include <cassert>
 #include <cstddef>
-#include <functional>
-#include <iostream>
 #include <memory>
 #include <optional>
 #include <utility>
-#include <vector>
 
 #include "ordered_array.hpp"
 
 namespace kressler::fast_containers {
 
 /**
- * Calculate optimal internal node size based on key size.
- * Targets ~1KB memory footprint (16 cache lines) for optimal cache efficiency.
+ * Heuristic to calculate a reasonable internal node size based on key size.
+ * Targets ~1KB memory footprint (16 cache lines) for cache efficiency.
  *
  * @tparam Key The key type
- * @return Optimal number of entries for internal nodes
+ * @return Number of entries for internal nodes
  *
  * Formula validated empirically across 8, 16, 24, 32-byte keys:
  *   Target: 1024 bytes
@@ -44,8 +41,8 @@ constexpr std::size_t default_internal_node_size() {
 }
 
 /**
- * Calculate optimal leaf node size based on key and value sizes.
- * Targets ~1KB memory footprint (16 cache lines) for optimal cache efficiency.
+ * Heuristic to calculate a reasonable leaf node size based on key and value
+ * sizes. Targets ~1KB memory footprint (16 cache lines) for cache efficiency.
  *
  * @tparam Key The key type
  * @tparam Value The value type
@@ -60,10 +57,7 @@ constexpr std::size_t default_internal_node_size() {
  * - Leaf nodes move entire values during splits (expensive)
  * - Larger nodes reduce split frequency → amortizes data movement cost
  * - Internal nodes move only 8-byte pointers → can use smaller 1KB target
- * - Empirical testing shows 2KB optimal for values 24-128 bytes
- *
- * Note: For pooled values (pointer-based), use sizeof(void*) instead of
- * sizeof(Value).
+ * - Empirical testing shows 2KB better for values 24-128 bytes
  */
 template <typename Key, typename Value>
 constexpr std::size_t default_leaf_node_size() {
@@ -89,13 +83,16 @@ constexpr std::size_t default_leaf_node_size() {
  * @tparam Key The key type (must be ComparatorCompatible with Compare)
  * @tparam Value The value type
  * @tparam LeafNodeSize Maximum number of key-value pairs in each leaf node
- *         (defaults to optimal size based on key+value size, targeting ~2KB)
+ *         (defaults to heuristic size based on key+value size, targeting ~2KB)
  * @tparam InternalNodeSize Maximum number of children in each internal node
- *         (defaults to optimal size based on key size, targeting ~1KB)
+ *         (defaults to heuristic size based on key size, targeting ~1KB)
  * @tparam Compare The comparison function object type (defaults to
- * std::less<Key>)
+ *         std::less<Key>)
  * @tparam SearchModeT Search mode passed through to ordered_array
  * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
+ *
+ * TODO: Document rebinding interface used with the allocators to enable
+ * separate pools for internal and leaf nodes.
  */
 template <typename Key, typename Value,
           std::size_t LeafNodeSize = default_leaf_node_size<Key, Value>(),
@@ -119,7 +116,6 @@ class btree {
       SearchModeT != SearchMode::SIMD || SIMDSearchable<Key>,
       "SIMD search mode requires a key type that satisfies SIMDSearchable. "
       "Supported types: int32_t, uint32_t, int64_t, uint64_t, float, double. "
-      "For composite keys, define a struct with operator<=> instead. "
       "For other types, use SearchMode::Binary or SearchMode::Linear.");
 
   /**
@@ -161,7 +157,7 @@ class btree {
       ordered_array<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
           internal_children;
     };
-    bool children_are_leaves;
+    const bool children_are_leaves;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
 
     // Constructor for leaf children
@@ -209,6 +205,10 @@ class btree {
   /**
    * Copy assignment operator - replaces contents with a deep copy.
    * Complexity: O(n + m) where n is this tree's size, m is other's size
+   *
+   * TODO: I don't think the complexity analysis is correct, as we're just
+   * invoking insert for every element in other. We could actually copy node by
+   * node to make this true. This also applies to the copy constructor.
    */
   btree& operator=(const btree& other);
 
@@ -222,7 +222,7 @@ class btree {
   /**
    * Move assignment operator - replaces contents by taking ownership.
    * Leaves other in a valid but empty state.
-   * Complexity: O(n) where n is this tree's size
+   * Complexity: O(n) where n is this tree's size (due to deallocation)
    */
   btree& operator=(btree&& other) noexcept;
 
@@ -922,6 +922,8 @@ class btree {
   /**
    * Finds the leaf node that should contain the given key.
    * Assumes tree is non-empty.
+   *
+   * TODO: Move implementation to .ipp file.
    */
   LeafNode* find_leaf_for_key(const Key& key) const {
     if (root_is_leaf_) {
@@ -936,8 +938,6 @@ class btree {
       // We want the rightmost child whose minimum <= search key
       auto it = node->internal_children.lower_bound(key);
 
-      // If lower_bound found exact match or went past, back up one
-      // (unless we're at the beginning)
       if (it != node->internal_children.begin() &&
           (it == node->internal_children.end() || it->first != key)) {
         --it;
@@ -961,6 +961,8 @@ class btree {
    * Split a full leaf node and insert a key-value pair.
    * Creates a new leaf and moves half the elements to it.
    * Returns iterator to the inserted element and true.
+   *
+   * TODO: document case of duplicate values
    */
   std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
                                        const Value& value);

@@ -379,25 +379,6 @@ class ordered_array {
       ordered_array<Key, Value, OutputLength, Compare, SearchModeT>& output);
 
   /**
-   * Append all elements from another array to the end of this array.
-   * The other array is left empty after the operation.
-   *
-   * Precondition (debug mode only): All keys in other must be greater than
-   * all keys in this array.
-   *
-   * Note: Invalidates all iterators to both arrays.
-   *
-   * @tparam OtherLength The capacity of the other array
-   * @param other The array to append (rvalue reference, will be emptied)
-   * @throws std::runtime_error if combined size exceeds capacity
-   *
-   * Complexity: O(n) where n is the size of other
-   */
-  template <std::size_t OtherLength>
-  void append(
-      ordered_array<Key, Value, OtherLength, Compare, SearchModeT>&& other);
-
-  /**
    * Transfer elements from the beginning of source array to the end of
    * this array (append behavior).
    *
