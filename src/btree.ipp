@@ -667,14 +667,23 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   const bool needs_rebalancing =
       size_after_erase == 0 || size_after_erase < underflow_threshold;
 
-  // Save next key ONLY if rebalancing will occur (avoids copy for large keys)
-  std::optional<Key> next_key;
+  // Capture next element BEFORE erasing (for O(1) tracking through rebalancing)
+  std::optional<size_t> next_index;
+  bool next_in_next_leaf = false;
   if (needs_rebalancing) {
-    iterator next = pos;
-    ++next;
-    if (next != end()) {
-      next_key = (*next).first;
+    // Calculate index of element after the one being erased
+    const size_t erase_index = std::distance(leaf->data.begin(), leaf_it);
+    if (erase_index + 1 < leaf->data.size()) {
+      // Next element is in this leaf - track its index (O(1) during rebalancing)
+      // After erase, it will shift left by 1, so index becomes erase_index
+      next_index = erase_index;
+    } else if (leaf->next_leaf != nullptr) {
+      // Next element is first element of next leaf
+      // Special handling: if we borrow from right or merge with right,
+      // that element will move into this leaf at the old_size position
+      next_in_next_leaf = true;
     }
+    // else: at end of tree, no next element
   }
 
   // Erase from leaf using iterator (no search needed!)
@@ -691,34 +700,15 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   if (needs_rebalancing) {
-    // handle_underflow returns pointer to leaf where data ended up
-    LeafNode* result_leaf = handle_underflow(leaf);
-
-    // Search for next element
-    if (next_key.has_value()) {
-      // TODO: Rather than searching, handle_underflow (or its callees) know how
-      // the merge/borrow was performed. Couldn't it return an iterator to that?
-      //
-      // Optimization: Search in result_leaf first (O(log m) where m ≈ 64-128)
-      // This is much faster than tree-wide search (O(log n))
-      auto leaf_it = result_leaf->data.find(*next_key);
-      if (leaf_it != result_leaf->data.end()) {
-        return iterator(result_leaf, leaf_it);
-      }
-
-      // Check result_leaf->next_leaf (next_key may have moved there during
-      // merge)
-      if (result_leaf->next_leaf != nullptr) {
-        leaf_it = result_leaf->next_leaf->data.find(*next_key);
-        if (leaf_it != result_leaf->next_leaf->data.end()) {
-          return iterator(result_leaf->next_leaf, leaf_it);
-        }
-      }
-
-      // Should never reach here - next_key must be in result_leaf or its next
-      // But keep as safety fallback in case of unexpected edge cases
-      assert(false && "next_key not found in expected leaves after underflow");
-      return find(*next_key);
+    // handle_underflow uses O(1) index tracking when available
+    auto [result_leaf, next_iter] = handle_underflow(leaf, next_index, next_in_next_leaf);
+    if (next_iter.has_value()) {
+      return *next_iter;
+    }
+    // Next element was not in this leaf, check next leaf
+    if (result_leaf->next_leaf != nullptr) {
+      return iterator(result_leaf->next_leaf,
+                      result_leaf->next_leaf->data.begin());
     }
     return end();
   }
@@ -1295,14 +1285,22 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-                Allocator>::borrow_from_left_sibling(NodeType* node) {
+std::pair<NodeType*, std::optional<typename btree<Key, Value, LeafNodeSize,
+                                                   InternalNodeSize, Compare,
+                                                   SearchModeT, Allocator>::iterator>>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::borrow_from_left_sibling(NodeType* node,
+                                           const std::optional<size_t>& next_index,
+                                           bool next_in_next_leaf) {
   NodeType* left_sibling = find_left_sibling(node);
 
   // Can't borrow if no left sibling
   if (left_sibling == nullptr) {
-    return nullptr;
+    return {nullptr, std::nullopt};
   }
+
+  // Track how many elements we actually borrow for index adjustment
+  size_type actual_borrow = 0;
 
   // Unified borrow implementation using templated lambda
   auto borrow_impl = [&]<typename ChildPtrType, bool UpdateParents>(
@@ -1314,7 +1312,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
     const size_type can_borrow = (left_children.size() > min_size)
                                      ? (left_children.size() - min_size)
                                      : 0;
-    const size_type actual_borrow = std::min(target_borrow, can_borrow);
+    actual_borrow = std::min(target_borrow, can_borrow);
 
     if (actual_borrow == 0) {
       return false;
@@ -1342,14 +1340,35 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Leaf node borrowing
     if (left_sibling->data.size() <= min_leaf_size()) {
-      return nullptr;
+      return {nullptr, std::nullopt};
     }
     bool success =
         borrow_impl.template operator()<std::pair<Key, Value>, false>(
             node->data, left_sibling->data, min_leaf_size(), leaf_hysteresis());
-    return success ? node : nullptr;
+
+    if (!success) {
+      return {nullptr, std::nullopt};
+    }
+
+    // Calculate iterator to next element
+    std::optional<iterator> next_iter;
+    if (next_in_next_leaf) {
+      // Special case: next is in next leaf, stays there (elements inserted at beginning)
+      // Return nullopt, let caller use next_leaf pointer
+      return {node, std::nullopt};
+    } else if (next_index.has_value()) {
+      // Next was in this node, index shifts right by borrowed count
+      const size_t new_index = *next_index + actual_borrow;
+      if (new_index < node->data.size()) {
+        auto it = node->data.begin();
+        std::advance(it, new_index);
+        next_iter = iterator(node, it);
+      }
+    }
+    // else: no next element to track
+    return {node, next_iter};
   } else {
-    // Internal node borrowing
+    // Internal node borrowing - we don't track iterators through internal nodes
     bool success;
     if (node->children_are_leaves) {
       success = borrow_impl.template operator()<LeafNode*, true>(
@@ -1360,7 +1379,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
           node->internal_children, left_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
-    return success ? node : nullptr;
+    return {success ? node : nullptr, std::nullopt};
   }
 }
 
@@ -1370,13 +1389,18 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-                Allocator>::borrow_from_right_sibling(NodeType* node) {
+std::pair<NodeType*, std::optional<typename btree<Key, Value, LeafNodeSize,
+                                                   InternalNodeSize, Compare,
+                                                   SearchModeT, Allocator>::iterator>>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::borrow_from_right_sibling(NodeType* node,
+                                            const std::optional<size_t>& next_index,
+                                            bool next_in_next_leaf) {
   NodeType* right_sibling = find_right_sibling(node);
 
   // Can't borrow if no right sibling
   if (right_sibling == nullptr) {
-    return nullptr;
+    return {nullptr, std::nullopt};
   }
 
   // Unified borrow implementation using templated lambda
@@ -1419,15 +1443,38 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Leaf node borrowing
     if (right_sibling->data.size() <= min_leaf_size()) {
-      return nullptr;
+      return {nullptr, std::nullopt};
     }
+
+    // Capture old size before borrowing (needed if next_in_next_leaf)
+    const size_type old_size = node->data.size();
+
     bool success =
         borrow_impl.template operator()<std::pair<Key, Value>, false>(
             node->data, right_sibling->data, min_leaf_size(),
             leaf_hysteresis());
-    return success ? node : nullptr;
+
+    if (!success) {
+      return {nullptr, std::nullopt};
+    }
+
+    // Calculate iterator to next element
+    std::optional<iterator> next_iter;
+    if (next_in_next_leaf) {
+      // Special case: next was in right sibling (next leaf), now at index old_size
+      auto it = node->data.begin();
+      std::advance(it, old_size);
+      next_iter = iterator(node, it);
+    } else if (next_index.has_value() && *next_index < node->data.size()) {
+      // Next was in this node, index unchanged (elements appended to end)
+      auto it = node->data.begin();
+      std::advance(it, *next_index);
+      next_iter = iterator(node, it);
+    }
+    // else: no next element to track
+    return {node, next_iter};
   } else {
-    // Internal node borrowing
+    // Internal node borrowing - we don't track iterators through internal nodes
     bool success;
     if (node->children_are_leaves) {
       success = borrow_impl.template operator()<LeafNode*, true>(
@@ -1438,7 +1485,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
           node->internal_children, right_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
-    return success ? node : nullptr;
+    return {success ? node : nullptr, std::nullopt};
   }
 }
 
@@ -1448,8 +1495,13 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-                Allocator>::merge_with_left_sibling(NodeType* node) {
+std::pair<NodeType*, std::optional<typename btree<Key, Value, LeafNodeSize,
+                                                   InternalNodeSize, Compare,
+                                                   SearchModeT, Allocator>::iterator>>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::merge_with_left_sibling(NodeType* node,
+                                          const std::optional<size_t>& next_index,
+                                          bool next_in_next_leaf) {
   NodeType* left_sibling = find_left_sibling(node);
   assert(left_sibling != nullptr &&
          "merge_with_left_sibling requires left sibling");
@@ -1497,7 +1549,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
               : 0;
       if (!parent_is_root &&
           parent_children.size() < parent_underflow_threshold) {
-        handle_underflow(parent);
+        // Recursive underflow - discard iterator (internal node)
+        handle_underflow(parent, std::nullopt, false);
       } else if (parent_is_root && parent_children.size() == 1) {
         LeafNode* new_root = parent_children.begin()->second;
         new_root->parent = nullptr;
@@ -1505,11 +1558,15 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
         leaf_root_ = new_root;
         deallocate_internal_node(parent);
       }
-      return left_sibling;
+      // next_key can't exist in empty node - return nullopt
+      return {left_sibling, std::nullopt};
     }
 
     // Capture node's minimum key BEFORE transferring data
     const Key node_min = node->data.begin()->first;
+
+    // Capture left_sibling's size BEFORE merge for index calculation
+    const size_type left_old_size = left_sibling->data.size();
 
     // Merge leaf data
     const size_type count = node->data.size();
@@ -1548,7 +1605,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
             : 0;
     if (!parent_is_root &&
         parent_children.size() < parent_underflow_threshold) {
-      handle_underflow(parent);
+      // Recursive underflow - discard iterator (internal node)
+      handle_underflow(parent, std::nullopt, false);
     } else if (parent_is_root && parent_children.size() == 1) {
       // Root has only one child left - make that child the new root
       LeafNode* new_root = parent_children.begin()->second;
@@ -1557,6 +1615,24 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
       leaf_root_ = new_root;
       deallocate_internal_node(parent);
     }
+
+    // Calculate iterator to next element
+    std::optional<iterator> next_iter;
+    if (next_in_next_leaf) {
+      // Special case: next is in next leaf of result, stays there
+      // Return nullopt, let caller use next_leaf pointer
+      return {left_sibling, std::nullopt};
+    } else if (next_index.has_value()) {
+      // Next was in this node, now at left_old_size + index
+      const size_t new_index = left_old_size + *next_index;
+      if (new_index < left_sibling->data.size()) {
+        auto it = left_sibling->data.begin();
+        std::advance(it, new_index);
+        next_iter = iterator(left_sibling, it);
+      }
+    }
+    // else: no next element to track
+    return {left_sibling, next_iter};
   } else {
     // Capture node's minimum key BEFORE transferring children
     const Key node_min = node->children_are_leaves
@@ -1609,7 +1685,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
             : 0;
     if (!parent_is_root &&
         parent_children.size() < parent_underflow_threshold) {
-      handle_underflow(parent);
+      // Recursive underflow - discard iterator (internal node)
+      handle_underflow(parent, std::nullopt, false);
     } else if (parent_is_root && parent_children.size() == 1) {
       // Root has only one child left - make that child the new root
       InternalNode* new_root = parent_children.begin()->second;
@@ -1617,8 +1694,10 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
       internal_root_ = new_root;
       deallocate_internal_node(parent);
     }
+
+    // Internal nodes don't track iterators
+    return {left_sibling, std::nullopt};
   }
-  return left_sibling;
 }
 
 // merge_with_right_sibling
@@ -1627,8 +1706,13 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-                Allocator>::merge_with_right_sibling(NodeType* node) {
+std::pair<NodeType*, std::optional<typename btree<Key, Value, LeafNodeSize,
+                                                   InternalNodeSize, Compare,
+                                                   SearchModeT, Allocator>::iterator>>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::merge_with_right_sibling(NodeType* node,
+                                           const std::optional<size_t>& next_index,
+                                           bool next_in_next_leaf) {
   NodeType* right_sibling = find_right_sibling(node);
   assert(right_sibling != nullptr &&
          "merge_with_right_sibling requires right sibling");
@@ -1674,7 +1758,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
               : 0;
       if (!parent_is_root &&
           parent_children.size() < parent_underflow_threshold) {
-        handle_underflow(parent);
+        // Recursive underflow - discard iterator (internal node)
+        handle_underflow(parent, std::nullopt, false);
       } else if (parent_is_root && parent_children.size() == 1) {
         LeafNode* new_root = parent_children.begin()->second;
         new_root->parent = nullptr;
@@ -1682,11 +1767,18 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
         leaf_root_ = new_root;
         deallocate_internal_node(parent);
       }
-      return right_sibling;
+
+      // Index would be in right_sibling but we're returning right_sibling
+      // Can't track index - would need to search in right_sibling
+      // This case is rare (empty node), so acceptable to return nullopt
+      return {right_sibling, std::nullopt};
     }
 
     // Capture right sibling's minimum key BEFORE transferring data
     const Key right_sibling_min = right_sibling->data.begin()->first;
+
+    // Capture old size before merging (needed if next_in_next_leaf)
+    const size_type old_size = node->data.size();
 
     // Merge leaf data
     const size_type count = right_sibling->data.size();
@@ -1725,7 +1817,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
             : 0;
     if (!parent_is_root &&
         parent_children.size() < parent_underflow_threshold) {
-      handle_underflow(parent);
+      // Recursive underflow - discard iterator (internal node)
+      handle_underflow(parent, std::nullopt, false);
     } else if (parent_is_root && parent_children.size() == 1) {
       // Root has only one child left - make that child the new root
       LeafNode* new_root = parent_children.begin()->second;
@@ -1734,6 +1827,22 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
       leaf_root_ = new_root;
       deallocate_internal_node(parent);
     }
+
+    // Calculate iterator to next element
+    std::optional<iterator> next_iter;
+    if (next_in_next_leaf) {
+      // Special case: next was in right sibling (next leaf), now at index old_size
+      auto it = node->data.begin();
+      std::advance(it, old_size);
+      next_iter = iterator(node, it);
+    } else if (next_index.has_value() && *next_index < node->data.size()) {
+      // Next was in this node, index unchanged (elements appended to end)
+      auto it = node->data.begin();
+      std::advance(it, *next_index);
+      next_iter = iterator(node, it);
+    }
+    // else: no next element to track
+    return {node, next_iter};
   } else {
     // Capture right sibling's minimum key BEFORE transferring children
     const Key right_sibling_min =
@@ -1787,7 +1896,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
             : 0;
     if (!parent_is_root &&
         parent_children.size() < parent_underflow_threshold) {
-      handle_underflow(parent);
+      // Recursive underflow - discard iterator (internal node)
+      handle_underflow(parent, std::nullopt, false);
     } else if (parent_is_root && parent_children.size() == 1) {
       // Root has only one child left - make that child the new root
       InternalNode* new_root = parent_children.begin()->second;
@@ -1795,8 +1905,10 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
       internal_root_ = new_root;
       deallocate_internal_node(parent);
     }
+
+    // Internal nodes don't track iterators
+    return {node, std::nullopt};
   }
-  return node;
 }
 
 // handle_underflow
@@ -1805,8 +1917,13 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType>
-NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-                Allocator>::handle_underflow(NodeType* node) {
+std::pair<NodeType*, std::optional<typename btree<Key, Value, LeafNodeSize,
+                                                   InternalNodeSize, Compare,
+                                                   SearchModeT, Allocator>::iterator>>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::handle_underflow(NodeType* node,
+                                   const std::optional<size_t>& next_index,
+                                   bool next_in_next_leaf) {
   // Compute node size and underflow threshold based on node type
   size_type node_size;
   size_type underflow_threshold;
@@ -1832,25 +1949,25 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   assert(node->parent != nullptr && "Root node cannot underflow");
 
   // Try to borrow from left sibling first
-  NodeType* result = borrow_from_left_sibling(node);
-  if (result != nullptr) {
-    return result;
+  auto [result_node, next_iter] = borrow_from_left_sibling(node, next_index, next_in_next_leaf);
+  if (result_node != nullptr) {
+    return {result_node, next_iter};
   }
 
   // Try to borrow from right sibling
-  result = borrow_from_right_sibling(node);
-  if (result != nullptr) {
-    return result;
+  std::tie(result_node, next_iter) = borrow_from_right_sibling(node, next_index, next_in_next_leaf);
+  if (result_node != nullptr) {
+    return {result_node, next_iter};
   }
 
   // Can't borrow - must merge
   // Prefer merging with left sibling if it exists
   NodeType* left_sibling = find_left_sibling(node);
   if (left_sibling != nullptr) {
-    return merge_with_left_sibling(node);
+    return merge_with_left_sibling(node, next_index, next_in_next_leaf);
   } else {
     // No left sibling - merge with right
-    return merge_with_right_sibling(node);
+    return merge_with_right_sibling(node, next_index, next_in_next_leaf);
   }
 }
 

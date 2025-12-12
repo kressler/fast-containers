@@ -1015,28 +1015,49 @@ class btree {
    * Works for both LeafNode and InternalNode.
    *
    * @param node The node that underflowed
-   * @return Pointer to node containing the data after rebalancing
+   * @param next_index Optional index to track during rebalancing (for erase
+   * iterator)
+   * @return Pair of {node containing data, iterator to next_index location if
+   * valid}
    */
   template <typename NodeType>
-  NodeType* handle_underflow(NodeType* node);
+  std::pair<NodeType*, std::optional<iterator>> handle_underflow(
+      NodeType* node, const std::optional<size_t>& next_index,
+      bool next_in_next_leaf);
 
   /**
    * Try to borrow element(s) or child(ren) from the left sibling of a node.
    * Works for both LeafNode and InternalNode.
    * Returns pointer to node if successful, nullptr if borrowing was not
    * possible.
+   *
+   * @param node The node to borrow into
+   * @param next_index Optional index to track during borrowing (O(1) path)
+   * @param next_in_next_leaf True if next element is in next leaf
+   * @return Pair of {node if successful or nullptr, iterator to next_index if
+   * valid}
    */
   template <typename NodeType>
-  NodeType* borrow_from_left_sibling(NodeType* node);
+  std::pair<NodeType*, std::optional<iterator>> borrow_from_left_sibling(
+      NodeType* node, const std::optional<size_t>& next_index,
+      bool next_in_next_leaf);
 
   /**
    * Try to borrow element(s) or child(ren) from the right sibling of a node.
    * Works for both LeafNode and InternalNode.
    * Returns pointer to node if successful, nullptr if borrowing was not
    * possible.
+   *
+   * @param node The node to borrow into
+   * @param next_index Optional index to track during borrowing (O(1) path)
+   * @param next_in_next_leaf True if next element is in next leaf
+   * @return Pair of {node if successful or nullptr, iterator to next_index if
+   * valid}
    */
   template <typename NodeType>
-  NodeType* borrow_from_right_sibling(NodeType* node);
+  std::pair<NodeType*, std::optional<iterator>> borrow_from_right_sibling(
+      NodeType* node, const std::optional<size_t>& next_index,
+      bool next_in_next_leaf);
 
   /**
    * Merge a node with its left sibling.
@@ -1045,10 +1066,15 @@ class btree {
    * Works for both LeafNode and InternalNode.
    *
    * @param node The node to merge (will be deleted)
-   * @return Pointer to left sibling containing the merged data
+   * @param next_index Optional index to track during merging (O(1) path)
+   * @param next_in_next_leaf True if next element is in next leaf
+   * @return Pair of {left sibling with merged data, iterator to next_index if
+   * valid}
    */
   template <typename NodeType>
-  NodeType* merge_with_left_sibling(NodeType* node);
+  std::pair<NodeType*, std::optional<iterator>> merge_with_left_sibling(
+      NodeType* node, const std::optional<size_t>& next_index,
+      bool next_in_next_leaf);
 
   /**
    * Merge a node with its right sibling.
@@ -1057,10 +1083,14 @@ class btree {
    * Works for both LeafNode and InternalNode.
    *
    * @param node The node that absorbs right sibling's data
-   * @return Pointer to node containing the merged data
+   * @param next_index Optional index to track during merging (O(1) path)
+   * @param next_in_next_leaf True if next element is in next leaf
+   * @return Pair of {node with merged data, iterator to next_index if valid}
    */
   template <typename NodeType>
-  NodeType* merge_with_right_sibling(NodeType* node);
+  std::pair<NodeType*, std::optional<iterator>> merge_with_right_sibling(
+      NodeType* node, const std::optional<size_t>& next_index,
+      bool next_in_next_leaf);
 
   /**
    * Template helper to find the left sibling of a node.
