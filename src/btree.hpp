@@ -956,39 +956,10 @@ class btree {
    * Finds the leaf node that should contain the given key.
    * Assumes tree is non-empty.
    *
-   * TODO: Move implementation to .ipp file.
+   * @param key The key to search for
+   * @return Pointer to the leaf node that should contain the key
    */
-  LeafNode* find_leaf_for_key(const Key& key) const {
-    if (root_is_leaf_) {
-      return leaf_root_;
-    }
-
-    // Traverse down the tree
-    InternalNode* node = internal_root_;
-    while (!node->children_are_leaves) {
-      // Find the child to follow using optimized lower_bound
-      // In a B+ tree, keys represent minimum key in each subtree
-      // We want the rightmost child whose minimum <= search key
-      auto it = node->internal_children.lower_bound(key);
-
-      if (it != node->internal_children.begin() &&
-          (it == node->internal_children.end() || it->first != key)) {
-        --it;
-      }
-
-      node = it->second;
-    }
-
-    // Now node has leaf children - find the appropriate leaf using lower_bound
-    auto it = node->leaf_children.lower_bound(key);
-
-    if (it != node->leaf_children.begin() &&
-        (it == node->leaf_children.end() || it->first != key)) {
-      --it;
-    }
-
-    return it->second;
-  }
+  LeafNode* find_leaf_for_key(const Key& key) const;
 
   /**
    * Split a full leaf node and insert a key-value pair.

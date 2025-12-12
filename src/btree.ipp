@@ -321,9 +321,62 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, Allocator>::iterator>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::equal_range(const Key& key) {
-  // TODO: Couldn't this be done more efficiently by just calling lower bound,
-  // copying the iterator, and conditionally incrementing it?
-  return {lower_bound(key), upper_bound(key)};
+  // Optimized: single tree traversal instead of two
+  // For unique keys (btree is like std::map):
+  // - If key exists: upper_bound is just next position after lower_bound
+  // - If key doesn't exist: lower_bound == upper_bound
+  auto lb = lower_bound(key);
+
+  // Check if key exists: equivalent comparison (!comp(a,b) && !comp(b,a))
+  if (lb != end() && !comp_(key, lb->first) && !comp_(lb->first, key)) {
+    // Key exists - upper_bound is next position
+    auto ub = lb;
+    ++ub;
+    return {lb, ub};
+  } else {
+    // Key doesn't exist - lower_bound == upper_bound
+    return {lb, lb};
+  }
+}
+
+// find_leaf_for_key
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+               Allocator>::LeafNode*
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::find_leaf_for_key(const Key& key) const {
+  if (root_is_leaf_) {
+    return leaf_root_;
+  }
+
+  // Traverse down the tree
+  InternalNode* node = internal_root_;
+  while (!node->children_are_leaves) {
+    // Find the child to follow using optimized lower_bound
+    // In a B+ tree, keys represent minimum key in each subtree
+    // We want the rightmost child whose minimum <= search key
+    auto it = node->internal_children.lower_bound(key);
+
+    if (it != node->internal_children.begin() &&
+        (it == node->internal_children.end() || it->first != key)) {
+      --it;
+    }
+
+    node = it->second;
+  }
+
+  // Now node has leaf children - find the appropriate leaf using lower_bound
+  auto it = node->leaf_children.lower_bound(key);
+
+  if (it != node->leaf_children.begin() &&
+      (it == node->leaf_children.end() || it->first != key)) {
+    --it;
+  }
+
+  return it->second;
 }
 
 // insert
