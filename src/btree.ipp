@@ -1182,30 +1182,18 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   };
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    if (node->data.empty()) {
-      return nullptr;  // Empty leaf, can't find it
-    }
     node_min = &(node->data.begin()->first);
     return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
   } else {
     // InternalNode
     if (node->children_are_leaves) {
-      if (node->leaf_children.empty()) {
-        return nullptr;  // Empty node, can't find it
-      }
       node_min = &(node->leaf_children.begin()->first);
     } else {
-      if (node->internal_children.empty()) {
-        return nullptr;  // Empty node, can't find it
-      }
       node_min = &(node->internal_children.begin()->first);
     }
     return find_sibling.template operator()<InternalNode*>(
         parent->internal_children);
   }
-
-  assert(false && "Node not found in parent's children");
-  return nullptr;
 }
 
 // find_right_sibling
@@ -1253,30 +1241,18 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   };
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
-    if (node->data.empty()) {
-      return nullptr;  // Empty leaf, can't find it
-    }
     node_min = &(node->data.begin()->first);
     return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
   } else {
     // InternalNode
     if (node->children_are_leaves) {
-      if (node->leaf_children.empty()) {
-        return nullptr;  // Empty node, can't find it
-      }
       node_min = &(node->leaf_children.begin()->first);
     } else {
-      if (node->internal_children.empty()) {
-        return nullptr;  // Empty node, can't find it
-      }
       node_min = &(node->internal_children.begin()->first);
     }
     return find_sibling.template operator()<InternalNode*>(
         parent->internal_children);
   }
-
-  assert(false && "Node not found in parent's children");
-  return nullptr;
 }
 
 // borrow_from_left_sibling
