@@ -91,8 +91,29 @@ constexpr std::size_t default_leaf_node_size() {
  * @tparam SearchModeT Search mode passed through to ordered_array
  * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
  *
- * TODO: Document rebinding interface used with the allocators to enable
- * separate pools for internal and leaf nodes.
+ * ## Allocator Rebinding
+ *
+ * The btree uses std::allocator_traits::rebind to create separate allocators
+ * for LeafNode and InternalNode types from the provided value_type allocator.
+ * This enables performance optimizations like separate hugepage pools:
+ *
+ * - `leaf_alloc_`: rebind_alloc<LeafNode> - allocates leaf nodes
+ * - `internal_alloc_`: rebind_alloc<InternalNode> - allocates internal nodes
+ *
+ * When using PolicyBasedHugePageAllocator with TwoPoolPolicy, the policy
+ * automatically routes allocations to the appropriate pool via type
+ * introspection (LeafNode has `next_leaf` member, InternalNode has
+ * `children_are_leaves` member). This allows different pool sizes and
+ * configurations for leaf vs internal nodes.
+ *
+ * Example with two separate pools:
+ * @code
+ * auto alloc = make_two_pool_allocator<Key, Value>(
+ *     64ul * 1024ul * 1024ul,  // 64MB leaf pool
+ *     64ul * 1024ul * 1024ul); // 64MB internal pool
+ * btree<Key, Value, 32, 64, std::less<Key>, SearchMode::Linear,
+ *       decltype(alloc)> tree{alloc};
+ * @endcode
  */
 template <typename Key, typename Value,
           std::size_t LeafNodeSize = default_leaf_node_size<Key, Value>(),
@@ -198,17 +219,29 @@ class btree {
 
   /**
    * Copy constructor - creates a deep copy of the tree.
-   * Complexity: O(n)
+   *
+   * Implementation: Iterates through other and calls insert() for each element,
+   * building the tree incrementally.
+   *
+   * Complexity: O(m log m) where m = other.size()
+   *
+   * @note A node-by-node copy could achieve O(m) complexity but would add
+   * significant implementation complexity.
    */
   btree(const btree& other);
 
   /**
    * Copy assignment operator - replaces contents with a deep copy.
-   * Complexity: O(n + m) where n is this tree's size, m is other's size
    *
-   * TODO: I don't think the complexity analysis is correct, as we're just
-   * invoking insert for every element in other. We could actually copy node by
-   * node to make this true. This also applies to the copy constructor.
+   * Implementation: Calls clear() to deallocate existing nodes, then iterates
+   * through other and calls insert() for each element.
+   *
+   * Complexity: O(n + m log m) where n = this.size(), m = other.size()
+   *             - O(n) to clear existing tree
+   *             - O(m log m) to insert m elements into growing tree
+   *
+   * @note A node-by-node copy could achieve O(n + m) complexity but would add
+   * significant implementation complexity.
    */
   btree& operator=(const btree& other);
 
@@ -960,9 +993,19 @@ class btree {
   /**
    * Split a full leaf node and insert a key-value pair.
    * Creates a new leaf and moves half the elements to it.
-   * Returns iterator to the inserted element and true.
    *
-   * TODO: document case of duplicate values
+   * @param leaf The full leaf node to split (size == LeafNodeSize)
+   * @param key The key to insert (guaranteed not to exist in tree)
+   * @param value The value to insert
+   * @return {iterator to inserted element, true}
+   *
+   * @pre leaf->data.size() == LeafNodeSize
+   * @pre key does not exist in the tree (checked by insert() before calling)
+   * @post Returns {iterator, true} - second element is always true since
+   *       duplicates are rejected before this function is called
+   *
+   * @note This function is only called from insert() after verifying the key
+   * doesn't exist. The btree enforces unique keys like std::map.
    */
   std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
                                        const Value& value);
