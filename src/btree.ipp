@@ -1484,10 +1484,21 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Capture node's minimum key BEFORE transferring data
-    const Key node_min = node->data.begin()->first;
+    const Key &node_min = node->data.begin()->first;
 
     // Capture left_sibling's size BEFORE merge for index calculation
     const size_type left_old_size = left_sibling->data.size();
+
+    // Remove this leaf from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+    // Find and remove the entry for this leaf in parent
+    auto& parent_children = parent->leaf_children;
+    auto it = parent_children.find(node_min);
+    assert(it != parent_children.end() && it->second == node &&
+           "Node's minimum key should map to node in parent");
+    parent_children.erase(it->first);
 
     // Merge leaf data
     const size_type count = node->data.size();
@@ -1503,17 +1514,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     if (rightmost_leaf_ == node) {
       rightmost_leaf_ = left_sibling;
     }
-
-    // Remove this leaf from parent
-    InternalNode* parent = node->parent;
-    assert(parent != nullptr && "Merging non-root leaf should have parent");
-
-    // Find and remove the entry for this leaf in parent
-    auto& parent_children = parent->leaf_children;
-    auto it = parent_children.find(node_min);
-    assert(it != parent_children.end() && it->second == node &&
-           "Node's minimum key should map to node in parent");
-    parent_children.erase(it->first);
 
     // Deallocate this leaf
     deallocate_leaf_node(node);
@@ -1556,9 +1556,20 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     return {left_sibling, next_iter};
   } else {
     // Capture node's minimum key BEFORE transferring children
-    const Key node_min = node->children_are_leaves
+    const Key &node_min = node->children_are_leaves
                              ? node->leaf_children.begin()->first
                              : node->internal_children.begin()->first;
+
+    // Remove this node from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root node should have parent");
+
+    // Find and remove the entry for this node in parent
+    auto& parent_children = parent->internal_children;
+    auto it = parent_children.find(node_min);
+    assert(it != parent_children.end() && it->second == node &&
+           "Node's minimum key should map to node in parent");
+    parent_children.erase(it->first);
 
     // Merge internal node children using templated lambda
     auto merge_children = [&]<typename ChildPtrType>(auto& children,
@@ -1583,17 +1594,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       merge_children.template operator()<InternalNode*>(
           node->internal_children, left_sibling->internal_children);
     }
-
-    // Remove this node from parent
-    InternalNode* parent = node->parent;
-    assert(parent != nullptr && "Merging non-root node should have parent");
-
-    // Find and remove the entry for this node in parent
-    auto& parent_children = parent->internal_children;
-    auto it = parent_children.find(node_min);
-    assert(it != parent_children.end() && it->second == node &&
-           "Node's minimum key should map to node in parent");
-    parent_children.erase(it->first);
 
     // Deallocate this node
     deallocate_internal_node(node);
@@ -1640,10 +1640,21 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     // Capture right sibling's minimum key BEFORE transferring data
-    const Key right_sibling_min = right_sibling->data.begin()->first;
+    const Key &right_sibling_min = right_sibling->data.begin()->first;
 
     // Capture old size before merging (needed if next_in_next_leaf)
     const size_type old_size = node->data.size();
+
+    // Remove right sibling from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root leaf should have parent");
+
+    // Find and remove the entry for right sibling in parent
+    auto& parent_children = parent->leaf_children;
+    auto it = parent_children.find(right_sibling_min);
+    assert(it != parent_children.end() && it->second == right_sibling &&
+           "Right sibling's minimum key should map to right sibling in parent");
+    parent_children.erase(it->first);
 
     // Merge leaf data
     const size_type count = right_sibling->data.size();
@@ -1659,17 +1670,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     if (rightmost_leaf_ == right_sibling) {
       rightmost_leaf_ = node;
     }
-
-    // Remove right sibling from parent
-    InternalNode* parent = node->parent;
-    assert(parent != nullptr && "Merging non-root leaf should have parent");
-
-    // Find and remove the entry for right sibling in parent
-    auto& parent_children = parent->leaf_children;
-    auto it = parent_children.find(right_sibling_min);
-    assert(it != parent_children.end() && it->second == right_sibling &&
-           "Right sibling's minimum key should map to right sibling in parent");
-    parent_children.erase(it->first);
 
     // Deallocate right sibling
     deallocate_leaf_node(right_sibling);
@@ -1710,10 +1710,21 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     return {node, next_iter};
   } else {
     // Capture right sibling's minimum key BEFORE transferring children
-    const Key right_sibling_min =
+    const Key &right_sibling_min =
         right_sibling->children_are_leaves
             ? right_sibling->leaf_children.begin()->first
             : right_sibling->internal_children.begin()->first;
+
+    // Remove right sibling from parent
+    InternalNode* parent = node->parent;
+    assert(parent != nullptr && "Merging non-root node should have parent");
+
+    // Find and remove the entry for right sibling in parent
+    auto& parent_children = parent->internal_children;
+    auto it = parent_children.find(right_sibling_min);
+    assert(it != parent_children.end() && it->second == right_sibling &&
+           "Right sibling's minimum key should map to right sibling in parent");
+    parent_children.erase(it->first);
 
     // Merge internal node children using templated lambda
     auto merge_children = [&]<typename ChildPtrType>(auto& children,
@@ -1738,17 +1749,6 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       merge_children.template operator()<InternalNode*>(
           node->internal_children, right_sibling->internal_children);
     }
-
-    // Remove right sibling from parent
-    InternalNode* parent = node->parent;
-    assert(parent != nullptr && "Merging non-root node should have parent");
-
-    // Find and remove the entry for right sibling in parent
-    auto& parent_children = parent->internal_children;
-    auto it = parent_children.find(right_sibling_min);
-    assert(it != parent_children.end() && it->second == right_sibling &&
-           "Right sibling's minimum key should map to right sibling in parent");
-    parent_children.erase(it->first);
 
     // Deallocate right sibling
     deallocate_internal_node(right_sibling);
