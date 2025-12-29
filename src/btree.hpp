@@ -1011,26 +1011,6 @@ class btree {
                                             GetValue&& get_value);
 
   /**
-   * Split a full leaf node and insert a key-value pair.
-   * Creates a new leaf and moves half the elements to it.
-   *
-   * @param leaf The full leaf node to split (size == LeafNodeSize)
-   * @param key The key to insert (guaranteed not to exist in tree)
-   * @param value The value to insert
-   * @return {iterator to inserted element, true}
-   *
-   * @pre leaf->data.size() == LeafNodeSize
-   * @pre key does not exist in the tree (checked by insert() before calling)
-   * @post Returns {iterator, true} - second element is always true since
-   *       duplicates are rejected before this function is called
-   *
-   * @note This function is only called from insert() after verifying the key
-   * doesn't exist. The btree enforces unique keys like std::map.
-   */
-  std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
-                                       const Value& value);
-
-  /**
    * Insert a promoted key and child pointer into a parent node.
    * If parent is full, splits it recursively.
    * If node has no parent, creates a new root.
