@@ -425,6 +425,15 @@ class ordered_array {
       size_type count);
 
  private:
+  /**
+   * Common implementation for all insert operations.
+   * Handles key existence check, shifting, and insertion logic.
+   */
+  template <typename OnExists, typename OnInsert>
+  std::pair<iterator, bool> insert_impl(size_type idx, const Key& key,
+                                        OnExists&& on_exists,
+                                        OnInsert&& on_insert);
+
 #ifdef __AVX2__
   /**
    * SIMD-accelerated linear search for 8-bit keys (int8_t, uint8_t)

@@ -128,32 +128,24 @@ std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iter
           bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
     const Key& key, const Value& value) {
-  // Check if array is full
+  // Early check for better error message (helper also checks)
   if (size_ >= Length) {
     throw std::runtime_error("Cannot insert: array is full");
   }
 
   // Find the position where the key should be inserted
-  const auto pos = lower_bound_key(key);
+  const size_type idx = lower_bound_key(key) - keys_.begin();
 
-  // Calculate index
-  const size_type idx = pos - keys_.begin();
-
-  // Check if key already exists
-  if (idx < size_ && keys_[idx] == key) {
-    return {iterator(this, idx), false};
-  }
-
-  // Shift elements to the right to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
-
-  // Insert the new elements
-  keys_[idx] = key;
-  values_[idx] = value;
-  ++size_;
-
-  return {iterator(this, idx), true};
+  return insert_impl(
+      idx, key,
+      [this](size_type idx) {
+        // Key exists - don't modify, just return
+        return std::pair{iterator(this, idx), false};
+      },
+      [this, &value](size_type idx) {
+        // Insert value via assignment
+        values_[idx] = value;
+      });
 }
 
 /**
@@ -174,7 +166,7 @@ std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iter
           bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
     iterator hint, const Key& key, const Value& value) {
-  // Check if array is full
+  // Early check for better error message (helper also checks)
   if (size_ >= Length) {
     throw std::runtime_error("Cannot insert: array is full");
   }
@@ -188,21 +180,16 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
   assert(idx == size_ || !comp_(keys_[idx], key));
   assert(idx == 0 || comp_(keys_[idx - 1], key));
 
-  // Check if key already exists at the hint position
-  if (idx < size_ && keys_[idx] == key) {
-    return {iterator(this, idx), false};
-  }
-
-  // Shift elements to the right to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
-
-  // Insert the new elements
-  keys_[idx] = key;
-  values_[idx] = value;
-  ++size_;
-
-  return {iterator(this, idx), true};
+  return insert_impl(
+      idx, key,
+      [this](size_type idx) {
+        // Key exists - don't modify, just return
+        return std::pair{iterator(this, idx), false};
+      },
+      [this, &value](size_type idx) {
+        // Insert value via assignment
+        values_[idx] = value;
+      });
 }
 
 /**
@@ -217,36 +204,25 @@ std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iter
           bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
     const Key& key, Args&&... args) {
-  // Check if array is full
+  // Early check for better error message (helper also checks)
   if (size_ >= Length) {
     throw std::runtime_error("Cannot insert: array is full");
   }
 
   // Find the position where the key should be inserted
-  const auto pos = lower_bound_key(key);
+  const size_type idx = lower_bound_key(key) - keys_.begin();
 
-  // Calculate index
-  const size_type idx = pos - keys_.begin();
-
-  // Check if key already exists - CRITICAL: don't construct value!
-  if (idx < size_ && keys_[idx] == key) {
-    return {iterator(this, idx), false};
-  }
-
-  // Shift elements to the right to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
-
-  // Insert the key
-  keys_[idx] = key;
-
-  // Construct the value IN-PLACE using the provided arguments
-  // This is the key difference from insert() - no temporary value created!
-  std::construct_at(&values_[idx], std::forward<Args>(args)...);
-
-  ++size_;
-
-  return {iterator(this, idx), true};
+  return insert_impl(
+      idx, key,
+      [this](size_type idx) {
+        // Key exists - CRITICAL: don't construct value, just return
+        return std::pair{iterator(this, idx), false};
+      },
+      [this, &args...](size_type idx) {
+        // Construct value IN-PLACE using provided arguments
+        // This is the key difference from insert() - no temporary value!
+        std::construct_at(&values_[idx], std::forward<Args>(args)...);
+      });
 }
 
 /**
@@ -262,34 +238,19 @@ std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iter
           bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(const Key& key, M&& value) {
   // Find the position where the key should be inserted
-  const auto pos = lower_bound_key(key);
+  const size_type idx = lower_bound_key(key) - keys_.begin();
 
-  // Calculate index
-  const size_type idx = pos - keys_.begin();
-
-  // Check if key already exists - if so, ASSIGN the new value
-  if (idx < size_ && keys_[idx] == key) {
-    values_[idx] = std::forward<M>(value);
-    return {iterator(this, idx), false};  // false = assignment, not insertion
-  }
-
-  // Key doesn't exist - insert new element
-  // Check if array is full
-  if (size_ >= Length) {
-    throw std::runtime_error("Cannot insert: array is full");
-  }
-
-  // Shift elements to the right to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
-
-  // Insert the key and value
-  keys_[idx] = key;
-  values_[idx] = std::forward<M>(value);
-
-  ++size_;
-
-  return {iterator(this, idx), true};  // true = insertion
+  return insert_impl(
+      idx, key,
+      [this, &value](size_type idx) {
+        // Key exists - ASSIGN the new value
+        values_[idx] = std::forward<M>(value);
+        return std::pair{iterator(this, idx), false};  // false = assignment
+      },
+      [this, &value](size_type idx) {
+        // Insert new value
+        values_[idx] = std::forward<M>(value);
+      });
 }
 
 /**
@@ -703,6 +664,54 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 // ============================================================================
 // Private Helper Methods
 // ============================================================================
+
+/**
+ * Common implementation for all insert operations.
+ * Handles key existence check, shifting, and insertion logic.
+ *
+ * @param idx Position where key should be inserted
+ * @param key Key to insert
+ * @param on_exists Callback for when key exists: (size_type) -> pair<iterator, bool>
+ *                  Can modify the existing value (insert_or_assign) or just return
+ * @param on_insert Callback to insert value: (size_type) -> void
+ *                  Uses assignment (insert) or construct_at (try_emplace)
+ * @return Pair of iterator to element and bool indicating insertion success
+ */
+template <typename Key, typename Value, std::size_t Length, typename Compare,
+          SearchMode SearchModeT>
+  requires ComparatorCompatible<Key, Compare>
+template <typename OnExists, typename OnInsert>
+std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+          bool>
+ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_impl(
+    size_type idx,
+    const Key& key,
+    OnExists&& on_exists,
+    OnInsert&& on_insert) {
+  // Check if key exists at this position
+  if (idx < size_ && keys_[idx] == key) {
+    return on_exists(idx);  // Let caller decide what to do (return or assign)
+  }
+
+  // Key doesn't exist - insert it
+  if (size_ >= Length) {
+    throw std::runtime_error("Cannot insert: array is full");
+  }
+
+  // Shift elements to the right to make space in both arrays
+  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
+  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+
+  // Insert the key
+  keys_[idx] = key;
+
+  // Let caller insert the value (assignment vs construct_at)
+  on_insert(idx);
+
+  ++size_;
+
+  return {iterator(this, idx), true};
+}
 
 /**
  * Find the insertion position for a key using the configured search mode.
