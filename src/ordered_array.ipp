@@ -696,7 +696,9 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 // SIMD Search Implementations (AVX2)
 // ============================================================================
 
+#ifdef __AVX2__
 #include "ordered_array_simd.ipp"
+#endif
 
 // ============================================================================
 // Private Helper Methods
