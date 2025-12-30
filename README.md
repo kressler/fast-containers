@@ -1,6 +1,8 @@
 # Fast Containers
 
-Fast container library for C++ on x86-64
+![CI](https://github.com/kressler/fast-containers/workflows/CI/badge.svg)
+
+High-performance header-only container library for C++ on x86-64
 
 ## Tech Stack
 
@@ -56,17 +58,23 @@ git commit --no-verify
 
 ```
 .
-├── src/                    # Main source code
-│   ├── tests/             # Test files
-│   └── *.hpp              # Header files
-├── third_party/           # Third-party libraries
+├── include/
+│   └── fast_containers/   # Public header files
+│       ├── btree.hpp, btree.ipp
+│       ├── ordered_array.hpp, ordered_array.ipp
+│       └── hugepage_*.hpp
+├── tests/                 # Unit tests (Catch2)
+├── third_party/           # Git submodules (Catch2)
 ├── hooks/                 # Git hooks (install with install-hooks.sh)
-└── CMakeLists.txt        # Build configuration
+└── CMakeLists.txt         # Build configuration
 ```
 
 ## Development Workflow
 
-1. Clone the repository
+1. Clone the repository with submodules:
+   ```bash
+   git clone --recursive https://github.com/kressler/fast-containers.git
+   ```
 2. Install the pre-commit hook: `./install-hooks.sh`
 3. Make your changes
 4. Build and test: `cmake --build build && ctest --test-dir build`

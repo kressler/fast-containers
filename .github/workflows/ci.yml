@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} - ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GCC 14 - Debug, Release, ASAN
+          - compiler: gcc-14
+            cxx_compiler: g++-14
+            build_type: Debug
+            enable_asan: OFF
+            enable_avx2: OFF
+
+          - compiler: gcc-14
+            cxx_compiler: g++-14
+            build_type: Release
+            enable_asan: OFF
+            enable_avx2: ON
+
+          - compiler: gcc-14
+            cxx_compiler: g++-14
+            build_type: Debug
+            enable_asan: ON
+            enable_avx2: OFF
+
+          # Clang 18 - Release only
+          - compiler: clang-18
+            cxx_compiler: clang++-18
+            build_type: Release
+            enable_asan: OFF
+            enable_avx2: ON
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.cxx_compiler }}
+
+      - name: Cache Catch2
+        uses: actions/cache@v4
+        with:
+          path: third_party/Catch2
+          key: catch2-${{ hashFiles('.gitmodules') }}
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_ASAN=${{ matrix.enable_asan }} \
+            -DENABLE_AVX2=${{ matrix.enable_avx2 }}
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.compiler }}-${{ matrix.build_type }}
+          path: build/Testing/Temporary/
+          retention-days: 7
