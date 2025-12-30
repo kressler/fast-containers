@@ -826,7 +826,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   deallocate_internal_node(node);
 }
 
-// split_leaf_impl
+// split_leaf_and_insert
 template <typename Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           typename Allocator>
@@ -836,8 +836,8 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, Allocator>::iterator,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-      Allocator>::split_leaf_impl(LeafNode* leaf, const Key& key,
-                                  GetValue&& get_value) {
+      Allocator>::split_leaf_and_insert(LeafNode* leaf, const Key& key,
+                                        GetValue&& get_value) {
   // Create new leaf for right half
   LeafNode* new_leaf = allocate_leaf_node();
 
@@ -868,16 +868,15 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // Determine target leaf
   LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
 
-  // KEY CHANGE: Get value on-demand AFTER determining target
-  // This preserves try_emplace's optimization - value only constructed if
-  // we're actually inserting
+  // Get value on-demand after determining target leaf
+  // This preserves try_emplace's optimization
   auto value = get_value();
 
   // Insert the new key-value pair into appropriate leaf
   auto [leaf_it, inserted] = target_leaf->data.insert(key, std::move(value));
 
   // Key is guaranteed not to exist (checked by insert_impl before calling)
-  assert(inserted && "split_leaf_impl: key should not exist in tree");
+  assert(inserted && "split_leaf_and_insert: key should not exist in tree");
 
   size_++;
 
@@ -926,23 +925,24 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // If leaf is full, split it with on-demand value construction
   if (leaf->data.size() >= LeafNodeSize) {
-    return split_leaf_impl(leaf, key, std::forward<GetValue>(get_value));
+    return split_leaf_and_insert(leaf, key, std::forward<GetValue>(get_value));
   }
 
   // Leaf has space - get value on-demand and insert using hint
   auto value = get_value();
   auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, std::move(value));
 
-  if (inserted) {
-    size_++;
+  // Key is guaranteed not to exist (checked above)
+  assert(inserted && "insert_impl: key should not exist");
 
-    // If we inserted at the beginning and leaf has a parent, update parent key
-    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
-      update_parent_key_recursive(leaf, key);
-    }
+  size_++;
+
+  // If we inserted at the beginning and leaf has a parent, update parent key
+  if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
+    update_parent_key_recursive(leaf, key);
   }
 
-  return {iterator(leaf, leaf_it), inserted};
+  return {iterator(leaf, leaf_it), true};
 }
 
 // insert_into_parent

@@ -1007,8 +1007,9 @@ class btree {
    * @post Returns {iterator, true} - second element is always true
    */
   template <typename GetValue>
-  std::pair<iterator, bool> split_leaf_impl(LeafNode* leaf, const Key& key,
-                                            GetValue&& get_value);
+  std::pair<iterator, bool> split_leaf_and_insert(LeafNode* leaf,
+                                                  const Key& key,
+                                                  GetValue&& get_value);
 
   /**
    * Insert a promoted key and child pointer into a parent node.
