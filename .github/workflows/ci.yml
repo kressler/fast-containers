@@ -77,7 +77,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DENABLE_ASAN=${{ matrix.enable_asan }} \
-            -DENABLE_AVX2=${{ matrix.enable_avx2 }}
+            -DENABLE_AVX2=${{ matrix.enable_avx2 }} \
+            ${{ matrix.extra_cmake_args }}
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
