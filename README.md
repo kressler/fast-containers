@@ -13,16 +13,45 @@ High-performance header-only container library for C++ on x86-64
 
 ## Building
 
+### Using CMake Presets (Recommended)
+
+```bash
+# List available presets
+cmake --list-presets
+
+# Configure, build, and test in one workflow
+cmake --preset release
+cmake --build --preset release
+ctest --preset release
+
+# Common presets:
+cmake --preset debug          # Debug build
+cmake --preset release        # Release with AVX2 (default)
+cmake --preset asan           # AddressSanitizer build
+cmake --preset release-no-avx2  # Release without AVX2
+```
+
+### Manual Build (Alternative)
+
 ```bash
 # Configure
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 # Build
 cmake --build build
 
 # Run tests
-ctest --test-dir build
+ctest --test-dir build --output-on-failure
 ```
+
+### Build Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ENABLE_AVX2` | `ON` (Release), `OFF` (Debug) | Enable AVX2 SIMD optimizations |
+| `ENABLE_ASAN` | `OFF` | Enable AddressSanitizer |
+| `ENABLE_ALLOCATOR_STATS` | `OFF` | Enable allocator statistics |
+| `ENABLE_NUMA` | Auto-detected | Enable NUMA support (requires libnuma) |
 
 ## Code Formatting
 
