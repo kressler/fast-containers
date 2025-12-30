@@ -1245,6 +1245,43 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT
   }
 }
 
+// handle_parent_after_merge
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+template <typename NodeType, typename ChildrenArray>
+void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+           Allocator>::handle_parent_after_merge(InternalNode* parent,
+                                                  ChildrenArray& parent_children) {
+  // Check if parent underflowed (use hysteresis threshold)
+  const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
+  const size_type parent_underflow_threshold =
+      min_internal_size() > internal_hysteresis()
+          ? min_internal_size() - internal_hysteresis()
+          : 0;
+
+  if (!parent_is_root &&
+      parent_children.size() < parent_underflow_threshold) {
+    // Recursive underflow - discard iterator (internal node)
+    handle_underflow(parent, std::nullopt, false);
+  } else if (parent_is_root && parent_children.size() == 1) {
+    // Root has only one child left - make that child the new root
+    NodeType* new_root = parent_children.begin()->second;
+    new_root->parent = nullptr;
+
+    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+      root_is_leaf_ = true;
+      leaf_root_ = new_root;
+    } else {
+      // InternalNode becomes new root
+      internal_root_ = new_root;
+    }
+
+    deallocate_internal_node(parent);
+  }
+}
+
 // borrow_from_left_sibling
 template <typename Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
@@ -1508,24 +1545,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // Deallocate this leaf
     deallocate_leaf_node(node);
 
-    // Check if parent underflowed (use hysteresis threshold)
-    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    const size_type parent_underflow_threshold =
-        min_internal_size() > internal_hysteresis()
-            ? min_internal_size() - internal_hysteresis()
-            : 0;
-    if (!parent_is_root &&
-        parent_children.size() < parent_underflow_threshold) {
-      // Recursive underflow - discard iterator (internal node)
-      handle_underflow(parent, std::nullopt, false);
-    } else if (parent_is_root && parent_children.size() == 1) {
-      // Root has only one child left - make that child the new root
-      LeafNode* new_root = parent_children.begin()->second;
-      new_root->parent = nullptr;
-      root_is_leaf_ = true;
-      leaf_root_ = new_root;
-      deallocate_internal_node(parent);
-    }
+    // Handle parent underflow and potential root reduction
+    handle_parent_after_merge<LeafNode>(parent, parent_children);
 
     // Calculate iterator to next element
     std::optional<iterator> next_iter;
@@ -1588,23 +1609,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // Deallocate this node
     deallocate_internal_node(node);
 
-    // Check if parent underflowed (use hysteresis threshold)
-    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    const size_type parent_underflow_threshold =
-        min_internal_size() > internal_hysteresis()
-            ? min_internal_size() - internal_hysteresis()
-            : 0;
-    if (!parent_is_root &&
-        parent_children.size() < parent_underflow_threshold) {
-      // Recursive underflow - discard iterator (internal node)
-      handle_underflow(parent, std::nullopt, false);
-    } else if (parent_is_root && parent_children.size() == 1) {
-      // Root has only one child left - make that child the new root
-      InternalNode* new_root = parent_children.begin()->second;
-      new_root->parent = nullptr;
-      internal_root_ = new_root;
-      deallocate_internal_node(parent);
-    }
+    // Handle parent underflow and potential root reduction
+    handle_parent_after_merge<InternalNode>(parent, parent_children);
 
     // Internal nodes don't track iterators
     return {left_sibling, std::nullopt};
@@ -1664,24 +1670,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // Deallocate right sibling
     deallocate_leaf_node(right_sibling);
 
-    // Check if parent underflowed (use hysteresis threshold)
-    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    const size_type parent_underflow_threshold =
-        min_internal_size() > internal_hysteresis()
-            ? min_internal_size() - internal_hysteresis()
-            : 0;
-    if (!parent_is_root &&
-        parent_children.size() < parent_underflow_threshold) {
-      // Recursive underflow - discard iterator (internal node)
-      handle_underflow(parent, std::nullopt, false);
-    } else if (parent_is_root && parent_children.size() == 1) {
-      // Root has only one child left - make that child the new root
-      LeafNode* new_root = parent_children.begin()->second;
-      new_root->parent = nullptr;
-      root_is_leaf_ = true;
-      leaf_root_ = new_root;
-      deallocate_internal_node(parent);
-    }
+    // Handle parent underflow and potential root reduction
+    handle_parent_after_merge<LeafNode>(parent, parent_children);
 
     // Calculate iterator to next element
     std::optional<iterator> next_iter;
@@ -1743,23 +1733,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // Deallocate right sibling
     deallocate_internal_node(right_sibling);
 
-    // Check if parent underflowed (use hysteresis threshold)
-    const bool parent_is_root = (parent == internal_root_ && !root_is_leaf_);
-    const size_type parent_underflow_threshold =
-        min_internal_size() > internal_hysteresis()
-            ? min_internal_size() - internal_hysteresis()
-            : 0;
-    if (!parent_is_root &&
-        parent_children.size() < parent_underflow_threshold) {
-      // Recursive underflow - discard iterator (internal node)
-      handle_underflow(parent, std::nullopt, false);
-    } else if (parent_is_root && parent_children.size() == 1) {
-      // Root has only one child left - make that child the new root
-      InternalNode* new_root = parent_children.begin()->second;
-      new_root->parent = nullptr;
-      internal_root_ = new_root;
-      deallocate_internal_node(parent);
-    }
+    // Handle parent underflow and potential root reduction
+    handle_parent_after_merge<InternalNode>(parent, parent_children);
 
     // Internal nodes don't track iterators
     return {node, std::nullopt};

@@ -1139,6 +1139,18 @@ class btree {
   NodeType* find_right_sibling(NodeType* node) const;
 
   /**
+   * Handle parent node after a merge operation.
+   * Checks if parent underflowed and handles recursively.
+   * Reduces root height if root has only one child.
+   *
+   * @param parent The parent node that may have underflowed
+   * @param parent_children Reference to parent's children array
+   */
+  template <typename NodeType, typename ChildrenArray>
+  void handle_parent_after_merge(InternalNode* parent,
+                                 ChildrenArray& parent_children);
+
+  /**
    * Minimum number of elements in a non-root leaf node.
    */
   static constexpr size_type min_leaf_size() { return (LeafNodeSize + 1) / 2; }
