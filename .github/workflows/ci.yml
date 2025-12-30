@@ -34,12 +34,13 @@ jobs:
             enable_asan: ON
             enable_avx2: OFF
 
-          # Clang 19 - Release only
+          # Clang 19 - Release only (LTO disabled due to LLVM version mismatch in CI)
           - compiler: clang-19
             cxx_compiler: clang++-19
             build_type: Release
             enable_asan: OFF
             enable_avx2: ON
+            extra_cmake_args: -DENABLE_LTO=OFF
 
     steps:
       - name: Checkout repository
