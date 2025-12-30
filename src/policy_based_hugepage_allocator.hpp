@@ -86,31 +86,6 @@ struct TwoPoolPolicy {
 };
 
 /**
- * Single-pool policy: all types use the same pool.
- *
- * Simpler than TwoPoolPolicy but still allows pool sharing across btrees.
- */
-struct SinglePoolPolicy {
-  std::shared_ptr<HugePagePool> pool_;
-
-  /**
-   * Construct policy with a single shared pool.
-   *
-   * @param pool Pool for all allocations
-   */
-  explicit SinglePoolPolicy(std::shared_ptr<HugePagePool> pool)
-      : pool_(std::move(pool)) {}
-
-  /**
-   * Get the pool for type T (always returns the same pool).
-   */
-  template <typename T>
-  std::shared_ptr<HugePagePool> get_pool_for_type() const {
-    return pool_;
-  }
-};
-
-/**
  * Policy-based allocator using HugePagePool with configurable pool selection.
  *
  * This allocator uses a policy to determine which pool to use for each type,
@@ -141,8 +116,7 @@ struct SinglePoolPolicy {
  * ```
  *
  * @tparam T The type to allocate
- * @tparam PoolPolicy The policy for selecting pools (e.g., TwoPoolPolicy,
- * SinglePoolPolicy)
+ * @tparam PoolPolicy The policy for selecting pools (e.g., TwoPoolPolicy)
  */
 template <typename T, typename PoolPolicy>
 class PolicyBasedHugePageAllocator {
@@ -331,50 +305,6 @@ auto make_two_pool_allocator(std::size_t leaf_pool_size,
   TwoPoolPolicy policy(leaf_pool, internal_pool);
   using ValueType = std::pair<Key, Value>;
   return PolicyBasedHugePageAllocator<ValueType, TwoPoolPolicy>(policy);
-}
-
-/**
- * Factory function to create a single-pool allocator for btrees.
- *
- * This is a convenience function that simplifies the creation of a
- * PolicyBasedHugePageAllocator with SinglePoolPolicy. It creates one pool
- * shared by both leaf and internal nodes.
- *
- * Example usage:
- * ```cpp
- * auto alloc = make_single_pool_allocator<int, std::string>(
- *     1024 * 1024 * 1024,  // pool size (1GB)
- *     true);               // use hugepages
- *
- * btree<int, std::string, 32, 32, std::less<int>, SearchMode::Binary,
- *       MoveMode::Standard, decltype(alloc)> tree(alloc);
- *
- * // Access statistics from pool via get_policy()
- * auto& pool = alloc.get_policy().pool_;
- * std::cout << "Total allocations: " << pool->get_allocations() << "\n";
- * ```
- *
- * @tparam Key The key type for the btree
- * @tparam Value The value type for the btree
- * @param pool_size Size of the pool in bytes
- * @param use_hugepages If true, attempt to use hugepages (default: true)
- * @param growth_size Size of additional pool regions when pool grows (default:
- * 64MB)
- * @param use_numa If true and NUMA available, allocate on local NUMA node
- * (default: false)
- * @return PolicyBasedHugePageAllocator configured with a single pool
- */
-template <typename Key, typename Value>
-auto make_single_pool_allocator(std::size_t pool_size,
-                                bool use_hugepages = true,
-                                std::size_t growth_size = 64 * 1024 * 1024,
-                                bool use_numa = false) {
-  auto pool = std::make_shared<HugePagePool>(pool_size, use_hugepages,
-                                             growth_size, use_numa);
-
-  SinglePoolPolicy policy(pool);
-  using ValueType = std::pair<Key, Value>;
-  return PolicyBasedHugePageAllocator<ValueType, SinglePoolPolicy>(policy);
 }
 
 }  // namespace kressler::fast_containers
