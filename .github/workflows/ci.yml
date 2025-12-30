@@ -34,9 +34,9 @@ jobs:
             enable_asan: ON
             enable_avx2: OFF
 
-          # Clang 18 - Release only
-          - compiler: clang-18
-            cxx_compiler: clang++-18
+          # Clang 19 - Release only
+          - compiler: clang-19
+            cxx_compiler: clang++-19
             build_type: Release
             enable_asan: OFF
             enable_avx2: ON

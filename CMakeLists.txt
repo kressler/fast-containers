@@ -128,6 +128,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         add_compile_options(-funroll-loops)
         add_compile_options(-fno-trapping-math)
         add_compile_options(-flto)
+        add_link_options(-flto)
     elseif(MSVC)
         # MSVC optimizations
         add_compile_options(/O2 /fp:fast)

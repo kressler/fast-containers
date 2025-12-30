@@ -91,7 +91,7 @@
       "description": "Debug build with Clang",
       "inherits": "debug",
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_CXX_COMPILER": "clang++-19"
       }
     },
     {
@@ -100,7 +100,7 @@
       "description": "Release build with Clang",
       "inherits": "release",
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_CXX_COMPILER": "clang++-19"
       }
     }
   ],
