@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
 
 jobs:
   build-and-test:
@@ -21,18 +29,21 @@ jobs:
             build_type: Debug
             enable_asan: OFF
             enable_avx2: OFF
+            enable_lto: ON
 
           - compiler: gcc-14
             cxx_compiler: g++-14
             build_type: Release
             enable_asan: OFF
             enable_avx2: ON
+            enable_lto: ON
 
           - compiler: gcc-14
             cxx_compiler: g++-14
             build_type: Debug
             enable_asan: ON
             enable_avx2: OFF
+            enable_lto: ON
 
           # Clang 19 - Release only (LTO disabled due to LLVM version mismatch in CI)
           - compiler: clang-19
@@ -40,6 +51,7 @@ jobs:
             build_type: Release
             enable_asan: OFF
             enable_avx2: ON
+            enable_lto: OFF
             extra_cmake_args: -DENABLE_LTO=OFF
 
     steps:
@@ -57,7 +69,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party/Catch2
-          key: catch2-${{ hashFiles('.gitmodules') }}
+          key: catch2-${{ matrix.compiler }}-${{ matrix.build_type }}-lto${{ matrix.enable_lto }}-${{ hashFiles('.gitmodules') }}
 
       - name: Configure CMake
         run: |
