@@ -51,6 +51,7 @@ ctest --test-dir build --output-on-failure
 | `ENABLE_AVX2` | `ON` (Release), `OFF` (Debug) | Enable AVX2 SIMD optimizations |
 | `ENABLE_ASAN` | `OFF` | Enable AddressSanitizer |
 | `ENABLE_ALLOCATOR_STATS` | `OFF` | Enable allocator statistics |
+| `ENABLE_LTO` | `ON` | Enable Link-Time Optimization |
 | `ENABLE_NUMA` | Auto-detected | Enable NUMA support (requires libnuma) |
 
 ## Code Formatting
