@@ -976,24 +976,40 @@ class btree {
   LeafNode* find_leaf_for_key(const Key& key) const;
 
   /**
-   * Split a full leaf node and insert a key-value pair.
+   * Common implementation for all insert operations.
+   * Handles leaf finding, key existence check, splitting, and insertion logic.
+   *
+   * @param key Key to insert
+   * @param on_exists Callback when key exists: (LeafNode*, pos) ->
+   * pair<iterator, bool> Can modify existing value (insert_or_assign) or just
+   * return
+   * @param get_value Callback to provide value on-demand: () -> Value
+   *                  Called only when inserting (not when key exists)
+   * @return Pair of iterator to element and bool indicating insertion success
+   */
+  template <typename OnExists, typename GetValue>
+  std::pair<iterator, bool> insert_impl(const Key& key, OnExists&& on_exists,
+                                        GetValue&& get_value);
+
+  /**
+   * Split a full leaf node with on-demand value construction.
    * Creates a new leaf and moves half the elements to it.
+   * Inserts the new key-value pair into the appropriate half.
    *
    * @param leaf The full leaf node to split (size == LeafNodeSize)
    * @param key The key to insert (guaranteed not to exist in tree)
-   * @param value The value to insert
+   * @param get_value Lambda providing value on-demand: () -> Value
+   *                  Only called after determining target leaf
    * @return {iterator to inserted element, true}
    *
    * @pre leaf->data.size() == LeafNodeSize
-   * @pre key does not exist in the tree (checked by insert() before calling)
-   * @post Returns {iterator, true} - second element is always true since
-   *       duplicates are rejected before this function is called
-   *
-   * @note This function is only called from insert() after verifying the key
-   * doesn't exist. The btree enforces unique keys like std::map.
+   * @pre key does not exist in the tree (checked by insert_impl before calling)
+   * @post Returns {iterator, true} - second element is always true
    */
-  std::pair<iterator, bool> split_leaf(LeafNode* leaf, const Key& key,
-                                       const Value& value);
+  template <typename GetValue>
+  std::pair<iterator, bool> split_leaf_and_insert(LeafNode* leaf,
+                                                  const Key& key,
+                                                  GetValue&& get_value);
 
   /**
    * Insert a promoted key and child pointer into a parent node.

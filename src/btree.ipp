@@ -389,36 +389,16 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::insert(const Key& key, const Value& value) {
-  // Find the appropriate leaf for the key (root on first insert)
-  LeafNode* leaf = find_leaf_for_key(key);
-
-  // Use lower_bound to find position - single search for both existence check
-  // and insertion point
-  auto pos = leaf->data.lower_bound(key);
-
-  // Check if key already exists at the position found by lower_bound
-  if (pos != leaf->data.end() && pos->first == key) {
-    return {iterator(leaf, pos), false};
-  }
-
-  // If leaf is full, split it
-  if (leaf->data.size() >= LeafNodeSize) {
-    return split_leaf(leaf, key, value);
-  }
-
-  // Leaf has space - insert using hint to avoid re-searching
-  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, value);
-  if (inserted) {
-    size_++;
-
-    // If we inserted at the beginning and leaf has a parent, update parent key
-    // Iterator comparison avoids expensive key comparison
-    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
-      update_parent_key_recursive(leaf, key);
-    }
-  }
-
-  return {iterator(leaf, leaf_it), inserted};
+  return insert_impl(
+      key,
+      [this](LeafNode* leaf, auto pos) {
+        // Key exists - don't modify, just return
+        return std::pair{iterator(leaf, pos), false};
+      },
+      [&value]() -> const Value& {
+        // Return reference to value (no copy needed)
+        return value;
+      });
 }
 
 // insert(value_type)
@@ -478,40 +458,18 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::try_emplace(const Key& key, Args&&... args) {
-  // Find the appropriate leaf for the key
-  LeafNode* leaf = find_leaf_for_key(key);
-
-  // Use lower_bound to find position - single search for both existence check
-  // and insertion point
-  auto pos = leaf->data.lower_bound(key);
-
-  // CRITICAL: Check if key already exists BEFORE constructing the value
-  // This is the key advantage of try_emplace over emplace
-  if (pos != leaf->data.end() && pos->first == key) {
-    return {iterator(leaf, pos), false};
-  }
-
-  // If leaf is full, we need to split
-  // In this case, we have to construct the value to pass to split_leaf
-  // This is the rare case, so acceptable to construct temp
-  if (leaf->data.size() >= LeafNodeSize) {
-    Value temp_value(std::forward<Args>(args)...);
-    return split_leaf(leaf, key, std::move(temp_value));
-  }
-
-  // Leaf has space - use try_emplace to construct value in-place
-  // This is the common case where we get the performance benefit
-  auto [leaf_it, inserted] = leaf->data.try_emplace(key, std::forward<Args>(args)...);
-  if (inserted) {
-    size_++;
-
-    // If we inserted at the beginning and leaf has a parent, update parent key
-    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
-      update_parent_key_recursive(leaf, key);
-    }
-  }
-
-  return {iterator(leaf, leaf_it), inserted};
+  return insert_impl(
+      key,
+      [this](LeafNode* leaf, auto pos) {
+        // Key exists - CRITICAL: don't construct value, just return
+        return std::pair{iterator(leaf, pos), false};
+      },
+      [&args...]() -> Value {
+        // Construct value on-demand (only if actually inserting)
+        // This preserves try_emplace's optimization - value only constructed
+        // when key doesn't exist (checked before calling this lambda)
+        return Value(std::forward<Args>(args)...);
+      });
 }
 
 // insert_or_assign
@@ -525,38 +483,17 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::insert_or_assign(const Key& key, M&& value) {
-  // Find the appropriate leaf for the key
-  LeafNode* leaf = find_leaf_for_key(key);
-
-  // Use lower_bound to find position - single search for both existence check
-  // and insertion point
-  auto pos = leaf->data.lower_bound(key);
-
-  // Check if key already exists - if so, ASSIGN to it
-  if (pos != leaf->data.end() && pos->first == key) {
-    pos->second = std::forward<M>(value);
-    return {iterator(leaf, pos), false};  // false = assignment, not insertion
-  }
-
-  // Key doesn't exist - insert new element
-  // If leaf is full, we need to split
-  if (leaf->data.size() >= LeafNodeSize) {
-    return split_leaf(leaf, key, std::forward<M>(value));
-  }
-
-  // Leaf has space - use insert_or_assign
-  auto [leaf_it, inserted] =
-      leaf->data.insert_or_assign(key, std::forward<M>(value));
-  if (inserted) {
-    size_++;
-
-    // If we inserted at the beginning and leaf has a parent, update parent key
-    if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
-      update_parent_key_recursive(leaf, key);
-    }
-  }
-
-  return {iterator(leaf, leaf_it), inserted};
+  return insert_impl(
+      key,
+      [this, &value](LeafNode* leaf, auto pos) {
+        // Key exists - ASSIGN the new value (unique behavior)
+        pos->second = std::forward<M>(value);
+        return std::pair{iterator(leaf, pos), false};
+      },
+      [&value]() {
+        // Forward the value for insertion
+        return std::forward<M>(value);
+      });
 }
 
 // operator[]
@@ -889,17 +826,18 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   deallocate_internal_node(node);
 }
 
-// split_leaf
+// split_leaf_and_insert
 template <typename Key, typename Value, std::size_t LeafNodeSize,
           std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
           typename Allocator>
   requires ComparatorCompatible<Key, Compare>
+template <typename GetValue>
 std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, Allocator>::iterator,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-      Allocator>::split_leaf(LeafNode* leaf, const Key& key,
-                             const Value& value) {
+      Allocator>::split_leaf_and_insert(LeafNode* leaf, const Key& key,
+                                        GetValue&& get_value) {
   // Create new leaf for right half
   LeafNode* new_leaf = allocate_leaf_node();
 
@@ -927,12 +865,18 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // Get first key of new leaf for promotion
   const Key& promoted_key = new_leaf->data.begin()->first;
 
-  // Insert the new key-value pair into appropriate leaf
+  // Determine target leaf
   LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
-  auto [leaf_it, inserted] = target_leaf->data.insert(key, value);
 
-  // Key is guaranteed not to exist (checked by insert() before calling split_leaf)
-  assert(inserted && "split_leaf: key should not exist in tree");
+  // Get value on-demand after determining target leaf
+  // This preserves try_emplace's optimization
+  auto value = get_value();
+
+  // Insert the new key-value pair into appropriate leaf
+  auto [leaf_it, inserted] = target_leaf->data.insert(key, std::move(value));
+
+  // Key is guaranteed not to exist (checked by insert_impl before calling)
+  assert(inserted && "split_leaf_and_insert: key should not exist in tree");
 
   size_++;
 
@@ -953,6 +897,52 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   return {iterator(target_leaf, leaf_it), true};
+}
+
+// insert_impl
+template <typename Key, typename Value, std::size_t LeafNodeSize,
+          std::size_t InternalNodeSize, typename Compare, SearchMode SearchModeT,
+          typename Allocator>
+  requires ComparatorCompatible<Key, Compare>
+template <typename OnExists, typename GetValue>
+std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
+                         SearchModeT, Allocator>::iterator,
+          bool>
+btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
+      Allocator>::insert_impl(const Key& key, OnExists&& on_exists,
+                              GetValue&& get_value) {
+  // Find the appropriate leaf for the key
+  LeafNode* leaf = find_leaf_for_key(key);
+
+  // Use lower_bound to find position - single search for both existence check
+  // and insertion point
+  auto pos = leaf->data.lower_bound(key);
+
+  // Check if key already exists - delegate to on_exists callback
+  if (pos != leaf->data.end() && pos->first == key) {
+    return on_exists(leaf, pos);
+  }
+
+  // If leaf is full, split it with on-demand value construction
+  if (leaf->data.size() >= LeafNodeSize) {
+    return split_leaf_and_insert(leaf, key, std::forward<GetValue>(get_value));
+  }
+
+  // Leaf has space - get value on-demand and insert using hint
+  auto value = get_value();
+  auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, std::move(value));
+
+  // Key is guaranteed not to exist (checked above)
+  assert(inserted && "insert_impl: key should not exist");
+
+  size_++;
+
+  // If we inserted at the beginning and leaf has a parent, update parent key
+  if (leaf_it == leaf->data.begin() && leaf->parent != nullptr) {
+    update_parent_key_recursive(leaf, key);
+  }
+
+  return {iterator(leaf, leaf_it), true};
 }
 
 // insert_into_parent
