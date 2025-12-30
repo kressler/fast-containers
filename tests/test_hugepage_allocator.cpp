@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "../btree.hpp"
-#include "../hugepage_allocator.hpp"
+#include <fast_containers/btree.hpp>
+#include <fast_containers/hugepage_allocator.hpp>
 
 using namespace kressler::fast_containers;
 

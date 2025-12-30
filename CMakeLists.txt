@@ -3,6 +3,19 @@ project(fast_containers)
 
 set(CMAKE_CXX_STANDARD 23)
 
+# Create header-only INTERFACE library
+add_library(fast_containers INTERFACE)
+add_library(fast_containers::fast_containers ALIAS fast_containers)
+
+# Specify include directories
+target_include_directories(fast_containers INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+# Require C++23
+target_compile_features(fast_containers INTERFACE cxx_std_23)
+
 # Option to enable AVX2 optimizations
 # Default to ON for Release builds, OFF for Debug (most modern CPUs support AVX2)
 # Users can override with -DENABLE_AVX2=ON/OFF as needed
@@ -20,12 +33,16 @@ if(ENABLE_AVX2)
         else()
             message(STATUS "Building with AVX2 optimizations enabled (explicitly enabled for Debug)")
         endif()
+        # Add to INTERFACE library
+        target_compile_options(fast_containers INTERFACE -mavx2 -mfma)
+        # Also add to tests/binaries
         add_compile_options(-mavx2)
         add_compile_options(-mfma)
         add_compile_options(-march=haswell)  # Haswell or later for AVX2
         add_compile_options(-mtune=native)
     elseif(MSVC)
         message(STATUS "Building with AVX2 optimizations enabled (MSVC)")
+        target_compile_options(fast_containers INTERFACE /arch:AVX2)
         add_compile_options(/arch:AVX2)
     endif()
 else()
@@ -50,6 +67,7 @@ option(ENABLE_ALLOCATOR_STATS "Enable allocator statistics tracking" OFF)
 
 if(ENABLE_ALLOCATOR_STATS)
     message(STATUS "Building with allocator statistics tracking enabled")
+    target_compile_definitions(fast_containers INTERFACE ALLOCATOR_STATS)
     add_compile_definitions(ALLOCATOR_STATS)
 endif()
 
@@ -66,6 +84,11 @@ if(ENABLE_NUMA)
         message(STATUS "Building with NUMA awareness enabled")
         message(STATUS "  libnuma library: ${NUMA_LIBRARY}")
         message(STATUS "  libnuma include: ${NUMA_INCLUDE_DIR}")
+        # Add to INTERFACE library
+        target_compile_definitions(fast_containers INTERFACE HAVE_NUMA)
+        target_include_directories(fast_containers INTERFACE ${NUMA_INCLUDE_DIR})
+        target_link_libraries(fast_containers INTERFACE ${NUMA_LIBRARY})
+        # Also add to tests/binaries
         add_compile_definitions(HAVE_NUMA)
         include_directories(${NUMA_INCLUDE_DIR})
         link_libraries(${NUMA_LIBRARY})
@@ -121,9 +144,9 @@ enable_testing()
 find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format)
 if(CLANG_FORMAT_EXECUTABLE)
     file(GLOB_RECURSE ALL_SOURCE_FILES
-        ${CMAKE_SOURCE_DIR}/src/*.cpp
-        ${CMAKE_SOURCE_DIR}/src/*.hpp
-        ${CMAKE_SOURCE_DIR}/src/*.ipp
+        ${CMAKE_SOURCE_DIR}/include/*.hpp
+        ${CMAKE_SOURCE_DIR}/include/*.ipp
+        ${CMAKE_SOURCE_DIR}/tests/*.cpp
     )
     add_custom_target(
         format
@@ -135,4 +158,7 @@ else()
     message(WARNING "clang-format not found. 'format' target will not be available.")
 endif()
 
-add_subdirectory(src)
+# Only build tests if this is the main project
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    add_subdirectory(tests)
+endif()

@@ -2,7 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "../ordered_array.hpp"
+#include <fast_containers/ordered_array.hpp>
 
 using namespace kressler::fast_containers;
 

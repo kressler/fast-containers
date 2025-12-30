@@ -2,9 +2,9 @@
 #include <string>
 #include <vector>
 
-#include "../btree.hpp"
-#include "../hugepage_pool.hpp"
-#include "../policy_based_hugepage_allocator.hpp"
+#include <fast_containers/btree.hpp>
+#include <fast_containers/hugepage_pool.hpp>
+#include <fast_containers/policy_based_hugepage_allocator.hpp>
 
 using namespace kressler::fast_containers;
 
