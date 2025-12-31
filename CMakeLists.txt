@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 # Create header-only INTERFACE library
 add_library(fast_containers INTERFACE)
-add_library(fast_containers::fast_containers ALIAS fast_containers)
+add_library(kressler::fast_containers ALIAS fast_containers)
 
 # Specify include directories
 target_include_directories(fast_containers INTERFACE
