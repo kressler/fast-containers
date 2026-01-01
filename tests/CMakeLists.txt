@@ -1,9 +1,6 @@
 # Add Catch2 testing framework
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/catch2 ${CMAKE_CURRENT_BINARY_DIR}/catch2)
 
-# Enable testing
-enable_testing()
-
 # Clang-format target
 find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format)
 if(CLANG_FORMAT_EXECUTABLE)
