@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.30)
 project(fast_containers)
 
-set(CMAKE_CXX_STANDARD 23)
-
 # Create header-only INTERFACE library
 add_library(fast_containers INTERFACE)
 add_library(kressler::fast_containers ALIAS fast_containers)
@@ -33,27 +31,16 @@ if(ENABLE_AVX2)
         else()
             message(STATUS "Building with AVX2 optimizations enabled (explicitly enabled for Debug)")
         endif()
-        # Add to INTERFACE library
         target_compile_options(fast_containers INTERFACE -mavx2 -mfma)
-        # Also add to tests/binaries
-        add_compile_options(-mavx2)
-        add_compile_options(-mfma)
-        add_compile_options(-march=haswell)  # Haswell or later for AVX2
-        add_compile_options(-mtune=native)
     elseif(MSVC)
         message(STATUS "Building with AVX2 optimizations enabled (MSVC)")
         target_compile_options(fast_containers INTERFACE /arch:AVX2)
-        add_compile_options(/arch:AVX2)
     endif()
 else()
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        if(CMAKE_BUILD_TYPE STREQUAL "Release")
-            message(STATUS "Building without AVX2 (explicitly disabled)")
-        else()
-            message(STATUS "Building without AVX2 (default for Debug)")
-        endif()
-        add_compile_options(-march=native)
-        add_compile_options(-mtune=native)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        message(STATUS "Building without AVX2 (explicitly disabled)")
+    else()
+        message(STATUS "Building without AVX2 (default for Debug)")
     endif()
 endif()
 
@@ -68,7 +55,6 @@ option(ENABLE_ALLOCATOR_STATS "Enable allocator statistics tracking" OFF)
 if(ENABLE_ALLOCATOR_STATS)
     message(STATUS "Building with allocator statistics tracking enabled")
     target_compile_definitions(fast_containers INTERFACE ALLOCATOR_STATS)
-    add_compile_definitions(ALLOCATOR_STATS)
 endif()
 
 if(ENABLE_ASAN)
