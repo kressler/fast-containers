@@ -1,3 +1,27 @@
+# Option to enable AddressSanitizer (ASAN) for memory error detection
+# Useful for debugging memory issues like buffer overflows, use-after-free, etc.
+option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)
+
+if(ENABLE_ASAN)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Building tests with AddressSanitizer (ASAN) enabled")
+        add_compile_options(-fsanitize=address)
+        add_compile_options(-fno-omit-frame-pointer)
+        add_compile_options(-g)
+        add_link_options(-fsanitize=address)
+
+        # Disable optimizations that interfere with ASAN
+        add_compile_options(-O1)
+        add_compile_options(-fno-optimize-sibling-calls)
+    elseif(MSVC)
+        message(STATUS "Building tests with AddressSanitizer (ASAN) enabled (MSVC)")
+        add_compile_options(/fsanitize=address)
+        add_compile_options(/Zi)
+    else()
+        message(WARNING "AddressSanitizer not supported for this compiler")
+    endif()
+endif()
+
 # Test executables
 add_executable(sample_test sample_test.cpp)
 target_link_libraries(sample_test PRIVATE
