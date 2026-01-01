@@ -1,5 +1,8 @@
-#include <catch2/catch_test_macros.hpp>
+// Copyright (c) 2025 Bryan Kressler
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
+#include <catch2/catch_test_macros.hpp>
 #include <fast_containers/btree.hpp>
 #include <fast_containers/hugepage_allocator.hpp>
 

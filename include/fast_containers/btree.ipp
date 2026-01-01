@@ -1,3 +1,7 @@
+// Copyright (c) 2025 Bryan Kressler
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
 // Implementation file for btree.hpp
 // This file contains all method implementations for the btree class.
 

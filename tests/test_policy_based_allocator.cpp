@@ -1,10 +1,13 @@
-#include <catch2/catch_test_macros.hpp>
-#include <string>
-#include <vector>
+// Copyright (c) 2025 Bryan Kressler
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
+#include <catch2/catch_test_macros.hpp>
 #include <fast_containers/btree.hpp>
 #include <fast_containers/hugepage_pool.hpp>
 #include <fast_containers/policy_based_hugepage_allocator.hpp>
+#include <string>
+#include <vector>
 
 using namespace kressler::fast_containers;
 

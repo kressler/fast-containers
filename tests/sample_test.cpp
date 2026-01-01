@@ -1,3 +1,7 @@
+// Copyright (c) 2025 Bryan Kressler
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("Sample test to verify Catch2 is working", "[sample]") {

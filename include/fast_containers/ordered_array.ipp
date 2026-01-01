@@ -1,3 +1,7 @@
+// Copyright (c) 2025 Bryan Kressler
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
 // ordered_array.ipp - Implementation details for ordered_array
 // This file is included at the end of ordered_array.hpp
 // DO NOT include this file directly
