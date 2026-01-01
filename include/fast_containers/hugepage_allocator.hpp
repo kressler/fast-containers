@@ -177,37 +177,41 @@ class HugePageAllocator {
    */
   size_type bytes_remaining() const { return pool_->bytes_remaining(); }
 
-#ifdef ALLOCATOR_STATS
   /**
-   * Get total number of allocations (compile-time optional).
+   * Get total number of allocations.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_allocations() const { return pool_->get_allocations(); }
 
   /**
-   * Get total number of deallocations (compile-time optional).
+   * Get total number of deallocations.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_deallocations() const { return pool_->get_deallocations(); }
 
   /**
-   * Get number of pool growth events (compile-time optional).
+   * Get number of pool growth events.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_growth_events() const { return pool_->get_growth_events(); }
 
   /**
-   * Get lifetime total bytes allocated (compile-time optional).
+   * Get lifetime total bytes allocated.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_bytes_allocated() const { return pool_->get_bytes_allocated(); }
 
   /**
-   * Get current bytes in use (compile-time optional).
+   * Get current bytes in use.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_current_usage() const { return pool_->get_current_usage(); }
 
   /**
-   * Get peak bytes in use (compile-time optional).
+   * Get peak bytes in use.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_peak_usage() const { return pool_->get_peak_usage(); }
-#endif
 
  private:
   std::shared_ptr<HugePagePool> pool_;

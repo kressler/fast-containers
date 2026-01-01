@@ -12,6 +12,13 @@
 
 namespace kressler::fast_containers {
 
+// Compile-time flag for statistics tracking
+#ifdef ALLOCATOR_STATS
+inline constexpr bool allocator_stats_enabled = true;
+#else
+inline constexpr bool allocator_stats_enabled = false;
+#endif
+
 /**
  * Type-erased memory pool using explicit hugepages (2MB pages on Linux
  * x86-64).
@@ -24,7 +31,7 @@ namespace kressler::fast_containers {
  * - Reduced TLB misses (2MB pages vs 4KB pages)
  * - Cache-line aligned allocations (handled by caller)
  * - Dynamic growth: pools expand automatically as needed
- * - Optional statistics tracking
+ * - Optional statistics tracking (define ALLOCATOR_STATS at compile time)
  * - NUMA locality via first-touch: create allocator on desired NUMA node
  *
  * Requirements:
@@ -50,10 +57,9 @@ class HugePagePool {
     size_type size = 0;
   };
 
-#ifdef ALLOCATOR_STATS
   /**
-   * Statistics tracked by the pool (compile-time optional).
-   * Enable by defining ALLOCATOR_STATS at compile time.
+   * Statistics tracked by the pool.
+   * Only populated when allocator_stats_enabled is true.
    *
    * Note: Not thread-safe (consistent with rest of pool).
    */
@@ -66,22 +72,29 @@ class HugePagePool {
     size_type peak_usage{0};       // Peak bytes in use
 
     void record_allocation(size_type bytes) {
-      ++allocations;
-      bytes_allocated += bytes;
-      current_usage += bytes;
-      if (current_usage > peak_usage) {
-        peak_usage = current_usage;
+      if constexpr (allocator_stats_enabled) {
+        ++allocations;
+        bytes_allocated += bytes;
+        current_usage += bytes;
+        if (current_usage > peak_usage) {
+          peak_usage = current_usage;
+        }
       }
     }
 
     void record_deallocation(size_type bytes) {
-      ++deallocations;
-      current_usage -= bytes;
+      if constexpr (allocator_stats_enabled) {
+        ++deallocations;
+        current_usage -= bytes;
+      }
     }
 
-    void record_growth() { ++growth_events; }
+    void record_growth() {
+      if constexpr (allocator_stats_enabled) {
+        ++growth_events;
+      }
+    }
   };
-#endif
 
   std::vector<MemoryRegion> regions_;
   std::byte* next_free_;
@@ -90,10 +103,7 @@ class HugePagePool {
   size_type growth_size_;
   bool using_hugepages_;
   void* free_list_head_;  // Head of intrusive free list
-
-#ifdef ALLOCATOR_STATS
   Stats stats_;
-#endif
 
  public:
   /**
@@ -167,9 +177,7 @@ class HugePagePool {
       void* ptr = free_list_head_;
       free_list_head_ = *reinterpret_cast<void**>(ptr);
 
-#ifdef ALLOCATOR_STATS
       stats_.record_allocation(bytes);
-#endif
 
       return ptr;
     }
@@ -196,9 +204,7 @@ class HugePagePool {
     next_free_ += bytes;
     bytes_remaining_ -= (bytes + padding);
 
-#ifdef ALLOCATOR_STATS
     stats_.record_allocation(bytes);
-#endif
 
     return result;
   }
@@ -217,9 +223,7 @@ class HugePagePool {
     *reinterpret_cast<void**>(ptr) = free_list_head_;
     free_list_head_ = ptr;
 
-#ifdef ALLOCATOR_STATS
     stats_.record_deallocation(bytes);
-#endif
   }
 
   /**
@@ -247,37 +251,41 @@ class HugePagePool {
    */
   bool is_hugepages_enabled() const { return using_hugepages_; }
 
-#ifdef ALLOCATOR_STATS
   /**
-   * Get total number of allocations (compile-time optional).
+   * Get total number of allocations.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_allocations() const { return stats_.allocations; }
 
   /**
-   * Get total number of deallocations (compile-time optional).
+   * Get total number of deallocations.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_deallocations() const { return stats_.deallocations; }
 
   /**
-   * Get number of pool growth events (compile-time optional).
+   * Get number of pool growth events.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_growth_events() const { return stats_.growth_events; }
 
   /**
-   * Get lifetime total bytes allocated (compile-time optional).
+   * Get lifetime total bytes allocated.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_bytes_allocated() const { return stats_.bytes_allocated; }
 
   /**
-   * Get current bytes in use (compile-time optional).
+   * Get current bytes in use.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_current_usage() const { return stats_.current_usage; }
 
   /**
-   * Get peak bytes in use (compile-time optional).
+   * Get peak bytes in use.
+   * Only tracked when ALLOCATOR_STATS is defined.
    */
   size_type get_peak_usage() const { return stats_.peak_usage; }
-#endif
 
  private:
   /**
@@ -301,9 +309,7 @@ class HugePagePool {
     next_free_ = new_region.base;
     bytes_remaining_ = new_region.size;
 
-#ifdef ALLOCATOR_STATS
     stats_.record_growth();
-#endif
   }
 
   MemoryRegion allocate_hugepages_region(size_type size) {
