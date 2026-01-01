@@ -65,10 +65,6 @@ option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)
 # Tracks allocation counts, growth events, peak usage, etc.
 option(ENABLE_ALLOCATOR_STATS "Enable allocator statistics tracking" OFF)
 
-# Option to enable Link-Time Optimization (LTO)
-# May be disabled to work around toolchain incompatibilities
-option(ENABLE_LTO "Enable Link-Time Optimization" ON)
-
 if(ENABLE_ALLOCATOR_STATS)
     message(STATUS "Building with allocator statistics tracking enabled")
     target_compile_definitions(fast_containers INTERFACE ALLOCATOR_STATS)
@@ -92,29 +88,6 @@ if(ENABLE_ASAN)
         add_compile_options(/Zi)
     else()
         message(WARNING "AddressSanitizer not supported for this compiler")
-    endif()
-endif()
-
-# Set aggressive optimization flags for Release builds only
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        # Aggressive optimizations
-        add_compile_options(-O3)
-        add_compile_options(-ffast-math)
-        add_compile_options(-funroll-loops)
-        add_compile_options(-fno-trapping-math)
-
-        # Link-Time Optimization (conditionally enabled)
-        if(ENABLE_LTO)
-            message(STATUS "Building with Link-Time Optimization (LTO) enabled")
-            add_compile_options(-flto)
-            add_link_options(-flto)
-        else()
-            message(STATUS "Building without LTO (disabled)")
-        endif()
-    elseif(MSVC)
-        # MSVC optimizations
-        add_compile_options(/O2 /fp:fast)
     endif()
 endif()
 
