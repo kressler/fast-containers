@@ -1,3 +1,27 @@
+# Add Catch2 testing framework
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/catch2 ${CMAKE_CURRENT_BINARY_DIR}/catch2)
+
+# Enable testing
+enable_testing()
+
+# Clang-format target
+find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format)
+if(CLANG_FORMAT_EXECUTABLE)
+    file(GLOB_RECURSE ALL_SOURCE_FILES
+        ${CMAKE_SOURCE_DIR}/include/*.hpp
+        ${CMAKE_SOURCE_DIR}/include/*.ipp
+        ${CMAKE_SOURCE_DIR}/tests/*.cpp
+    )
+    add_custom_target(
+        format
+        COMMAND ${CLANG_FORMAT_EXECUTABLE} -i ${ALL_SOURCE_FILES}
+        COMMENT "Running clang-format on all C++ source files"
+        VERBATIM
+    )
+else()
+    message(WARNING "clang-format not found. 'format' target will not be available.")
+endif()
+
 # Option to enable AddressSanitizer (ASAN) for memory error detection
 # Useful for debugging memory issues like buffer overflows, use-after-free, etc.
 option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)
