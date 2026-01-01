@@ -289,8 +289,6 @@ class PolicyBasedHugePageAllocator {
  * (default: 64MB)
  * @param internal_growth_size Size of additional internal pool regions when
  * pool grows (default: 64MB)
- * @param use_numa If true and NUMA available, allocate on local NUMA node
- * (default: false)
  * @return PolicyBasedHugePageAllocator configured with two pools
  */
 template <typename Key, typename Value>
@@ -299,12 +297,11 @@ auto make_two_pool_allocator(std::size_t leaf_pool_size,
                              bool use_hugepages = true,
                              std::size_t leaf_growth_size = 64 * 1024 * 1024,
                              std::size_t internal_growth_size = 64 * 1024 *
-                                                                1024,
-                             bool use_numa = false) {
+                                                                1024) {
   auto leaf_pool = std::make_shared<HugePagePool>(leaf_pool_size, use_hugepages,
-                                                  leaf_growth_size, use_numa);
+                                                  leaf_growth_size);
   auto internal_pool = std::make_shared<HugePagePool>(
-      internal_pool_size, use_hugepages, internal_growth_size, use_numa);
+      internal_pool_size, use_hugepages, internal_growth_size);
 
   TwoPoolPolicy policy(leaf_pool, internal_pool);
   using ValueType = std::pair<Key, Value>;

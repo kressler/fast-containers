@@ -10,11 +10,6 @@
 #include <stdexcept>
 #include <vector>
 
-#ifdef HAVE_NUMA
-#include <numa.h>
-#include <numaif.h>
-#endif
-
 namespace kressler::fast_containers {
 
 /**
@@ -29,19 +24,19 @@ namespace kressler::fast_containers {
  * - Reduced TLB misses (2MB pages vs 4KB pages)
  * - Cache-line aligned allocations (handled by caller)
  * - Dynamic growth: pools expand automatically as needed
- * - Optional NUMA awareness (allocate on local NUMA node)
  * - Optional statistics tracking
+ * - NUMA locality via first-touch: create allocator on desired NUMA node
  *
  * Requirements:
  * - Explicit hugepages must be configured on the system:
  *   sudo sysctl -w vm.nr_hugepages=<num_pages>
  * - Falls back to regular pages if hugepages unavailable
- * - For NUMA: requires libnuma library (compile with -DENABLE_NUMA=ON)
  *
  * Implementation notes:
  * - Not thread-safe (add locking if needed for concurrent use)
  * - Intrusive free list: freed blocks store next pointer in-place
  * - Requires allocated size >= sizeof(void*) for free list
+ * - Memory is allocated on NUMA node via first-touch policy during pre-faulting
  */
 class HugePagePool {
  public:
@@ -94,12 +89,7 @@ class HugePagePool {
   size_type initial_size_;
   size_type growth_size_;
   bool using_hugepages_;
-  bool using_numa_;
   void* free_list_head_;  // Head of intrusive free list
-
-#ifdef HAVE_NUMA
-  int numa_node_;  // Current NUMA node (-1 if NUMA not available)
-#endif
 
 #ifdef ALLOCATOR_STATS
   Stats stats_;
@@ -109,38 +99,24 @@ class HugePagePool {
   /**
    * Construct pool with specified configuration.
    *
+   * Memory will be allocated on the NUMA node where this constructor runs
+   * (via first-touch policy during pre-faulting).
+   *
    * @param initial_size Initial size of memory pool in bytes (default 256MB)
    * @param use_hugepages If true, attempt to use hugepages; otherwise use
    * regular pages (default true)
    * @param growth_size Size of additional regions when pool grows (default
    * 64MB)
-   * @param use_numa If true and NUMA available, allocate on local NUMA node
-   * (default false)
    */
   explicit HugePagePool(size_type initial_size = 256 * 1024 * 1024,
                         bool use_hugepages = true,
-                        size_type growth_size = 64 * 1024 * 1024,
-                        bool use_numa = false)
+                        size_type growth_size = 64 * 1024 * 1024)
       : bytes_remaining_(0),
         initial_size_(initial_size),
         growth_size_(growth_size),
         using_hugepages_(false),
-        using_numa_(false),
         next_free_(nullptr),
-        free_list_head_(nullptr)
-#ifdef HAVE_NUMA
-        ,
-        numa_node_(-1)
-#endif
-  {
-#ifdef HAVE_NUMA
-    // Check if NUMA is available and requested
-    if (use_numa && numa_available() != -1) {
-      numa_node_ = numa_node_of_cpu(sched_getcpu());
-      using_numa_ = true;
-    }
-#endif
-
+        free_list_head_(nullptr) {
     // Allocate initial region
     MemoryRegion initial_region;
 
@@ -252,17 +228,6 @@ class HugePagePool {
   bool using_hugepages() const { return using_hugepages_; }
 
   /**
-   * Check if pool is using NUMA-aware allocations.
-   */
-  bool using_numa() const {
-#ifdef HAVE_NUMA
-    return using_numa_;
-#else
-    return false;
-#endif
-  }
-
-  /**
    * Get remaining bytes in pool.
    */
   size_type bytes_remaining() const { return bytes_remaining_; }
@@ -281,11 +246,6 @@ class HugePagePool {
    * Check if pool is configured to use hugepages.
    */
   bool is_hugepages_enabled() const { return using_hugepages_; }
-
-  /**
-   * Check if pool is configured to use NUMA.
-   */
-  bool is_numa_enabled() const { return using_numa_; }
 
 #ifdef ALLOCATOR_STATS
   /**
@@ -357,19 +317,12 @@ class HugePagePool {
       return {nullptr, 0};  // Hugepages not available
     }
 
-#ifdef HAVE_NUMA
-    // Bind memory to NUMA node if NUMA is enabled
-    if (using_numa_ && numa_node_ >= 0) {
-      unsigned long nodemask = 1UL << numa_node_;
-      mbind(ptr, aligned_size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
-            MPOL_MF_STRICT | MPOL_MF_MOVE);
-    }
-#endif
-
     // Advise kernel about access pattern
     madvise(ptr, aligned_size, MADV_NORMAL);
 
     // Pre-fault pages to ensure hugepages are allocated now
+    // This is where first-touch NUMA policy applies - pages will be allocated
+    // on the NUMA node where this code runs
     for (size_type i = 0; i < aligned_size; i += HUGEPAGE_SIZE) {
       static_cast<volatile char*>(ptr)[i] = 0;
     }
@@ -384,15 +337,6 @@ class HugePagePool {
     if (ptr == MAP_FAILED) {
       throw std::bad_alloc();
     }
-
-#ifdef HAVE_NUMA
-    // Bind memory to NUMA node if NUMA is enabled
-    if (using_numa_ && numa_node_ >= 0) {
-      unsigned long nodemask = 1UL << numa_node_;
-      mbind(ptr, size, MPOL_BIND, &nodemask, sizeof(nodemask) * 8,
-            MPOL_MF_STRICT | MPOL_MF_MOVE);
-    }
-#endif
 
     // Hint to use transparent hugepages if available
     madvise(ptr, size, MADV_HUGEPAGE);

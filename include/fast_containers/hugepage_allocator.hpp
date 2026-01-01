@@ -25,13 +25,12 @@ namespace kressler::fast_containers {
  * - Cache-line aligned allocations (64-byte boundaries)
  * - Separate pools per type (via rebind mechanism)
  * - Dynamic growth: pools expand automatically as needed
- * - Optional NUMA awareness (allocate on local NUMA node)
+ * - NUMA locality via first-touch: create allocator on desired NUMA node
  *
  * Requirements:
  * - Explicit hugepages must be configured on the system:
  *   sudo sysctl -w vm.nr_hugepages=<num_pages>
  * - Falls back to regular pages if hugepages unavailable
- * - For NUMA: requires libnuma library (compile with -DENABLE_NUMA=ON)
  *
  * Implementation notes:
  * - Each instantiation (via rebind) creates a separate pool
@@ -40,8 +39,8 @@ namespace kressler::fast_containers {
  * - Uses intrusive free list (freed blocks store next pointer in-place)
  * - Requires sizeof(T) >= sizeof(void*) for intrusive free list
  * - Optional statistics tracking (define ALLOCATOR_STATS at compile time)
- * - Optional NUMA awareness (define HAVE_NUMA at compile time)
  * - Not thread-safe (add locking if needed for concurrent use)
+ * - Memory allocated on NUMA node via first-touch policy during pre-faulting
  *
  * @tparam T The type to allocate
  */
@@ -80,21 +79,21 @@ class HugePageAllocator {
   /**
    * Construct allocator with specified pool size.
    *
+   * Memory will be allocated on the NUMA node where this constructor runs
+   * (via first-touch policy during pre-faulting).
+   *
    * @param initial_pool_size Initial size of memory pool in bytes (default
    * 256MB)
    * @param use_hugepages If true, attempt to use hugepages; otherwise use
    * regular pages (default true)
    * @param growth_size Size of additional regions when pool grows (default
    * 64MB)
-   * @param use_numa If true and NUMA available, allocate on local NUMA node
-   * (default false)
    */
   explicit HugePageAllocator(size_type initial_pool_size = 256 * 1024 * 1024,
                              bool use_hugepages = true,
-                             size_type growth_size = 64 * 1024 * 1024,
-                             bool use_numa = false)
+                             size_type growth_size = 64 * 1024 * 1024)
       : pool_(std::make_shared<HugePagePool>(initial_pool_size, use_hugepages,
-                                             growth_size, use_numa)) {}
+                                             growth_size)) {}
 
   /**
    * Copy constructor (shares pool with other allocator).
@@ -110,7 +109,7 @@ class HugePageAllocator {
   explicit HugePageAllocator(const HugePageAllocator<U>& other)
       : pool_(std::make_shared<HugePagePool>(
             other.pool_->initial_size(), other.pool_->is_hugepages_enabled(),
-            other.pool_->growth_size(), other.pool_->is_numa_enabled())) {}
+            other.pool_->growth_size())) {}
 
   /**
    * Allocate n objects of type T.
@@ -172,11 +171,6 @@ class HugePageAllocator {
    * Check if allocator is using hugepages.
    */
   bool using_hugepages() const { return pool_->using_hugepages(); }
-
-  /**
-   * Check if allocator is using NUMA-aware allocations.
-   */
-  bool using_numa() const { return pool_->using_numa(); }
 
   /**
    * Get remaining bytes in pool.

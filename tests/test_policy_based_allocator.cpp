@@ -350,8 +350,7 @@ TEST_CASE("make_two_pool_allocator factory function", "[policy][factory]") {
         512 * 1024,   // internal pool size
         false,        // no hugepages
         128 * 1024,   // leaf growth size
-        64 * 1024,    // internal growth size
-        false);       // no NUMA
+        64 * 1024);   // internal growth size
 
     auto* p = alloc.allocate(1);
     REQUIRE(p != nullptr);
