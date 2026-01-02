@@ -13,7 +13,6 @@ Checks: >
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -modernize-use-trailing-return-type,
-  -performance-enum-size,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
   -readability-magic-numbers

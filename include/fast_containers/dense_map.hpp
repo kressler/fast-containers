@@ -23,7 +23,7 @@
 namespace kressler::fast_containers {
 
 // Enum to control search strategy
-enum class SearchMode {
+enum class SearchMode : std::uint8_t {
   Binary,  // Binary search using std::lower_bound (O(log n))
   Linear,  // Linear search for small arrays (better cache behavior)
   SIMD     // SIMD-accelerated linear search for small arrays
