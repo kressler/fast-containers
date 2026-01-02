@@ -55,7 +55,7 @@ inline constexpr bool has_children_are_leaves_v =
  * - Better cache locality: similar node types allocated together
  * - Pool sharing: multiple btrees can share the same pools
  */
-struct TwoPoolPolicy {
+struct TwoPoolPolicy {  // NOLINT(readability-identifier-naming)
   std::shared_ptr<HugePagePool> leaf_pool_;
   std::shared_ptr<HugePagePool> internal_pool_;
 
@@ -77,7 +77,7 @@ struct TwoPoolPolicy {
    * - Otherwise → leaf_pool (default)
    */
   template <typename T>
-  std::shared_ptr<HugePagePool> get_pool_for_type() const {
+  [[nodiscard]] std::shared_ptr<HugePagePool> get_pool_for_type() const {
     if constexpr (has_next_leaf_v<T>) {
       return leaf_pool_;
     } else if constexpr (has_children_are_leaves_v<T>) {
@@ -123,6 +123,7 @@ struct TwoPoolPolicy {
  * @tparam PoolPolicy The policy for selecting pools (e.g., TwoPoolPolicy)
  */
 template <typename T, typename PoolPolicy>
+// NOLINTNEXTLINE(readability-identifier-naming,cppcoreguidelines-special-member-functions)
 class PolicyBasedHugePageAllocator {
  public:
   using value_type = T;
@@ -165,6 +166,17 @@ class PolicyBasedHugePageAllocator {
       default;
 
   /**
+   * Copy assignment operator.
+   */
+  PolicyBasedHugePageAllocator& operator=(
+      const PolicyBasedHugePageAllocator& other) = default;
+
+  /**
+   * Destructor.
+   */
+  ~PolicyBasedHugePageAllocator() = default;
+
+  /**
    * Rebind constructor (shares policy across different types).
    * This allows LeafNode and InternalNode allocators to share the same policy
    * (and thus the pools selected by that policy).
@@ -183,8 +195,9 @@ class PolicyBasedHugePageAllocator {
    * @throws std::bad_alloc if unable to allocate
    */
   T* allocate(size_type n) {
-    if (n == 0)
+    if (n == 0) {
       return nullptr;
+    }
 
     if (n != 1) {
       throw std::invalid_argument(
@@ -208,8 +221,9 @@ class PolicyBasedHugePageAllocator {
    * @param n Number of objects (must be 1)
    */
   void deallocate(T* p, size_type n) {
-    if (p == nullptr || n == 0)
+    if (p == nullptr || n == 0) {
       return;
+    }
 
     if (n != 1) {
       throw std::invalid_argument(
@@ -246,10 +260,10 @@ class PolicyBasedHugePageAllocator {
   /**
    * Get the policy (for accessing pools directly).
    */
-  const PoolPolicy& get_policy() const { return policy_; }
+  [[nodiscard]] const PoolPolicy& get_policy() const { return policy_; }
 
  private:
-  const PoolPolicy policy_;
+  const PoolPolicy policy_;  // NOLINT(readability-identifier-naming)
 
   // Allow rebind to access policy_
   template <typename, typename>
@@ -295,8 +309,8 @@ template <typename Key, typename Value>
 auto make_two_pool_allocator(std::size_t leaf_pool_size,
                              std::size_t internal_pool_size,
                              bool use_hugepages = true,
-                             std::size_t leaf_growth_size = 64 * 1024 * 1024,
-                             std::size_t internal_growth_size = 64 * 1024 *
+                             std::size_t leaf_growth_size = 64UL * 1024 * 1024,
+                             std::size_t internal_growth_size = 64UL * 1024 *
                                                                 1024) {
   auto leaf_pool = std::make_shared<HugePagePool>(leaf_pool_size, use_hugepages,
                                                   leaf_growth_size);
