@@ -249,7 +249,7 @@ class PolicyBasedHugePageAllocator {
   const PoolPolicy& get_policy() const { return policy_; }
 
  private:
-  PoolPolicy policy_;
+  const PoolPolicy policy_;
 
   // Allow rebind to access policy_
   template <typename, typename>

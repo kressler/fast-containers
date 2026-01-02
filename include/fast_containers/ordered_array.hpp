@@ -86,7 +86,8 @@ class ordered_array {
   template <bool IsConst>
   class ordered_array_iterator;
 
-  // Allow different instantiations to access each other's private members
+  // Allow different instantiations to access each other's private members.
+  // Primarily useful for arrays with differing search modes or sizes.
   template <typename K, typename V, std::size_t L, typename C, SearchMode SM>
     requires ComparatorCompatible<K, C>
   friend class ordered_array;

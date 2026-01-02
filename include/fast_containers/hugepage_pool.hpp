@@ -99,8 +99,8 @@ class HugePagePool {
   std::vector<MemoryRegion> regions_;
   std::byte* next_free_;
   size_type bytes_remaining_;
-  size_type initial_size_;
-  size_type growth_size_;
+  const size_type initial_size_;
+  const size_type growth_size_;
   bool using_hugepages_;
   void* free_list_head_;  // Head of intrusive free list
   Stats stats_;
