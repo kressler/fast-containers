@@ -76,6 +76,7 @@ class HugePagePool {  // NOLINT(readability-identifier-naming)
         ++allocations;
         bytes_allocated += bytes;
         current_usage += bytes;
+        // NOLINTNEXTLINE(readability-use-std-min-max)
         if (current_usage > peak_usage) {
           peak_usage = current_usage;
         }
@@ -182,8 +183,10 @@ class HugePagePool {  // NOLINT(readability-identifier-naming)
 
     // Allocate from pool
     // Align next_free to requested boundary
+    // NOLINTNEXTLINE(modernize-use-auto)
     uintptr_t current = reinterpret_cast<uintptr_t>(next_free_);
     uintptr_t aligned =
+        // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
         (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
     size_type padding = aligned - current;
 
@@ -193,10 +196,12 @@ class HugePagePool {  // NOLINT(readability-identifier-naming)
       // After growth, recalculate alignment from new next_free_
       current = reinterpret_cast<uintptr_t>(next_free_);
       aligned =
+          // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
           (current + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
       padding = aligned - current;
     }
 
+    // NOLINTNEXTLINE(performance-no-int-to-ptr)
     next_free_ = reinterpret_cast<std::byte*>(aligned);
     void* result = next_free_;
     next_free_ += bytes;
@@ -319,6 +324,7 @@ class HugePagePool {  // NOLINT(readability-identifier-naming)
     stats_.record_growth();
   }
 
+  // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
   memory_region allocate_hugepages_region(size_type size) {
     // Round up to hugepage boundary
     size_type aligned_size = (size + hugepage_size - 1) & ~(hugepage_size - 1);
@@ -343,6 +349,7 @@ class HugePagePool {  // NOLINT(readability-identifier-naming)
     return {.base = static_cast<std::byte*>(ptr), .size = aligned_size};
   }
 
+  // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
   memory_region allocate_regular_region(size_type size) {
     void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
