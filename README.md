@@ -54,30 +54,44 @@ ctest --test-dir build --output-on-failure
 | `ENABLE_LTO` | `ON` | Enable Link-Time Optimization |
 | `ENABLE_NUMA` | Auto-detected | Enable NUMA support (requires libnuma) |
 
-## Code Formatting
+## Code Quality
 
-This project uses clang-format with Google C++ Style Guide conventions.
+This project uses clang-format for code formatting and clang-tidy for static analysis.
 
-### Format All Files
+### Code Formatting
 
+Format all files:
 ```bash
 cmake --build build --target format
 ```
 
-### Pre-commit Hook (Automatic Formatting)
+### Static Analysis
 
-To automatically format C++ files before each commit, install the pre-commit hook:
-
+Run clang-tidy on production headers:
 ```bash
-./install-hooks.sh
+clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/*.hpp
 ```
 
-This will:
-- Automatically format all staged C++ files (.cpp, .hpp) with clang-format
-- Re-stage formatted files
-- Continue with the commit
+### Pre-commit Hook (Automatic Formatting & Checks)
 
-**Requirements**: clang-format must be installed on your system
+To automatically format and check C++ files before each commit:
+
+```bash
+./setup-dev.sh  # One-time setup (recommended)
+# OR
+./install-hooks.sh  # Just install hooks
+```
+
+The pre-commit hook will:
+- Automatically format all staged C++ files with clang-format
+- Check production headers with clang-tidy (production code only)
+- Fail the commit if clang-tidy finds warnings
+- Re-stage formatted files
+
+**Requirements**:
+- clang-format (for formatting)
+- clang-tidy-19 (for static analysis)
+- cmake-build-clang-tidy/ directory (created by `setup-dev.sh`)
 
 **Bypass hook** (when needed):
 ```bash
@@ -104,17 +118,37 @@ git commit --no-verify
 1. Clone the repository with submodules:
    ```bash
    git clone --recursive https://github.com/kressler/fast-containers.git
+   cd fast-containers
    ```
-2. Install the pre-commit hook: `./install-hooks.sh`
+
+2. Set up development environment (one-time):
+   ```bash
+   ./setup-dev.sh
+   ```
+   This installs pre-commit hooks and configures clang-tidy.
+
 3. Make your changes
-4. Build and test: `cmake --build build && ctest --test-dir build`
-5. Commit (files will be auto-formatted)
+
+4. Build and test:
+   ```bash
+   cmake --build build && ctest --test-dir build
+   ```
+
+5. Commit (files will be auto-formatted and checked):
+   ```bash
+   git add .
+   git commit -m "Your changes"
+   # Pre-commit hook runs automatically:
+   #  ✅ Formats code with clang-format
+   #  ✅ Checks production headers with clang-tidy
+   ```
 
 ## Code Conventions
 
 - Follow Google C++ Style Guide (enforced by clang-format)
 - Use C++23 features
 - Write tests for new functionality using Catch2
+- Production code must be clang-tidy clean (enforced in CI and pre-commit)
 - Run `cmake --build build --target format` before submitting PRs
 
 ## License
