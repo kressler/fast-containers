@@ -1,3 +1,18 @@
 [submodule "third_party/catch2"]
 	path = third_party/catch2
 	url = https://github.com/catchorg/Catch2.git
+[submodule "third_party/benchmark"]
+	path = third_party/benchmark
+	url = https://github.com/google/benchmark.git
+[submodule "third_party/abseil-cpp"]
+	path = third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
+[submodule "third_party/lyra"]
+	path = third_party/lyra
+	url = https://github.com/bfgroup/Lyra.git
+[submodule "third_party/unordered_dense"]
+	path = third_party/unordered_dense
+	url = https://github.com/martinus/unordered_dense.git
+[submodule "third_party/histograms"]
+	path = third_party/histograms
+	url = https://github.com/kressler/histograms.git
