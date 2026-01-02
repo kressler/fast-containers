@@ -67,13 +67,6 @@ elseif(MSVC)
 endif()
 
 # Test executables
-add_executable(sample_test sample_test.cpp)
-target_link_libraries(sample_test PRIVATE
-  Catch2::Catch2WithMain
-  kressler::fast_containers
-)
-add_test(NAME sample_test COMMAND sample_test)
-
 add_executable(test_dense_map test_dense_map.cpp)
 target_link_libraries(test_dense_map PRIVATE
   Catch2::Catch2WithMain
