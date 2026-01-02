@@ -15,6 +15,41 @@ on:
       - '.gitignore'
 
 jobs:
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy-19
+
+      - name: Configure CMake for clang-tidy
+        run: |
+          cmake -S . -B cmake-build-clang-tidy \
+            -DCMAKE_CXX_COMPILER=clang++-19 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Run clang-tidy on production headers
+        run: |
+          echo "Running clang-tidy on production code..."
+          clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/*.hpp
+
+          # Check exit code
+          if [ $? -ne 0 ]; then
+            echo "❌ clang-tidy found warnings in production code"
+            exit 1
+          fi
+
+          echo "✅ No clang-tidy warnings found"
+
   build-and-test:
     name: ${{ matrix.compiler }} - ${{ matrix.build_type }}
     runs-on: ubuntu-24.04

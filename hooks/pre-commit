@@ -1,13 +1,14 @@
 #!/bin/bash
 #
 # Pre-commit hook that automatically formats C++ files with clang-format
-# before committing them.
+# and checks production code with clang-tidy before committing.
 #
 # This hook:
 # 1. Finds all staged C++ files (.cpp, .hpp, .ipp)
 # 2. Runs clang-format on them
 # 3. Re-stages any files that were modified
-# 4. Continues with the commit
+# 4. Runs clang-tidy on staged production headers
+# 5. Continues with the commit (or fails if clang-tidy finds issues)
 
 # Check if clang-format is available
 if ! command -v clang-format &> /dev/null; then
@@ -40,6 +41,65 @@ done
 
 if [ $FILES_FORMATTED -gt 0 ]; then
     echo "Formatted $FILES_FORMATTED C++ file(s)"
+fi
+
+# Run clang-tidy on staged production headers
+# Only check files in include/fast_containers/ to avoid test files
+STAGED_HEADERS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^include/fast_containers/.*\.(hpp|ipp)$')
+
+if [ -n "$STAGED_HEADERS" ]; then
+    # Check if clang-tidy is available
+    if ! command -v clang-tidy-19 &> /dev/null; then
+        echo "Warning: clang-tidy-19 not found. Skipping clang-tidy checks."
+        echo "Install clang-tidy-19 to enable static analysis in pre-commit."
+        exit 0
+    fi
+
+    # Check if compile_commands.json exists, create if missing
+    if [ ! -f "cmake-build-clang-tidy/compile_commands.json" ]; then
+        echo ""
+        echo "cmake-build-clang-tidy/compile_commands.json not found."
+        echo "Creating cmake-build-clang-tidy directory..."
+
+        if cmake -S . -B cmake-build-clang-tidy \
+            -DCMAKE_CXX_COMPILER=clang++-19 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Debug &>/dev/null; then
+            echo "✅ Created cmake-build-clang-tidy/"
+        else
+            echo "⚠️  Failed to create cmake-build-clang-tidy/"
+            echo "Skipping clang-tidy checks."
+            exit 0
+        fi
+    fi
+
+    echo ""
+    echo "Running clang-tidy on staged production headers..."
+
+    TIDY_FAILED=0
+    for file in $STAGED_HEADERS; do
+        if [ -f "$file" ]; then
+            echo "  Checking: $file"
+            if ! clang-tidy-19 -p cmake-build-clang-tidy "$file" 2>&1 | grep -q "warning:"; then
+                :  # No warnings, continue
+            else
+                echo "  ❌ clang-tidy found warnings in $file"
+                TIDY_FAILED=1
+            fi
+        fi
+    done
+
+    if [ $TIDY_FAILED -eq 1 ]; then
+        echo ""
+        echo "❌ clang-tidy found warnings in staged files."
+        echo "Please fix the warnings before committing."
+        echo ""
+        echo "To see detailed warnings, run:"
+        echo "  clang-tidy-19 -p cmake-build-clang-tidy <file>"
+        exit 1
+    fi
+
+    echo "✅ No clang-tidy warnings found"
 fi
 
 exit 0
