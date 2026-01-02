@@ -189,11 +189,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   } else {
     // One is leaf, one is internal - need to swap carefully
     if (root_is_leaf_) {
-      LeafNode* temp_leaf = leaf_root_;
+      leaf_node* temp_leaf = leaf_root_;
       internal_root_ = other.internal_root_;
       other.leaf_root_ = temp_leaf;
     } else {
-      InternalNode* temp_internal = internal_root_;
+      internal_node* temp_internal = internal_root_;
       leaf_root_ = other.leaf_root_;
       other.internal_root_ = temp_internal;
     }
@@ -220,7 +220,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Find the leaf that should contain the key
-  LeafNode* leaf = find_leaf_for_key(key);
+  leaf_node* leaf = find_leaf_for_key(key);
 
   // Search within the leaf
   auto it = leaf->data.find(key);
@@ -244,7 +244,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Find the leaf that should contain the key
-  LeafNode* leaf = find_leaf_for_key(key);
+  leaf_node* leaf = find_leaf_for_key(key);
 
   // Search within the leaf
   auto it = leaf->data.find(key);
@@ -268,7 +268,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Find the leaf that should contain the key
-  LeafNode* leaf = find_leaf_for_key(key);
+  leaf_node* leaf = find_leaf_for_key(key);
 
   // Search within the leaf
   auto it = leaf->data.lower_bound(key);
@@ -299,7 +299,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Find the leaf that should contain the key
-  LeafNode* leaf = find_leaf_for_key(key);
+  leaf_node* leaf = find_leaf_for_key(key);
 
   // Search within the leaf
   auto it = leaf->data.upper_bound(key);
@@ -350,7 +350,7 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-               Allocator>::LeafNode*
+               Allocator>::leaf_node*
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::find_leaf_for_key(const Key& key) const {
   if (root_is_leaf_) {
@@ -358,7 +358,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Traverse down the tree
-  InternalNode* node = internal_root_;
+  internal_node* node = internal_root_;
   while (!node->children_are_leaves) {
     // Find the child to follow using optimized lower_bound
     // In a B+ tree, keys represent minimum key in each subtree
@@ -396,7 +396,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::insert(const Key& key, const Value& value) {
   return insert_impl(
       key,
-      [this](LeafNode* leaf, auto pos) {
+      [this](leaf_node* leaf, auto pos) {
         // Key exists - don't modify, just return
         return std::pair{iterator(leaf, pos), false};
       },
@@ -466,7 +466,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::try_emplace(const Key& key, Args&&... args) {
   return insert_impl(
       key,
-      [this](LeafNode* leaf, auto pos) {
+      [this](leaf_node* leaf, auto pos) {
         // Key exists - CRITICAL: don't construct value, just return
         return std::pair{iterator(leaf, pos), false};
       },
@@ -491,7 +491,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::insert_or_assign(const Key& key, M&& value) {
   return insert_impl(
       key,
-      [this, &value](LeafNode* leaf, auto pos) {
+      [this, &value](leaf_node* leaf, auto pos) {
         // Key exists - ASSIGN the new value (unique behavior)
         pos->second = std::forward<M>(value);
         return std::pair{iterator(leaf, pos), false};
@@ -581,7 +581,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   assert(pos != end() && "Cannot erase end iterator");
 
   // Extract leaf and leaf iterator from btree iterator
-  LeafNode* leaf = pos.leaf_node_;
+  leaf_node* leaf = pos.leaf_node_;
   auto leaf_it = *pos.leaf_it_;  // Dereference optional
 
   // Check if we're erasing from beginning (will need parent update)
@@ -709,11 +709,11 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-               Allocator>::LeafNode*
+               Allocator>::leaf_node*
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::allocate_leaf_node() {
   using leaf_alloc_traits = std::allocator_traits<decltype(leaf_alloc_)>;
-  LeafNode* node = leaf_alloc_.allocate(1);
+  leaf_node* node = leaf_alloc_.allocate(1);
   leaf_alloc_traits::construct(leaf_alloc_, node);
   return node;
 }
@@ -724,12 +724,12 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-               Allocator>::InternalNode*
+               Allocator>::internal_node*
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::allocate_internal_node(bool leaf_children) {
   using internal_alloc_traits =
       std::allocator_traits<decltype(internal_alloc_)>;
-  InternalNode* node = internal_alloc_.allocate(1);
+  internal_node* node = internal_alloc_.allocate(1);
   internal_alloc_traits::construct(internal_alloc_, node, leaf_children);
   return node;
 }
@@ -740,7 +740,7 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-           Allocator>::deallocate_leaf_node(LeafNode* node) {
+           Allocator>::deallocate_leaf_node(leaf_node* node) {
   using leaf_alloc_traits = std::allocator_traits<decltype(leaf_alloc_)>;
   leaf_alloc_traits::destroy(leaf_alloc_, node);
   leaf_alloc_.deallocate(node, 1);
@@ -752,7 +752,7 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-           Allocator>::deallocate_internal_node(InternalNode* node) {
+           Allocator>::deallocate_internal_node(internal_node* node) {
   using internal_alloc_traits =
       std::allocator_traits<decltype(internal_alloc_)>;
   internal_alloc_traits::destroy(internal_alloc_, node);
@@ -816,7 +816,7 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
           SearchMode SearchModeT, typename Allocator>
   requires ComparatorCompatible<Key, Compare>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-           Allocator>::deallocate_internal_subtree(InternalNode* node) {
+           Allocator>::deallocate_internal_subtree(internal_node* node) {
   if (node->children_are_leaves) {
     // Children are leaves - deallocate them
     for (auto it = node->leaf_children.begin(); it != node->leaf_children.end();
@@ -844,10 +844,10 @@ std::pair<typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
                          SearchModeT, Allocator>::iterator,
           bool>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-      Allocator>::split_leaf_and_insert(LeafNode* leaf, const Key& key,
+      Allocator>::split_leaf_and_insert(leaf_node* leaf, const Key& key,
                                         GetValue&& get_value) {
   // Create new leaf for right half
-  LeafNode* new_leaf = allocate_leaf_node();
+  leaf_node* new_leaf = allocate_leaf_node();
 
   // Calculate split point (ceil(LeafNodeSize / 2))
   const size_type split_point = (LeafNodeSize + 1) / 2;
@@ -874,7 +874,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   const Key& promoted_key = new_leaf->data.begin()->first;
 
   // Determine target leaf
-  LeafNode* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
+  leaf_node* target_leaf = comp_(key, promoted_key) ? leaf : new_leaf;
 
   // Get value on-demand after determining target leaf
   // This preserves try_emplace's optimization
@@ -920,7 +920,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::insert_impl(const Key& key, OnExists&& on_exists,
                               GetValue&& get_value) {
   // Find the appropriate leaf for the key
-  LeafNode* leaf = find_leaf_for_key(key);
+  leaf_node* leaf = find_leaf_for_key(key);
 
   // Use lower_bound to find position - single search for both existence check
   // and insertion point
@@ -963,8 +963,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
            Allocator>::insert_into_parent(NodeType* left_child, const Key& key,
                                           NodeType* right_child) {
   // Helper lambda to get appropriate children array reference
-  auto get_children = [](InternalNode* node) -> auto& {
-    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  auto get_children = [](internal_node* node) -> auto& {
+    if constexpr (std::is_same_v<NodeType, leaf_node>) {
       return node->leaf_children;
     } else {
       return node->internal_children;
@@ -973,7 +973,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Helper lambda to get the left key for creating new root
   auto get_left_key = [](NodeType* node) -> const Key& {
-    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if constexpr (std::is_same_v<NodeType, leaf_node>) {
       return node->data.begin()->first;
     } else {
       if (node->children_are_leaves) {
@@ -985,8 +985,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Case 1: left_child is root - create new root
   if (left_child->parent == nullptr) {
-    constexpr bool children_are_leaves = std::is_same_v<NodeType, LeafNode>;
-    InternalNode* new_root = allocate_internal_node(children_are_leaves);
+    constexpr bool children_are_leaves = std::is_same_v<NodeType, leaf_node>;
+    internal_node* new_root = allocate_internal_node(children_are_leaves);
 
     auto& children = get_children(new_root);
     auto [it, inserted] = children.insert(get_left_key(left_child), left_child);
@@ -1003,7 +1003,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Case 2: Parent exists - insert into it
-  InternalNode* parent = left_child->parent;
+  internal_node* parent = left_child->parent;
   auto& parent_children = get_children(parent);
 
   // Check if parent is full
@@ -1012,7 +1012,7 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     auto [promoted_key, new_parent] = split_internal(parent);
 
     // Determine which parent to insert into
-    InternalNode* target_parent =
+    internal_node* target_parent =
         comp_(key, promoted_key) ? parent : new_parent;
     right_child->parent = target_parent;
 
@@ -1037,11 +1037,11 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
   requires ComparatorCompatible<Key, Compare>
 std::pair<const Key&,
           typename btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
-                         SearchModeT, Allocator>::InternalNode*>
+                         SearchModeT, Allocator>::internal_node*>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-      Allocator>::split_internal(InternalNode* node) {
+      Allocator>::split_internal(internal_node* node) {
   // Create new internal node
-  InternalNode* new_node = allocate_internal_node(node->children_are_leaves);
+  internal_node* new_node = allocate_internal_node(node->children_are_leaves);
 
   // Calculate split point
   const size_type split_point = (InternalNodeSize + 1) / 2;
@@ -1068,11 +1068,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   };
 
   if (node->children_are_leaves) {
-    const Key& promoted_key = perform_split.template operator()<LeafNode*>(
+    const Key& promoted_key = perform_split.template operator()<leaf_node*>(
         node->leaf_children, new_node->leaf_children);
     return {promoted_key, new_node};
   }
-  const Key& promoted_key = perform_split.template operator()<InternalNode*>(
+  const Key& promoted_key = perform_split.template operator()<internal_node*>(
       node->internal_children, new_node->internal_children);
   return {promoted_key, new_node};
 }
@@ -1090,11 +1090,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     return;
   }
 
-  InternalNode* parent = child->parent;
+  internal_node* parent = child->parent;
 
   // Get reference to appropriate children array based on child type
   auto& children = [&]() -> auto& {
-    if constexpr (std::is_same_v<ChildNodeType, LeafNode>) {
+    if constexpr (std::is_same_v<ChildNodeType, leaf_node>) {
       return parent->leaf_children;
     } else {
       return parent->internal_children;
@@ -1148,7 +1148,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
     return nullptr;  // Root has no siblings
   }
 
-  InternalNode* parent = node->parent;
+  internal_node* parent = node->parent;
 
   // Get node's minimum key and children array reference
   const Key* node_min = nullptr;
@@ -1181,17 +1181,17 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
     return nullptr;
   };
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     node_min = &(node->data.begin()->first);
-    return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
+    return find_sibling.template operator()<leaf_node*>(parent->leaf_children);
   } else {
-    // InternalNode
+    // internal_node
     if (node->children_are_leaves) {
       node_min = &(node->leaf_children.begin()->first);
     } else {
       node_min = &(node->internal_children.begin()->first);
     }
-    return find_sibling.template operator()<InternalNode*>(
+    return find_sibling.template operator()<internal_node*>(
         parent->internal_children);
   }
 }
@@ -1209,7 +1209,7 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
     return nullptr;  // Root has no siblings
   }
 
-  InternalNode* parent = node->parent;
+  internal_node* parent = node->parent;
 
   // Get node's minimum key and children array reference
   const Key* node_min = nullptr;
@@ -1242,17 +1242,17 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
     return nullptr;
   };
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     node_min = &(node->data.begin()->first);
-    return find_sibling.template operator()<LeafNode*>(parent->leaf_children);
+    return find_sibling.template operator()<leaf_node*>(parent->leaf_children);
   } else {
-    // InternalNode
+    // internal_node
     if (node->children_are_leaves) {
       node_min = &(node->leaf_children.begin()->first);
     } else {
       node_min = &(node->internal_children.begin()->first);
     }
-    return find_sibling.template operator()<InternalNode*>(
+    return find_sibling.template operator()<internal_node*>(
         parent->internal_children);
   }
 }
@@ -1264,7 +1264,7 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
   requires ComparatorCompatible<Key, Compare>
 template <typename NodeType, typename ChildrenArray>
 void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
-           Allocator>::handle_parent_after_merge(InternalNode* parent,
+           Allocator>::handle_parent_after_merge(internal_node* parent,
                                                  ChildrenArray&
                                                      parent_children) {
   // Check if parent underflowed (use hysteresis threshold)
@@ -1282,11 +1282,11 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     NodeType* new_root = parent_children.begin()->second;
     new_root->parent = nullptr;
 
-    if constexpr (std::is_same_v<NodeType, LeafNode>) {
+    if constexpr (std::is_same_v<NodeType, leaf_node>) {
       root_is_leaf_ = true;
       leaf_root_ = new_root;
     } else {
-      // InternalNode becomes new root
+      // internal_node becomes new root
       internal_root_ = new_root;
     }
 
@@ -1354,7 +1354,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     return true;
   };
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     // Leaf node borrowing
     if (left_sibling->data.size() <= min_leaf_size()) {
       return {nullptr, std::nullopt};
@@ -1386,16 +1386,16 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // else: no next element to track
     return {node, next_iter};
   }
-  // InternalNode case
-  if constexpr (std::is_same_v<NodeType, InternalNode>) {
+  // internal_node case
+  if constexpr (std::is_same_v<NodeType, internal_node>) {
     // Internal node borrowing - we don't track iterators through internal nodes
     bool success = false;
     if (node->children_are_leaves) {
-      success = borrow_impl.template operator()<LeafNode*, true>(
+      success = borrow_impl.template operator()<leaf_node*, true>(
           node->leaf_children, left_sibling->leaf_children, min_internal_size(),
           internal_hysteresis());
     } else {
-      success = borrow_impl.template operator()<InternalNode*, true>(
+      success = borrow_impl.template operator()<internal_node*, true>(
           node->internal_children, left_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
@@ -1462,7 +1462,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     return true;
   };
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     // Leaf node borrowing
     if (right_sibling->data.size() <= min_leaf_size()) {
       return {nullptr, std::nullopt};
@@ -1497,16 +1497,16 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // else: no next element to track
     return {node, next_iter};
   }
-  // InternalNode case
-  if constexpr (std::is_same_v<NodeType, InternalNode>) {
+  // internal_node case
+  if constexpr (std::is_same_v<NodeType, internal_node>) {
     // Internal node borrowing - we don't track iterators through internal nodes
     bool success = false;
     if (node->children_are_leaves) {
-      success = borrow_impl.template operator()<LeafNode*, true>(
+      success = borrow_impl.template operator()<leaf_node*, true>(
           node->leaf_children, right_sibling->leaf_children,
           min_internal_size(), internal_hysteresis());
     } else {
-      success = borrow_impl.template operator()<InternalNode*, true>(
+      success = borrow_impl.template operator()<internal_node*, true>(
           node->internal_children, right_sibling->internal_children,
           min_internal_size(), internal_hysteresis());
     }
@@ -1533,7 +1533,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   assert(left_sibling != nullptr &&
          "merge_with_left_sibling requires left sibling");
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     // Capture node's minimum key BEFORE transferring data
     const Key& node_min = node->data.begin()->first;
 
@@ -1541,7 +1541,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     const size_type left_old_size = left_sibling->data.size();
 
     // Remove this leaf from parent
-    InternalNode* parent = node->parent;
+    internal_node* parent = node->parent;
     assert(parent != nullptr && "Merging non-root leaf should have parent");
 
     // Find and remove the entry for this leaf in parent
@@ -1570,7 +1570,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     deallocate_leaf_node(node);
 
     // Handle parent underflow and potential root reduction
-    handle_parent_after_merge<LeafNode>(parent, parent_children);
+    handle_parent_after_merge<leaf_node>(parent, parent_children);
 
     // Calculate iterator to next element
     std::optional<iterator> next_iter;
@@ -1591,15 +1591,15 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // else: no next element to track
     return {left_sibling, next_iter};
   }
-  // InternalNode case
-  if constexpr (std::is_same_v<NodeType, InternalNode>) {
+  // internal_node case
+  if constexpr (std::is_same_v<NodeType, internal_node>) {
     // Capture node's minimum key BEFORE transferring children
     const Key& node_min = node->children_are_leaves
                               ? node->leaf_children.begin()->first
                               : node->internal_children.begin()->first;
 
     // Remove this node from parent
-    InternalNode* parent = node->parent;
+    internal_node* parent = node->parent;
     assert(parent != nullptr && "Merging non-root node should have parent");
 
     // Find and remove the entry for this node in parent
@@ -1626,10 +1626,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     };
 
     if (node->children_are_leaves) {
-      merge_children.template operator()<LeafNode*>(
+      merge_children.template operator()<leaf_node*>(
           node->leaf_children, left_sibling->leaf_children);
     } else {
-      merge_children.template operator()<InternalNode*>(
+      merge_children.template operator()<internal_node*>(
           node->internal_children, left_sibling->internal_children);
     }
 
@@ -1637,7 +1637,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     deallocate_internal_node(node);
 
     // Handle parent underflow and potential root reduction
-    handle_parent_after_merge<InternalNode>(parent, parent_children);
+    handle_parent_after_merge<internal_node>(parent, parent_children);
 
     // Internal nodes don't track iterators
     return {left_sibling, std::nullopt};
@@ -1663,7 +1663,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   assert(right_sibling != nullptr &&
          "merge_with_right_sibling requires right sibling");
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     // Capture right sibling's minimum key BEFORE transferring data
     const Key& right_sibling_min = right_sibling->data.begin()->first;
 
@@ -1671,7 +1671,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     const size_type old_size = node->data.size();
 
     // Remove right sibling from parent
-    InternalNode* parent = node->parent;
+    internal_node* parent = node->parent;
     assert(parent != nullptr && "Merging non-root leaf should have parent");
 
     // Find and remove the entry for right sibling in parent
@@ -1700,7 +1700,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     deallocate_leaf_node(right_sibling);
 
     // Handle parent underflow and potential root reduction
-    handle_parent_after_merge<LeafNode>(parent, parent_children);
+    handle_parent_after_merge<leaf_node>(parent, parent_children);
 
     // Calculate iterator to next element
     std::optional<iterator> next_iter;
@@ -1719,8 +1719,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     // else: no next element to track
     return {node, next_iter};
   }
-  // InternalNode case
-  if constexpr (std::is_same_v<NodeType, InternalNode>) {
+  // internal_node case
+  if constexpr (std::is_same_v<NodeType, internal_node>) {
     // Capture right sibling's minimum key BEFORE transferring children
     const Key& right_sibling_min =
         right_sibling->children_are_leaves
@@ -1728,7 +1728,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
             : right_sibling->internal_children.begin()->first;
 
     // Remove right sibling from parent
-    InternalNode* parent = node->parent;
+    internal_node* parent = node->parent;
     assert(parent != nullptr && "Merging non-root node should have parent");
 
     // Find and remove the entry for right sibling in parent
@@ -1755,10 +1755,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     };
 
     if (node->children_are_leaves) {
-      merge_children.template operator()<LeafNode*>(
+      merge_children.template operator()<leaf_node*>(
           node->leaf_children, right_sibling->leaf_children);
     } else {
-      merge_children.template operator()<InternalNode*>(
+      merge_children.template operator()<internal_node*>(
           node->internal_children, right_sibling->internal_children);
     }
 
@@ -1766,7 +1766,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     deallocate_internal_node(right_sibling);
 
     // Handle parent underflow and potential root reduction
-    handle_parent_after_merge<InternalNode>(parent, parent_children);
+    handle_parent_after_merge<internal_node>(parent, parent_children);
 
     // Internal nodes don't track iterators
     return {node, std::nullopt};
@@ -1791,7 +1791,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   size_type node_size = 0;
   size_type underflow_threshold = 0;
 
-  if constexpr (std::is_same_v<NodeType, LeafNode>) {
+  if constexpr (std::is_same_v<NodeType, leaf_node>) {
     node_size = node->data.size();
     underflow_threshold = min_leaf_size() > leaf_hysteresis()
                               ? min_leaf_size() - leaf_hysteresis()
@@ -1799,7 +1799,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     assert(node_size < underflow_threshold &&
            "handle_underflow called on non-underflowed leaf");
   } else {
-    // InternalNode - get size based on children type
+    // internal_node - get size based on children type
     node_size = node->children_are_leaves ? node->leaf_children.size()
                                           : node->internal_children.size();
     underflow_threshold = min_internal_size() > internal_hysteresis()

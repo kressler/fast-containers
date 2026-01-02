@@ -122,7 +122,7 @@ class dense_map {
   /**
    * Default constructor - initializes an empty ordered array
    */
-  dense_map() : size_(0), comp_() {}
+  dense_map() : comp_() {}
 
   /**
    * Copy constructor - creates a deep copy of another ordered array
@@ -494,7 +494,7 @@ class dense_map {
   // Align to 64-byte cache lines for optimal SIMD performance
   alignas(64) std::array<Key, Length> keys_;
   alignas(64) std::array<Value, Length> values_;
-  size_type size_;
+  size_type size_{0};
   [[no_unique_address]] Compare comp_;
 
   // Proxy class to represent a key-value pair reference
@@ -540,7 +540,8 @@ class dense_map {
         : array_(arr), index_(idx) {}
 
     // Allow conversion from non-const to const iterator
-    template <bool WasConst = IsConst, typename = std::enable_if_t<WasConst>>
+    template <bool WasConst = IsConst>
+      requires WasConst
     // NOLINTNEXTLINE(google-explicit-constructor)
     dense_map_iterator(const dense_map_iterator<false>& other)
         : array_(other.array_), index_(other.index_) {}
