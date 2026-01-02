@@ -78,6 +78,7 @@ struct TwoPoolPolicy {  // NOLINT(readability-identifier-naming)
    */
   template <typename T>
   [[nodiscard]] std::shared_ptr<HugePagePool> get_pool_for_type() const {
+    // NOLINTNEXTLINE(bugprone-branch-clone)
     if constexpr (has_next_leaf_v<T>) {
       return leaf_pool_;
     } else if constexpr (has_children_are_leaves_v<T>) {
