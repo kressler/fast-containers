@@ -47,10 +47,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
     : size_(other.size_), comp_(std::move(other.comp_)) {
   // Move the active elements
   if (size_ > 0) {
-    std::move(other.keys_.data(), other.keys_.data() + size_,
-                      keys_.data());
+    std::move(other.keys_.data(), other.keys_.data() + size_, keys_.data());
     std::move(other.values_.data(), other.values_.data() + size_,
-                      values_.data());
+              values_.data());
   }
   // Leave other in valid empty state
   other.size_ = 0;
@@ -100,10 +99,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
     size_ = other.size_;
     // Move the active elements
     if (size_ > 0) {
-      std::move(other.keys_.data(), other.keys_.data() + size_,
-                        keys_.data());
+      std::move(other.keys_.data(), other.keys_.data() + size_, keys_.data());
       std::move(other.values_.data(), other.values_.data() + size_,
-                        values_.data());
+                values_.data());
     }
     // Leave other in valid empty state
     other.size_ = 0;
@@ -128,8 +126,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
-          bool>
+std::pair<
+    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
     const Key& key, const Value& value) {
   // Early check for better error message (helper also checks)
@@ -166,8 +165,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
-          bool>
+std::pair<
+    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
     iterator hint, const Key& key, const Value& value) {
   // Early check for better error message (helper also checks)
@@ -204,8 +204,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename... Args>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
-          bool>
+std::pair<
+    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
     const Key& key, Args&&... args) {
   // Early check for better error message (helper also checks)
@@ -238,9 +239,11 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename M>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
-          bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(const Key& key, M&& value) {
+std::pair<
+    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    bool>
+ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(
+    const Key& key, M&& value) {
   // Find the position where the key should be inserted
   const size_type idx = lower_bound_key(key) - keys_.begin();
 
@@ -294,8 +297,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::size_type
-ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(
-    const Key& key) {
+ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(const Key& key) {
   const auto it = find(key);
   if (it != end()) {
     erase(it);  // Call iterator-based erase
@@ -358,8 +360,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
-    const Key& key) {
+ordered_array<Key, Value, Length, Compare, SearchModeT>::find(const Key& key) {
   const auto pos = lower_bound_key(key);
   const size_type idx = pos - keys_.begin();
 
@@ -513,8 +514,7 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
   // Move elements from [split_idx, size_) to output
   if (num_to_move > 0) {
     std::move(&keys_[split_idx], &keys_[size_], output.keys_.data());
-    std::move(&values_[split_idx], &values_[size_],
-                      output.values_.data());
+    std::move(&values_[split_idx], &values_[size_], output.values_.data());
     output.size_ = num_to_move;
   }
 
@@ -570,17 +570,16 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
   }
 
   // Copy prefix from source to end of this array (append)
-  std::move(source.keys_.data(), source.keys_.data() + count,
-                    &keys_[size_]);
+  std::move(source.keys_.data(), source.keys_.data() + count, &keys_[size_]);
   std::move(source.values_.data(), source.values_.data() + count,
-                    &values_[size_]);
+            &values_[size_]);
 
   // Shift remaining elements in source left to fill the gap
   if (count < source.size_) {
     std::move(&source.keys_[count], &source.keys_[source.size_],
-                      source.keys_.data());
+              source.keys_.data());
     std::move(&source.values_[count], &source.values_[source.size_],
-                      source.values_.data());
+              source.values_.data());
   }
 
   // Update sizes
@@ -629,7 +628,8 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 
   // Debug assertion: ordering precondition
   // All keys in source suffix must be < all keys in this array
-  assert((empty() || count == 0 || comp_(source.keys_[source.size_ - 1], keys_[0])) &&
+  assert((empty() || count == 0 ||
+          comp_(source.keys_[source.size_ - 1], keys_[0])) &&
          "Ordering precondition violated: all keys in source suffix must be "
          "< all keys in this");
 
@@ -648,9 +648,9 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 
   // Copy suffix from source to beginning of this array (prepend)
   std::move(&source.keys_[suffix_start], &source.keys_[source.size_],
-                    keys_.data());
-  std::move(&source.values_[suffix_start],
-                    &source.values_[source.size_], values_.data());
+            keys_.data());
+  std::move(&source.values_[suffix_start], &source.values_[source.size_],
+            values_.data());
 
   // Update sizes (no need to shift source - we took from the end)
   size_ += count;
@@ -675,8 +675,8 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
  *
  * @param idx Position where key should be inserted
  * @param key Key to insert
- * @param on_exists Callback for when key exists: (size_type) -> pair<iterator, bool>
- *                  Can modify the existing value (insert_or_assign) or just return
+ * @param on_exists Callback for when key exists: (size_type) -> pair<iterator,
+ * bool> Can modify the existing value (insert_or_assign) or just return
  * @param on_insert Callback to insert value: (size_type) -> void
  *                  Uses assignment (insert) or construct_at (try_emplace)
  * @return Pair of iterator to element and bool indicating insertion success
@@ -685,13 +685,11 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <typename OnExists, typename OnInsert>
-std::pair<typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
-          bool>
+std::pair<
+    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    bool>
 ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_impl(
-    size_type idx,
-    const Key& key,
-    OnExists&& on_exists,
-    OnInsert&& on_insert) {
+    size_type idx, const Key& key, OnExists&& on_exists, OnInsert&& on_insert) {
   // Check if key exists at this position
   if (idx < size_ && keys_[idx] == key) {
     return on_exists(idx);  // Let caller decide what to do (return or assign)

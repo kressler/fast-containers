@@ -52,7 +52,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
     // For ascending (std::less): find first position where key >= search_key
     //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
-    // For descending (std::greater): find first position where key <= search_key
+    // For descending (std::greater): find first position where key <=
+    // search_key
     //   Check: keys_vec > search_vec
     __m256i cmp;
     if constexpr (is_ascending) {
@@ -149,7 +150,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
     // For ascending (std::less): find first position where key >= search_key
     //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
-    // For descending (std::greater): find first position where key <= search_key
+    // For descending (std::greater): find first position where key <=
+    // search_key
     //   Check: keys_vec > search_vec
     __m256i cmp;
     if constexpr (is_ascending) {
@@ -258,7 +260,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
       // For ascending (std::less): find first position where key >= search_key
       //   Check: keys_vec < search_vec, find first false
-      // For descending (std::greater): find first position where key <= search_key
+      // For descending (std::greater): find first position where key <=
+      // search_key
       //   Check: keys_vec > search_vec, find first false
       __m256 cmp;
       if constexpr (is_ascending) {
@@ -335,7 +338,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
       // For ascending (std::less): find first position where key >= search_key
       //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
-      // For descending (std::greater): find first position where key <= search_key
+      // For descending (std::greater): find first position where key <=
+      // search_key
       //   Check: keys_vec > search_vec
       __m256i cmp;
       if constexpr (is_ascending) {
@@ -445,7 +449,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
       // For ascending (std::less): find first position where key >= search_key
       //   Check: keys_vec < search_vec, find first false
-      // For descending (std::greater): find first position where key <= search_key
+      // For descending (std::greater): find first position where key <=
+      // search_key
       //   Check: keys_vec > search_vec, find first false
       __m256d cmp;
       if constexpr (is_ascending) {
@@ -523,7 +528,8 @@ auto ordered_array<Key, Value, Length, Compare,
 
       // For ascending (std::less): find first position where key >= search_key
       //   Check: keys_vec < search_vec, i.e., search_vec > keys_vec
-      // For descending (std::greater): find first position where key <= search_key
+      // For descending (std::greater): find first position where key <=
+      // search_key
       //   Check: keys_vec > search_vec
       __m256i cmp;
       if constexpr (is_ascending) {
