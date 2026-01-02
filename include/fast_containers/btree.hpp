@@ -10,7 +10,7 @@
 #include <optional>
 #include <utility>
 
-#include "ordered_array.hpp"
+#include "dense_map.hpp"
 
 namespace kressler::fast_containers {
 
@@ -79,7 +79,7 @@ constexpr std::size_t default_leaf_node_size() {
 }
 
 /**
- * A B+ Tree that uses ordered_array as the underlying storage for nodes.
+ * A B+ Tree that uses dense_map as the underlying storage for nodes.
  * All data is stored in leaf nodes, which form a doubly-linked list for
  * efficient sequential traversal. Internal nodes store only keys and pointers
  * to guide searches.
@@ -92,7 +92,7 @@ constexpr std::size_t default_leaf_node_size() {
  *         (defaults to heuristic size based on key size, targeting ~1KB)
  * @tparam Compare The comparison function object type (defaults to
  *         std::less<Key>)
- * @tparam SearchModeT Search mode passed through to ordered_array
+ * @tparam SearchModeT Search mode passed through to dense_map
  * @tparam Allocator The allocator type (defaults to std::allocator<value_type>)
  *
  * ## Allocator Rebinding
@@ -169,14 +169,14 @@ class btree {
   };
 
   /**
-   * Leaf node - stores actual key-value pairs in an ordered_array.
+   * Leaf node - stores actual key-value pairs in an dense_map.
    * Forms a doubly-linked list with other leaf nodes for iteration.
    */
   // Forward declaration for LeafNode to use in InternalNode
   struct InternalNode;
 
   struct LeafNode {
-    ordered_array<Key, Value, LeafNodeSize, Compare, SearchModeT> data;
+    dense_map<Key, Value, LeafNodeSize, Compare, SearchModeT> data;
     LeafNode* next_leaf;
     LeafNode* prev_leaf;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
@@ -191,9 +191,9 @@ class btree {
    */
   struct InternalNode {
     union {
-      ordered_array<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT>
+      dense_map<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT>
           leaf_children;
-      ordered_array<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
+      dense_map<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
           internal_children;
     };
     const bool children_are_leaves;
@@ -212,9 +212,9 @@ class btree {
     // Destructor - must explicitly destroy the active union member
     ~InternalNode() {
       if (children_are_leaves) {
-        leaf_children.~ordered_array();
+        leaf_children.~dense_map();
       } else {
-        internal_children.~ordered_array();
+        internal_children.~dense_map();
       }
     }
 
@@ -335,8 +335,8 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                             SearchModeT>::iterator::reference;
+    using reference = typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                         SearchModeT>::iterator::reference;
 
     iterator() : leaf_node_(nullptr) {}
 
@@ -345,8 +345,8 @@ class btree {
       return *leaf_it_.value();
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                           SearchModeT>::iterator::arrow_proxy
+    typename dense_map<Key, Value, LeafNodeSize, Compare,
+                       SearchModeT>::iterator::arrow_proxy
     operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
       return leaf_it_.value().operator->();
@@ -426,18 +426,18 @@ class btree {
     friend class btree;
 
     iterator(LeafNode* node,
-             typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT>::iterator it)
+             typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
     iterator(const btree* tree, LeafNode* node,
-             typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                    SearchModeT>::iterator it)
+             typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     LeafNode* leaf_node_;
-    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT>::iterator>
+    std::optional<typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                     SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };
@@ -455,8 +455,8 @@ class btree {
     using difference_type = std::ptrdiff_t;
     using value_type = btree::value_type;
     using pointer = value_type*;
-    using reference = typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                             SearchModeT>::iterator::reference;
+    using reference = typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                         SearchModeT>::iterator::reference;
 
     reverse_iterator() : leaf_node_(nullptr), tree_(nullptr) {}
 
@@ -465,8 +465,8 @@ class btree {
       return *leaf_it_.value();
     }
 
-    typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                           SearchModeT>::iterator::arrow_proxy
+    typename dense_map<Key, Value, LeafNodeSize, Compare,
+                       SearchModeT>::iterator::arrow_proxy
     operator->() const {
       assert(leaf_node_ != nullptr && "Dereferencing end iterator");
       return leaf_it_.value().operator->();
@@ -553,21 +553,21 @@ class btree {
     friend class btree;
 
     reverse_iterator(LeafNode* node,
-                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                            SearchModeT>::iterator it)
+                     typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                        SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
     reverse_iterator(const btree* tree, LeafNode* node,
-                     typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                            SearchModeT>::iterator it)
+                     typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                        SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
     reverse_iterator(const btree* tree, LeafNode* node)
         : leaf_node_(node), leaf_it_(std::nullopt), tree_(tree) {}
 
     LeafNode* leaf_node_;
-    std::optional<typename ordered_array<Key, Value, LeafNodeSize, Compare,
-                                         SearchModeT>::iterator>
+    std::optional<typename dense_map<Key, Value, LeafNodeSize, Compare,
+                                     SearchModeT>::iterator>
         leaf_it_;
     const btree* tree_;
   };

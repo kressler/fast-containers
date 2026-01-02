@@ -4,7 +4,7 @@
 
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <fast_containers/ordered_array.hpp>
+#include <fast_containers/dense_map.hpp>
 #include <string>
 
 using namespace kressler::fast_containers;
@@ -19,8 +19,8 @@ using BinarySearchMode = SearchModeType<SearchMode::Binary>;
 using LinearSearchMode = SearchModeType<SearchMode::Linear>;
 using SIMDSearchMode = SearchModeType<SearchMode::SIMD>;
 
-TEST_CASE("ordered_array basic construction", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEST_CASE("dense_map basic construction", "[dense_map]") {
+  dense_map<int, std::string, 10> arr;
 
   REQUIRE(arr.size() == 0);
   REQUIRE(arr.empty());
@@ -28,10 +28,10 @@ TEST_CASE("ordered_array basic construction", "[ordered_array]") {
   REQUIRE(arr.capacity() == 10);
 }
 
-TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map insert operations", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 5, std::less<int>, Mode> arr;
+  dense_map<int, std::string, 5, std::less<int>, Mode> arr;
 
   SECTION("Insert single element") {
     arr.insert(5, "five");
@@ -92,10 +92,10 @@ TEMPLATE_TEST_CASE("ordered_array insert operations", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map find operations", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+  dense_map<int, std::string, 10, std::less<int>, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -134,10 +134,10 @@ TEMPLATE_TEST_CASE("ordered_array find operations", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map remove operations", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+  dense_map<int, std::string, 10, std::less<int>, Mode> arr;
   arr.insert(10, "ten");
   arr.insert(20, "twenty");
   arr.insert(30, "thirty");
@@ -201,10 +201,10 @@ TEMPLATE_TEST_CASE("ordered_array remove operations", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map subscript operator", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
-  ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+  dense_map<int, std::string, 10, std::less<int>, Mode> arr;
 
   SECTION("Access non-existing element inserts with default value") {
     auto& val = arr[5];
@@ -247,8 +247,8 @@ TEMPLATE_TEST_CASE("ordered_array subscript operator", "[ordered_array]",
   }
 }
 
-TEST_CASE("ordered_array iterator support", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEST_CASE("dense_map iterator support", "[dense_map]") {
+  dense_map<int, std::string, 10> arr;
   arr.insert(5, "five");
   arr.insert(3, "three");
   arr.insert(7, "seven");
@@ -285,8 +285,8 @@ TEST_CASE("ordered_array iterator support", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array reverse iterator support", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEST_CASE("dense_map reverse iterator support", "[dense_map]") {
+  dense_map<int, std::string, 10> arr;
   arr.insert(5, "five");
   arr.insert(3, "three");
   arr.insert(7, "seven");
@@ -312,9 +312,9 @@ TEST_CASE("ordered_array reverse iterator support", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array with different types", "[ordered_array]") {
+TEST_CASE("dense_map with different types", "[dense_map]") {
   SECTION("String keys and int values") {
-    ordered_array<std::string, int, 5> arr;
+    dense_map<std::string, int, 5> arr;
     arr.insert("apple", 1);
     arr.insert("zebra", 26);
     arr.insert("banana", 2);
@@ -332,7 +332,7 @@ TEST_CASE("ordered_array with different types", "[ordered_array]") {
   }
 
   SECTION("Double keys and double values") {
-    ordered_array<double, double, 5> arr;
+    dense_map<double, double, 5> arr;
     arr.insert(3.14, 1.0);
     arr.insert(2.71, 2.0);
     arr.insert(1.41, 3.0);
@@ -342,8 +342,8 @@ TEST_CASE("ordered_array with different types", "[ordered_array]") {
   }
 }
 
-TEST_CASE("ordered_array clear operation", "[ordered_array]") {
-  ordered_array<int, std::string, 10> arr;
+TEST_CASE("dense_map clear operation", "[dense_map]") {
+  dense_map<int, std::string, 10> arr;
   arr.insert(1, "one");
   arr.insert(2, "two");
   arr.insert(3, "three");
@@ -359,33 +359,33 @@ TEST_CASE("ordered_array clear operation", "[ordered_array]") {
   REQUIRE(arr.find(3) == arr.end());
 }
 
-TEST_CASE("ordered_array concept enforcement", "[ordered_array]") {
+TEST_CASE("dense_map concept enforcement", "[dense_map]") {
   // This test verifies that the Comparable concept works at compile time
   // If this compiles, the concept is working
 
   SECTION("Integer types are comparable") {
-    ordered_array<int, std::string, 5> arr1;
-    ordered_array<long, std::string, 5> arr2;
+    dense_map<int, std::string, 5> arr1;
+    dense_map<long, std::string, 5> arr2;
     REQUIRE(true);
   }
 
   SECTION("String types are comparable") {
-    ordered_array<std::string, int, 5> arr;
+    dense_map<std::string, int, 5> arr;
     REQUIRE(true);
   }
 
   SECTION("Floating point types are comparable") {
-    ordered_array<double, int, 5> arr;
+    dense_map<double, int, 5> arr;
     REQUIRE(true);
   }
 }
 
-TEST_CASE("ordered_array search mode comparison",
-          "[ordered_array][search_mode]") {
+TEST_CASE("dense_map search mode comparison",
+          "[dense_map][search_mode]") {
   using BinaryArray =
-      ordered_array<int, std::string, 20, std::less<int>, SearchMode::Binary>;
+      dense_map<int, std::string, 20, std::less<int>, SearchMode::Binary>;
   using LinearArray =
-      ordered_array<int, std::string, 20, std::less<int>, SearchMode::Linear>;
+      dense_map<int, std::string, 20, std::less<int>, SearchMode::Linear>;
 
   BinaryArray binary_arr;
   LinearArray linear_arr;
@@ -454,13 +454,13 @@ TEST_CASE("ordered_array search mode comparison",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map copy constructor", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> copy(original);
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> copy(original);
 
     REQUIRE(copy.size() == 0);
     REQUIRE(copy.empty());
@@ -468,12 +468,12 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   }
 
   SECTION("Copy array with elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(3, "three");
     original.insert(1, "one");
     original.insert(5, "five");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> copy(original);
+    dense_map<int, std::string, 10, std::less<int>, Mode> copy(original);
 
     REQUIRE(copy.size() == 3);
     REQUIRE(!copy.empty());
@@ -491,11 +491,11 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   }
 
   SECTION("Copy is independent from original") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> copy(original);
+    dense_map<int, std::string, 10, std::less<int>, Mode> copy(original);
 
     // Modify original
     original.insert(3, "three");
@@ -514,16 +514,16 @@ TEMPLATE_TEST_CASE("ordered_array copy constructor", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map copy assignment", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy assign to empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest = original;
 
     REQUIRE(dest.size() == 2);
@@ -532,11 +532,11 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Copy assign overwrites existing elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(5, "five");
     original.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
     dest.insert(3, "three");
@@ -550,7 +550,7 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Self-assignment is safe") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
@@ -562,10 +562,10 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 
   SECTION("Copy assignment creates independent copy") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest = original;
 
     // Modify original
@@ -576,13 +576,13 @@ TEMPLATE_TEST_CASE("ordered_array copy assignment", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map move constructor", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Move empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> moved(
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> moved(
         std::move(original));
 
     REQUIRE(moved.size() == 0);
@@ -592,12 +592,12 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   }
 
   SECTION("Move array with elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(3, "three");
     original.insert(1, "one");
     original.insert(5, "five");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> moved(
+    dense_map<int, std::string, 10, std::less<int>, Mode> moved(
         std::move(original));
 
     // Verify moved-to array has all elements
@@ -618,10 +618,10 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   }
 
   SECTION("Moved-from array is reusable") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> moved(
+    dense_map<int, std::string, 10, std::less<int>, Mode> moved(
         std::move(original));
 
     // Reuse moved-from array
@@ -634,16 +634,16 @@ TEMPLATE_TEST_CASE("ordered_array move constructor", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map move assignment", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Move assign to empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest = std::move(original);
 
     REQUIRE(dest.size() == 2);
@@ -655,11 +655,11 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Move assign overwrites existing elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(5, "five");
     original.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
     dest.insert(3, "three");
@@ -675,7 +675,7 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Self-move-assignment is safe") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
@@ -687,11 +687,11 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 
   SECTION("Moved-from array is reusable") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> original;
+    dense_map<int, std::string, 10, std::less<int>, Mode> original;
     original.insert(1, "one");
     original.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest = std::move(original);
 
     // Reuse moved-from array
@@ -704,17 +704,17 @@ TEMPLATE_TEST_CASE("ordered_array move assignment", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
-                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+TEMPLATE_TEST_CASE("dense_map copy/move with different types",
+                   "[dense_map]", BinarySearchMode, LinearSearchMode,
                    SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy with int keys and int values") {
-    ordered_array<int, int, 10, std::less<int>, Mode> original;
+    dense_map<int, int, 10, std::less<int>, Mode> original;
     original.insert(5, 50);
     original.insert(3, 30);
 
-    ordered_array<int, int, 10, std::less<int>, Mode> copy(original);
+    dense_map<int, int, 10, std::less<int>, Mode> copy(original);
 
     REQUIRE(copy.size() == 2);
     REQUIRE(copy.find(3)->second == 30);
@@ -722,11 +722,11 @@ TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
   }
 
   SECTION("Move with double keys and string values") {
-    ordered_array<double, std::string, 10, std::less<double>, Mode> original;
+    dense_map<double, std::string, 10, std::less<double>, Mode> original;
     original.insert(3.14, "pi");
     original.insert(2.71, "e");
 
-    ordered_array<double, std::string, 10, std::less<double>, Mode> moved(
+    dense_map<double, std::string, 10, std::less<double>, Mode> moved(
         std::move(original));
 
     REQUIRE(moved.size() == 2);
@@ -736,13 +736,13 @@ TEMPLATE_TEST_CASE("ordered_array copy/move with different types",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
+TEMPLATE_TEST_CASE("dense_map split_at operation", "[dense_map]",
                    BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Split empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> output;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> output;
 
     arr.split_at(arr.begin(), output);
 
@@ -751,12 +751,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split at beginning (move all elements)") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> output;
+    dense_map<int, std::string, 10, std::less<int>, Mode> output;
     arr.split_at(arr.begin(), output);
 
     REQUIRE(arr.size() == 0);
@@ -773,12 +773,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split at end (move no elements)") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> output;
+    dense_map<int, std::string, 10, std::less<int>, Mode> output;
     arr.split_at(arr.end(), output);
 
     REQUIRE(arr.size() == 3);
@@ -787,14 +787,14 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split in middle") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
     arr.insert(3, "three");
     arr.insert(4, "four");
     arr.insert(5, "five");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> output;
+    dense_map<int, std::string, 10, std::less<int>, Mode> output;
     auto it = arr.begin();
     ++it;
     ++it;  // Points to element with key 3
@@ -819,23 +819,23 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split throws if output is not empty") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     arr.insert(1, "one");
     arr.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> output;
+    dense_map<int, std::string, 10, std::less<int>, Mode> output;
     output.insert(10, "ten");
 
     REQUIRE_THROWS_AS(arr.split_at(arr.begin(), output), std::runtime_error);
   }
 
   SECTION("Split throws if output has insufficient capacity") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 10, std::less<int>, Mode> arr;
     for (int i = 0; i < 10; ++i) {
       arr.insert(i, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, std::less<int>, Mode> small_output;
+    dense_map<int, std::string, 5, std::less<int>, Mode> small_output;
 
     // Trying to move 10 elements to capacity-5 array should throw
     REQUIRE_THROWS_AS(arr.split_at(arr.begin(), small_output),
@@ -843,12 +843,12 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 
   SECTION("Split maintains element order and values") {
-    ordered_array<int, std::string, 20, std::less<int>, Mode> arr;
+    dense_map<int, std::string, 20, std::less<int>, Mode> arr;
     for (int i = 1; i <= 10; ++i) {
       arr.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, std::less<int>, Mode> output;
+    dense_map<int, std::string, 20, std::less<int>, Mode> output;
     auto split_pos = arr.begin();
     std::advance(split_pos, 6);  // Split at key 7
 
@@ -872,14 +872,14 @@ TEMPLATE_TEST_CASE("ordered_array split_at operation", "[ordered_array]",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
-                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+TEMPLATE_TEST_CASE("dense_map transfer_prefix_from operation",
+                   "[dense_map]", BinarySearchMode, LinearSearchMode,
                    SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer prefix to empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -895,11 +895,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer prefix to non-empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(1, "one");
     dest.insert(2, "two");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(5, "five");
     source.insert(6, "six");
     source.insert(7, "seven");
@@ -926,10 +926,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer zero elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(5, "five");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
 
     dest.transfer_prefix_from(source, 0);
@@ -939,10 +939,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer all elements from source") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(1, "one");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(10, "ten");
     source.insert(11, "eleven");
 
@@ -954,20 +954,20 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer throws if count exceeds source size") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
 
     REQUIRE_THROWS_AS(dest.transfer_prefix_from(source, 2), std::runtime_error);
   }
 
   SECTION("Transfer throws if destination has insufficient capacity") {
-    ordered_array<int, std::string, 5, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 5, std::less<int>, Mode> dest;
     for (int i = 0; i < 4; ++i) {
       dest.insert(i + 10, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, std::less<int>, Mode> source;
+    dense_map<int, std::string, 5, std::less<int>, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
 
@@ -976,12 +976,12 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 
   SECTION("Transfer maintains element order and values") {
-    ordered_array<int, std::string, 20, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 20, std::less<int>, Mode> dest;
     for (int i = 1; i <= 6; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, std::less<int>, Mode> source;
+    dense_map<int, std::string, 20, std::less<int>, Mode> source;
     for (int i = 10; i <= 14; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
@@ -1003,14 +1003,14 @@ TEMPLATE_TEST_CASE("ordered_array transfer_prefix_from operation",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
-                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+TEMPLATE_TEST_CASE("dense_map transfer_suffix_from operation",
+                   "[dense_map]", BinarySearchMode, LinearSearchMode,
                    SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer suffix to empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -1026,11 +1026,11 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer suffix to non-empty array") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(5, "five");
     dest.insert(6, "six");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
     source.insert(3, "three");
@@ -1056,10 +1056,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer zero elements") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(1, "one");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(5, "five");
 
     dest.transfer_suffix_from(source, 0);
@@ -1069,10 +1069,10 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer all elements from source") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
     dest.insert(10, "ten");
 
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(1, "one");
     source.insert(2, "two");
 
@@ -1084,20 +1084,20 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer throws if count exceeds source size") {
-    ordered_array<int, std::string, 10, std::less<int>, Mode> dest;
-    ordered_array<int, std::string, 10, std::less<int>, Mode> source;
+    dense_map<int, std::string, 10, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 10, std::less<int>, Mode> source;
     source.insert(5, "five");
 
     REQUIRE_THROWS_AS(dest.transfer_suffix_from(source, 2), std::runtime_error);
   }
 
   SECTION("Transfer throws if destination has insufficient capacity") {
-    ordered_array<int, std::string, 5, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 5, std::less<int>, Mode> dest;
     for (int i = 0; i < 4; ++i) {
       dest.insert(i, std::to_string(i));
     }
 
-    ordered_array<int, std::string, 5, std::less<int>, Mode> source;
+    dense_map<int, std::string, 5, std::less<int>, Mode> source;
     source.insert(10, "ten");
     source.insert(11, "eleven");
 
@@ -1106,12 +1106,12 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 
   SECTION("Transfer maintains element order and values") {
-    ordered_array<int, std::string, 20, std::less<int>, Mode> dest;
+    dense_map<int, std::string, 20, std::less<int>, Mode> dest;
     for (int i = 10; i <= 14; ++i) {
       dest.insert(i, std::to_string(i * 10));
     }
 
-    ordered_array<int, std::string, 20, std::less<int>, Mode> source;
+    dense_map<int, std::string, 20, std::less<int>, Mode> source;
     for (int i = 1; i <= 6; ++i) {
       source.insert(i, std::to_string(i * 100));
     }
@@ -1133,14 +1133,14 @@ TEMPLATE_TEST_CASE("ordered_array transfer_suffix_from operation",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
-                   "[ordered_array]", BinarySearchMode, LinearSearchMode,
+TEMPLATE_TEST_CASE("dense_map transfer operations combined",
+                   "[dense_map]", BinarySearchMode, LinearSearchMode,
                    SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Rebalancing simulation: transfer from overfull to underfull node") {
     // Simulate B+ tree rebalancing
-    ordered_array<int, int, 10, std::less<int>, Mode> left, right;
+    dense_map<int, int, 10, std::less<int>, Mode> left, right;
 
     // Left node is underfull
     left.insert(1, 10);
@@ -1170,7 +1170,7 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
   }
 
   SECTION("Multiple transfers in sequence") {
-    ordered_array<int, std::string, 15, std::less<int>, Mode> node1, node2,
+    dense_map<int, std::string, 15, std::less<int>, Mode> node1, node2,
         node3;
 
     // Setup initial nodes
@@ -1204,12 +1204,12 @@ TEMPLATE_TEST_CASE("ordered_array transfer operations combined",
 }
 
 // Test search for 16-byte keys (byte arrays don't support SIMD mode)
-TEMPLATE_TEST_CASE("ordered_array search with 16-byte keys",
-                   "[ordered_array][simd]", BinarySearchMode) {
+TEMPLATE_TEST_CASE("dense_map search with 16-byte keys",
+                   "[dense_map][simd]", BinarySearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using Key16 = std::array<uint8_t, 16>;
 
-  ordered_array<Key16, int, 10, std::less<Key16>, Mode> arr;
+  dense_map<Key16, int, 10, std::less<Key16>, Mode> arr;
 
   // Create test keys with distinct values
   Key16 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
@@ -1294,12 +1294,12 @@ TEMPLATE_TEST_CASE("ordered_array search with 16-byte keys",
 }
 
 // Test search for 32-byte keys (byte arrays don't support SIMD mode)
-TEMPLATE_TEST_CASE("ordered_array search with 32-byte keys",
-                   "[ordered_array][simd]", BinarySearchMode) {
+TEMPLATE_TEST_CASE("dense_map search with 32-byte keys",
+                   "[dense_map][simd]", BinarySearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using Key32 = std::array<uint8_t, 32>;
 
-  ordered_array<Key32, int, 10, std::less<Key32>, Mode> arr;
+  dense_map<Key32, int, 10, std::less<Key32>, Mode> arr;
 
   // Create test keys with distinct values
   Key32 key1 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1421,12 +1421,12 @@ TEMPLATE_TEST_CASE("ordered_array search with 32-byte keys",
 // SIMD Tests for 8-bit and 16-bit primitive types
 // ============================================================================
 
-TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with 8-bit signed integers",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("int8_t basic operations") {
-    ordered_array<int8_t, int, 64, std::less<int8_t>, Mode> arr;
+    dense_map<int8_t, int, 64, std::less<int8_t>, Mode> arr;
 
     // Test with positive values
     arr.insert(10, 100);
@@ -1457,7 +1457,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   }
 
   SECTION("int8_t edge cases") {
-    ordered_array<int8_t, int, 64, std::less<int8_t>, Mode> arr;
+    dense_map<int8_t, int, 64, std::less<int8_t>, Mode> arr;
 
     // Test minimum and maximum values
     arr.insert(127, 1);   // INT8_MAX
@@ -1482,7 +1482,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   }
 
   SECTION("int8_t with many elements (32+)") {
-    ordered_array<int8_t, int, 64, std::less<int8_t>, Mode> arr;
+    dense_map<int8_t, int, 64, std::less<int8_t>, Mode> arr;
 
     // Insert 40 elements to test full AVX2 path (32 at a time)
     for (int8_t i = 0; i < 40; ++i) {
@@ -1500,12 +1500,12 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit signed integers",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with 8-bit unsigned integers",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("uint8_t basic operations") {
-    ordered_array<uint8_t, int, 64, std::less<uint8_t>, Mode> arr;
+    dense_map<uint8_t, int, 64, std::less<uint8_t>, Mode> arr;
 
     arr.insert(10, 100);
     arr.insert(5, 50);
@@ -1535,7 +1535,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
   }
 
   SECTION("uint8_t high values (tests sign bit handling)") {
-    ordered_array<uint8_t, int, 64, std::less<uint8_t>, Mode> arr;
+    dense_map<uint8_t, int, 64, std::less<uint8_t>, Mode> arr;
 
     // Values > 127 have sign bit set in two's complement
     arr.insert(128, 1);
@@ -1556,12 +1556,12 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 8-bit unsigned integers",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with 16-bit signed integers",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("int16_t basic operations") {
-    ordered_array<int16_t, int, 64, std::less<int16_t>, Mode> arr;
+    dense_map<int16_t, int, 64, std::less<int16_t>, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);
@@ -1591,7 +1591,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   }
 
   SECTION("int16_t edge cases") {
-    ordered_array<int16_t, int, 64, std::less<int16_t>, Mode> arr;
+    dense_map<int16_t, int, 64, std::less<int16_t>, Mode> arr;
 
     // Test minimum and maximum values
     arr.insert(32767, 1);   // INT16_MAX
@@ -1616,7 +1616,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   }
 
   SECTION("int16_t with many elements (16+)") {
-    ordered_array<int16_t, int, 64, std::less<int16_t>, Mode> arr;
+    dense_map<int16_t, int, 64, std::less<int16_t>, Mode> arr;
 
     // Insert 20 elements to test full AVX2 path (16 at a time)
     for (int16_t i = 0; i < 20; ++i) {
@@ -1634,12 +1634,12 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit signed integers",
   }
 }
 
-TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with 16-bit unsigned integers",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("uint16_t basic operations") {
-    ordered_array<uint16_t, int, 64, std::less<uint16_t>, Mode> arr;
+    dense_map<uint16_t, int, 64, std::less<uint16_t>, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);
@@ -1669,7 +1669,7 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
   }
 
   SECTION("uint16_t high values (tests sign bit handling)") {
-    ordered_array<uint16_t, int, 64, std::less<uint16_t>, Mode> arr;
+    dense_map<uint16_t, int, 64, std::less<uint16_t>, Mode> arr;
 
     // Values > 32767 have sign bit set in two's complement
     arr.insert(32768, 1);
@@ -1691,12 +1691,12 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with 16-bit unsigned integers",
 }
 
 // Test with char types (may alias to int8_t or be separate type)
-TEMPLATE_TEST_CASE("ordered_array SIMD search with char types",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with char types",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("unsigned char basic operations") {
-    ordered_array<unsigned char, int, 64, std::less<unsigned char>, Mode> arr;
+    dense_map<unsigned char, int, 64, std::less<unsigned char>, Mode> arr;
 
     arr.insert('A', 65);
     arr.insert('Z', 90);
@@ -1722,12 +1722,12 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with char types",
 }
 
 // Test with short types (may alias to int16_t or be separate type)
-TEMPLATE_TEST_CASE("ordered_array SIMD search with short types",
-                   "[ordered_array][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with short types",
+                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("unsigned short basic operations") {
-    ordered_array<unsigned short, int, 64, std::less<unsigned short>, Mode> arr;
+    dense_map<unsigned short, int, 64, std::less<unsigned short>, Mode> arr;
 
     arr.insert(1000, 100);
     arr.insert(500, 50);
@@ -1750,10 +1750,10 @@ TEMPLATE_TEST_CASE("ordered_array SIMD search with short types",
   }
 }
 
-TEST_CASE("ordered_array with std::greater (descending order)",
-          "[ordered_array][comparator]") {
+TEST_CASE("dense_map with std::greater (descending order)",
+          "[dense_map][comparator]") {
   SECTION("Binary search mode") {
-    ordered_array<int, std::string, 10, std::greater<int>, SearchMode::Binary>
+    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Binary>
         arr;
 
     // Insert elements (they should be stored in descending order)
@@ -1804,7 +1804,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("Linear search mode") {
-    ordered_array<int, std::string, 10, std::greater<int>, SearchMode::Linear>
+    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Linear>
         arr;
 
     arr.insert(15, "fifteen");
@@ -1831,7 +1831,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 4-byte keys (int32_t)") {
-    ordered_array<int32_t, std::string, 64, std::greater<int32_t>,
+    dense_map<int32_t, std::string, 64, std::greater<int32_t>,
                   SearchMode::SIMD>
         arr;
 
@@ -1869,7 +1869,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 8-byte keys (int64_t)") {
-    ordered_array<int64_t, int, 64, std::greater<int64_t>, SearchMode::SIMD>
+    dense_map<int64_t, int, 64, std::greater<int64_t>, SearchMode::SIMD>
         arr;
 
     // Insert values to test 8-byte SIMD implementation
@@ -1892,7 +1892,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 4-byte keys (float)") {
-    ordered_array<float, int, 64, std::greater<float>, SearchMode::SIMD> arr;
+    dense_map<float, int, 64, std::greater<float>, SearchMode::SIMD> arr;
 
     // Insert float values
     arr.insert(3.14f, 1);
@@ -1917,7 +1917,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 8-byte keys (double)") {
-    ordered_array<double, int, 64, std::greater<double>, SearchMode::SIMD> arr;
+    dense_map<double, int, 64, std::greater<double>, SearchMode::SIMD> arr;
 
     // Insert double values
     for (int i = 0; i < 30; ++i) {
@@ -1936,7 +1936,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 2-byte keys (int16_t)") {
-    ordered_array<int16_t, int, 64, std::greater<int16_t>, SearchMode::SIMD>
+    dense_map<int16_t, int, 64, std::greater<int16_t>, SearchMode::SIMD>
         arr;
 
     // Insert int16_t values
@@ -1958,7 +1958,7 @@ TEST_CASE("ordered_array with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 1-byte keys (int8_t)") {
-    ordered_array<int8_t, int, 64, std::greater<int8_t>, SearchMode::SIMD> arr;
+    dense_map<int8_t, int, 64, std::greater<int8_t>, SearchMode::SIMD> arr;
 
     // Insert int8_t values
     for (int8_t i = 0; i < 50; ++i) {

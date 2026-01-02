@@ -6,7 +6,7 @@
 
 1. **fast-containers** (this repository): Core library with unit tests
    - Dependencies: Catch2 only (1 submodule)
-   - Contains: ordered_array, btree, allocators, and tests
+   - Contains: dense_map, btree, allocators, and tests
 
 2. **fast-containers-benchmarks** (separate repository): Benchmarks and stress tests
    - Dependencies: benchmark, abseil-cpp, lyra, unordered_dense, histograms (5 submodules)
@@ -22,8 +22,8 @@
 ## Structure
 ```
 src/
-  ordered_array.hpp (interface)      # 554 lines
-  ordered_array.ipp (implementation) # 958 lines
+  dense_map.hpp (interface)      # 554 lines
+  dense_map.ipp (implementation) # 958 lines
   btree.hpp (interface)              # 667 lines
   btree.ipp (implementation)         # 1532 lines
   hugepage_allocator.hpp, policy_based_hugepage_allocator.hpp
@@ -59,7 +59,7 @@ ASAN detects memory errors at runtime (buffer overflows, use-after-free, memory 
 
 **Performance**: ~2x slowdown, ~3x memory usage (debug builds only)
 
-## ordered_array<Key, Value, Length, SearchMode, MoveMode>
+## dense_map<Key, Value, Length, SearchMode, MoveMode>
 
 ### Core Design
 - **Storage**: Separate `std::array<Key, Length>` and `std::array<Value, Length>` (SoA layout)
@@ -376,7 +376,7 @@ if (pos != leaf->data.end() && pos->first == key) return ...;
 auto [it, inserted] = leaf->data.insert_hint(pos, key, value);  // uses pos
 ```
 
-**Added to ordered_array**:
+**Added to dense_map**:
 ```cpp
 std::pair<iterator, bool> insert_hint(iterator hint, const Key& key, const Value& value) {
   // Assumes hint from lower_bound(), skips re-searching
@@ -509,7 +509,7 @@ BENCHMARK(BM_OrderedArray_Insert<16, SearchMode::SIMD, MoveMode::Standard>);
 ### perf Analysis
 ```bash
 perf stat -e cycles,instructions,cache-references,cache-misses,branches \\
-  ./ordered_array_search_benchmark --benchmark_filter="RemoveInsert.*Size:32"
+  ./dense_map_search_benchmark --benchmark_filter="RemoveInsert.*Size:32"
 # IPC = instructions / cycles
 # Cache miss rate = cache-misses / cache-references * 100
 ```
@@ -577,29 +577,29 @@ gh api \
 
 ### Structure
 ```cpp
-// ordered_array.hpp
+// dense_map.hpp
 #pragma once
 #include <...>
 
 namespace fast_containers {
   template <...>
-  class ordered_array {
+  class dense_map {
    public:
     void method();  // Declaration only
    private:
     T* data_;
   };
 
-  #include "ordered_array.ipp"  // Include at end, before closing namespace
+  #include "dense_map.ipp"  // Include at end, before closing namespace
 }
 ```
 
 ```cpp
-// ordered_array.ipp - NO header guards
+// dense_map.ipp - NO header guards
 namespace fast_containers {
   template <Comparable Key, typename Value, std::size_t Length,
             SearchMode SearchModeT, MoveMode MoveModeT>
-  void ordered_array<Key, Value, Length, SearchModeT, MoveModeT>::method() {
+  void dense_map<Key, Value, Length, SearchModeT, MoveModeT>::method() {
     // Full implementation with complete template syntax
   }
 }
@@ -631,7 +631,7 @@ namespace fast_containers {
 
 | Component | Old .hpp | New .hpp | New .ipp | Reduction |
 |-----------|----------|----------|----------|-----------|
-| ordered_array | 1,129 lines | 554 lines | 958 lines | 51% |
+| dense_map | 1,129 lines | 554 lines | 958 lines | 51% |
 | btree | 2,113 lines | 667 lines | 1,532 lines | 68% |
 
 ## Common Pitfalls
@@ -704,9 +704,9 @@ SIMD provides same speedup for descending order as ascending:
 - Size 64: 59% faster than Linear
 
 ### Files Modified
-- `ordered_array.hpp`: Updated static_assert to accept std::greater
-- `ordered_array.ipp`: Updated all 4 SIMD implementations (1, 2, 4, 8 byte)
-- `test_ordered_array.cpp`: Added 6 comprehensive test sections for std::greater
+- `dense_map.hpp`: Updated static_assert to accept std::greater
+- `dense_map.ipp`: Updated all 4 SIMD implementations (1, 2, 4, 8 byte)
+- `test_dense_map.cpp`: Added 6 comprehensive test sections for std::greater
 
 ## Git Submodule Management
 

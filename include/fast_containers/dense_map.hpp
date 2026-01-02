@@ -80,17 +80,17 @@ template <typename Key, typename Value, std::size_t Length,
           typename Compare = std::less<Key>,
           SearchMode SearchModeT = SearchMode::Binary>
   requires ComparatorCompatible<Key, Compare>
-class ordered_array {
+class dense_map {
  private:
   // Forward declare iterator classes
   template <bool IsConst>
-  class ordered_array_iterator;
+  class dense_map_iterator;
 
   // Allow different instantiations to access each other's private members.
   // Primarily useful for arrays with differing search modes or sizes.
   template <typename K, typename V, std::size_t L, typename C, SearchMode SM>
     requires ComparatorCompatible<K, C>
-  friend class ordered_array;
+  friend class dense_map;
 
  public:
   // Type aliases for key-value pair
@@ -101,8 +101,8 @@ class ordered_array {
   using key_compare = Compare;
 
   // Iterator types
-  using iterator = ordered_array_iterator<false>;
-  using const_iterator = ordered_array_iterator<true>;
+  using iterator = dense_map_iterator<false>;
+  using const_iterator = dense_map_iterator<true>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -120,7 +120,7 @@ class ordered_array {
   /**
    * Default constructor - initializes an empty ordered array
    */
-  ordered_array() : size_(0), comp_() {}
+  dense_map() : size_(0), comp_() {}
 
   /**
    * Copy constructor - creates a deep copy of another ordered array
@@ -128,7 +128,7 @@ class ordered_array {
    *
    * @param other The ordered array to copy from
    */
-  ordered_array(const ordered_array& other);
+  dense_map(const dense_map& other);
 
   /**
    * Move constructor - transfers ownership from another ordered array
@@ -137,7 +137,7 @@ class ordered_array {
    *
    * @param other The ordered array to move from (will be left empty)
    */
-  ordered_array(ordered_array&& other) noexcept;
+  dense_map(dense_map&& other) noexcept;
 
   /**
    * Copy assignment operator - replaces contents with a copy of another array
@@ -146,7 +146,7 @@ class ordered_array {
    * @param other The ordered array to copy from
    * @return Reference to this array
    */
-  ordered_array& operator=(const ordered_array& other);
+  dense_map& operator=(const dense_map& other);
 
   /**
    * Move assignment operator - replaces contents by moving from another array
@@ -156,7 +156,7 @@ class ordered_array {
    * @param other The ordered array to move from (will be left empty)
    * @return Reference to this array
    */
-  ordered_array& operator=(ordered_array&& other) noexcept;
+  dense_map& operator=(dense_map&& other) noexcept;
 
   /**
    * Insert a new key-value pair into the array in sorted order.
@@ -381,7 +381,7 @@ class ordered_array {
   template <std::size_t OutputLength>
   void split_at(
       iterator pos,
-      ordered_array<Key, Value, OutputLength, Compare, SearchModeT>& output);
+      dense_map<Key, Value, OutputLength, Compare, SearchModeT>& output);
 
   /**
    * Transfer elements from the beginning of source array to the end of
@@ -402,7 +402,7 @@ class ordered_array {
    */
   template <std::size_t SourceLength>
   void transfer_prefix_from(
-      ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+      dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
       size_type count);
 
   /**
@@ -426,7 +426,7 @@ class ordered_array {
    */
   template <std::size_t SourceLength>
   void transfer_suffix_from(
-      ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+      dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
       size_type count);
 
  private:
@@ -508,7 +508,7 @@ class ordered_array {
 
   // Custom iterator implementation
   template <bool IsConst>
-  class ordered_array_iterator {
+  class dense_map_iterator {
    public:
     // Arrow operator helper (forward declare)
     struct arrow_proxy {
@@ -524,14 +524,14 @@ class ordered_array {
     using reference = pair_proxy<IsConst>;
 
     using array_ptr_type =
-        std::conditional_t<IsConst, const ordered_array*, ordered_array*>;
+        std::conditional_t<IsConst, const dense_map*, dense_map*>;
 
-    ordered_array_iterator(array_ptr_type arr, size_type idx)
+    dense_map_iterator(array_ptr_type arr, size_type idx)
         : array_(arr), index_(idx) {}
 
     // Allow conversion from non-const to const iterator
     template <bool WasConst = IsConst, typename = std::enable_if_t<WasConst>>
-    ordered_array_iterator(const ordered_array_iterator<false>& other)
+    dense_map_iterator(const dense_map_iterator<false>& other)
         : array_(other.array_), index_(other.index_) {}
 
     reference operator*() const {
@@ -540,47 +540,47 @@ class ordered_array {
 
     arrow_proxy operator->() const { return arrow_proxy(operator*()); }
 
-    ordered_array_iterator& operator++() {
+    dense_map_iterator& operator++() {
       ++index_;
       return *this;
     }
 
-    ordered_array_iterator operator++(int) {
+    dense_map_iterator operator++(int) {
       auto tmp = *this;
       ++index_;
       return tmp;
     }
 
-    ordered_array_iterator& operator--() {
+    dense_map_iterator& operator--() {
       --index_;
       return *this;
     }
 
-    ordered_array_iterator operator--(int) {
+    dense_map_iterator operator--(int) {
       auto tmp = *this;
       --index_;
       return tmp;
     }
 
-    ordered_array_iterator& operator+=(difference_type n) {
+    dense_map_iterator& operator+=(difference_type n) {
       index_ += n;
       return *this;
     }
 
-    ordered_array_iterator& operator-=(difference_type n) {
+    dense_map_iterator& operator-=(difference_type n) {
       index_ -= n;
       return *this;
     }
 
-    ordered_array_iterator operator+(difference_type n) const {
-      return ordered_array_iterator(array_, index_ + n);
+    dense_map_iterator operator+(difference_type n) const {
+      return dense_map_iterator(array_, index_ + n);
     }
 
-    ordered_array_iterator operator-(difference_type n) const {
-      return ordered_array_iterator(array_, index_ - n);
+    dense_map_iterator operator-(difference_type n) const {
+      return dense_map_iterator(array_, index_ - n);
     }
 
-    difference_type operator-(const ordered_array_iterator& other) const {
+    difference_type operator-(const dense_map_iterator& other) const {
       return index_ - other.index_;
     }
 
@@ -588,27 +588,27 @@ class ordered_array {
       return reference(array_->keys_[index_ + n], array_->values_[index_ + n]);
     }
 
-    bool operator==(const ordered_array_iterator& other) const {
+    bool operator==(const dense_map_iterator& other) const {
       return array_ == other.array_ && index_ == other.index_;
     }
 
-    bool operator!=(const ordered_array_iterator& other) const {
+    bool operator!=(const dense_map_iterator& other) const {
       return !(*this == other);
     }
 
-    bool operator<(const ordered_array_iterator& other) const {
+    bool operator<(const dense_map_iterator& other) const {
       return index_ < other.index_;
     }
 
-    bool operator>(const ordered_array_iterator& other) const {
+    bool operator>(const dense_map_iterator& other) const {
       return index_ > other.index_;
     }
 
-    bool operator<=(const ordered_array_iterator& other) const {
+    bool operator<=(const dense_map_iterator& other) const {
       return index_ <= other.index_;
     }
 
-    bool operator>=(const ordered_array_iterator& other) const {
+    bool operator>=(const dense_map_iterator& other) const {
       return index_ >= other.index_;
     }
 
@@ -624,26 +624,26 @@ class ordered_array {
     array_ptr_type array_;
     size_type index_;
 
-    friend class ordered_array;
+    friend class dense_map;
     template <bool>
-    friend class ordered_array_iterator;
+    friend class dense_map_iterator;
   };
 };
 
 // Non-member operator+ for iterator + difference
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT, bool IsConst>
-typename ordered_array<Key, Value, Length, Compare,
-                       SearchModeT>::template ordered_array_iterator<IsConst>
-operator+(typename ordered_array<Key, Value, Length, Compare, SearchModeT>::
-              template ordered_array_iterator<IsConst>::difference_type n,
-          const typename ordered_array<
+typename dense_map<Key, Value, Length, Compare,
+                       SearchModeT>::template dense_map_iterator<IsConst>
+operator+(typename dense_map<Key, Value, Length, Compare, SearchModeT>::
+              template dense_map_iterator<IsConst>::difference_type n,
+          const typename dense_map<
               Key, Value, Length, Compare,
-              SearchModeT>::template ordered_array_iterator<IsConst>& it) {
+              SearchModeT>::template dense_map_iterator<IsConst>& it) {
   return it + n;
 }
 
 }  // namespace kressler::fast_containers
 
 // Include implementation
-#include "ordered_array.ipp"
+#include "dense_map.ipp"

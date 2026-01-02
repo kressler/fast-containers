@@ -51,12 +51,12 @@ target_link_libraries(sample_test PRIVATE
 )
 add_test(NAME sample_test COMMAND sample_test)
 
-add_executable(test_ordered_array test_ordered_array.cpp)
-target_link_libraries(test_ordered_array PRIVATE
+add_executable(test_dense_map test_dense_map.cpp)
+target_link_libraries(test_dense_map PRIVATE
   Catch2::Catch2WithMain
   kressler::fast_containers
 )
-add_test(NAME test_ordered_array COMMAND test_ordered_array)
+add_test(NAME test_dense_map COMMAND test_dense_map)
 
 add_executable(test_btree test_btree.cpp)
 target_link_libraries(test_btree PRIVATE

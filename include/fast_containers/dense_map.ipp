@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-// ordered_array.ipp - Implementation details for ordered_array
-// This file is included at the end of ordered_array.hpp
+// dense_map.ipp - Implementation details for dense_map
+// This file is included at the end of dense_map.hpp
 // DO NOT include this file directly
 
 namespace kressler::fast_containers {
@@ -21,8 +21,8 @@ namespace kressler::fast_containers {
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
-    const ordered_array& other)
+dense_map<Key, Value, Length, Compare, SearchModeT>::dense_map(
+    const dense_map& other)
     : size_(other.size_), comp_(other.comp_) {
   // Copy only the active elements
   if (size_ > 0) {
@@ -42,8 +42,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
-    ordered_array&& other) noexcept
+dense_map<Key, Value, Length, Compare, SearchModeT>::dense_map(
+    dense_map&& other) noexcept
     : size_(other.size_), comp_(std::move(other.comp_)) {
   // Move the active elements
   if (size_ > 0) {
@@ -65,9 +65,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::ordered_array(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT>&
-ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
-    const ordered_array& other) {
+dense_map<Key, Value, Length, Compare, SearchModeT>&
+dense_map<Key, Value, Length, Compare, SearchModeT>::operator=(
+    const dense_map& other) {
   if (this != &other) {
     size_ = other.size_;
     // Copy only the active elements
@@ -92,9 +92,9 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-ordered_array<Key, Value, Length, Compare, SearchModeT>&
-ordered_array<Key, Value, Length, Compare, SearchModeT>::operator=(
-    ordered_array&& other) noexcept {
+dense_map<Key, Value, Length, Compare, SearchModeT>&
+dense_map<Key, Value, Length, Compare, SearchModeT>::operator=(
+    dense_map&& other) noexcept {
   if (this != &other) {
     size_ = other.size_;
     // Move the active elements
@@ -127,9 +127,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 std::pair<
-    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator,
     bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::insert(
+dense_map<Key, Value, Length, Compare, SearchModeT>::insert(
     const Key& key, const Value& value) {
   // Early check for better error message (helper also checks)
   if (size_ >= Length) {
@@ -166,9 +166,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 std::pair<
-    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator,
     bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_hint(
+dense_map<Key, Value, Length, Compare, SearchModeT>::insert_hint(
     iterator hint, const Key& key, const Value& value) {
   // Early check for better error message (helper also checks)
   if (size_ >= Length) {
@@ -205,9 +205,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename... Args>
 std::pair<
-    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator,
     bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::try_emplace(
+dense_map<Key, Value, Length, Compare, SearchModeT>::try_emplace(
     const Key& key, Args&&... args) {
   // Early check for better error message (helper also checks)
   if (size_ >= Length) {
@@ -240,9 +240,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename M>
 std::pair<
-    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator,
     bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(
+dense_map<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(
     const Key& key, M&& value) {
   // Find the position where the key should be inserted
   const size_type idx = lower_bound_key(key) - keys_.begin();
@@ -270,8 +270,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_or_assign(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
   assert(pos != end() && "Cannot erase end iterator");
 
   const size_type idx = pos.index();
@@ -296,8 +296,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::size_type
-ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(const Key& key) {
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::size_type
+dense_map<Key, Value, Length, Compare, SearchModeT>::erase(const Key& key) {
   const auto it = find(key);
   if (it != end()) {
     erase(it);  // Call iterator-based erase
@@ -318,7 +318,7 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::erase(const Key& key) {
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
+Value& dense_map<Key, Value, Length, Compare, SearchModeT>::operator[](
     const Key& key) {
   const auto it = find(key);
   if (it != end()) {
@@ -359,8 +359,8 @@ Value& ordered_array<Key, Value, Length, Compare, SearchModeT>::operator[](
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::find(const Key& key) {
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::find(const Key& key) {
   const auto pos = lower_bound_key(key);
   const size_type idx = pos - keys_.begin();
 
@@ -379,8 +379,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::find(const Key& key) {
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::const_iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::find(
     const Key& key) const {
   const auto pos = lower_bound_key(key);
   const size_type idx = pos - keys_.begin();
@@ -400,8 +400,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::find(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) {
   const auto pos = lower_bound_key(key);
   const size_type idx = pos - keys_.begin();
@@ -418,8 +418,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::const_iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::lower_bound(
     const Key& key) const {
   const auto pos = lower_bound_key(key);
   const size_type idx = pos - keys_.begin();
@@ -435,8 +435,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::upper_bound(
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::upper_bound(
     const Key& key) {
   auto it = lower_bound(key);
   if (it != end() && it->first == key) {
@@ -455,8 +455,8 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::upper_bound(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-typename ordered_array<Key, Value, Length, Compare, SearchModeT>::const_iterator
-ordered_array<Key, Value, Length, Compare, SearchModeT>::upper_bound(
+typename dense_map<Key, Value, Length, Compare, SearchModeT>::const_iterator
+dense_map<Key, Value, Length, Compare, SearchModeT>::upper_bound(
     const Key& key) const {
   auto it = lower_bound(key);
   if (it != end() && it->first == key) {
@@ -488,9 +488,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t OutputLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT>::split_at(
+void dense_map<Key, Value, Length, Compare, SearchModeT>::split_at(
     iterator pos,
-    ordered_array<Key, Value, OutputLength, Compare, SearchModeT>& output) {
+    dense_map<Key, Value, OutputLength, Compare, SearchModeT>& output) {
   // Debug assertion: iterator must belong to this array
   assert(pos.array_ == this && "Iterator does not belong to this array");
 
@@ -543,9 +543,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT>::
+void dense_map<Key, Value, Length, Compare, SearchModeT>::
     transfer_prefix_from(
-        ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+        dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
         size_type count) {
   // Validate count
   if (count > source.size_) {
@@ -610,9 +610,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void ordered_array<Key, Value, Length, Compare, SearchModeT>::
+void dense_map<Key, Value, Length, Compare, SearchModeT>::
     transfer_suffix_from(
-        ordered_array<Key, Value, SourceLength, Compare, SearchModeT>& source,
+        dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
         size_type count) {
   // Validate count
   if (count > source.size_) {
@@ -662,7 +662,7 @@ void ordered_array<Key, Value, Length, Compare, SearchModeT>::
 // ============================================================================
 
 #ifdef __AVX2__
-#include "ordered_array_simd.ipp"
+#include "dense_map_simd.ipp"
 #endif
 
 // ============================================================================
@@ -686,9 +686,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename OnExists, typename OnInsert>
 std::pair<
-    typename ordered_array<Key, Value, Length, Compare, SearchModeT>::iterator,
+    typename dense_map<Key, Value, Length, Compare, SearchModeT>::iterator,
     bool>
-ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_impl(
+dense_map<Key, Value, Length, Compare, SearchModeT>::insert_impl(
     size_type idx, const Key& key, OnExists&& on_exists, OnInsert&& on_insert) {
   // Check if key exists at this position
   if (idx < size_ && keys_[idx] == key) {
@@ -725,7 +725,7 @@ ordered_array<Key, Value, Length, Compare, SearchModeT>::insert_impl(
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
-auto ordered_array<Key, Value, Length, Compare, SearchModeT>::lower_bound_key(
+auto dense_map<Key, Value, Length, Compare, SearchModeT>::lower_bound_key(
     const Key& key) const {
   if constexpr (SearchModeT == SearchMode::Linear) {
     // Linear search: scan from beginning until we find key >= search key
