@@ -17,7 +17,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 1)
-auto ordered_array<Key, Value, Length, Compare,
+auto dense_map<Key, Value, Length, Compare,
                    SearchModeT>::simd_lower_bound_1byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "1-byte SIMD search requires primitive type (int8_t, uint8_t, "
@@ -115,7 +115,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 2)
-auto ordered_array<Key, Value, Length, Compare,
+auto dense_map<Key, Value, Length, Compare,
                    SearchModeT>::simd_lower_bound_2byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "2-byte SIMD search requires primitive type (int16_t, "
@@ -239,7 +239,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 4)
-auto ordered_array<Key, Value, Length, Compare,
+auto dense_map<Key, Value, Length, Compare,
                    SearchModeT>::simd_lower_bound_4byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "4-byte SIMD search requires primitive type (int32_t, "
@@ -428,7 +428,7 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
   requires ComparatorCompatible<Key, Compare>
 template <typename K>
   requires(sizeof(K) == 8)
-auto ordered_array<Key, Value, Length, Compare,
+auto dense_map<Key, Value, Length, Compare,
                    SearchModeT>::simd_lower_bound_8byte(const K& key) const {
   static_assert(SimdPrimitive<K>,
                 "8-byte SIMD search requires primitive type (int64_t, "
