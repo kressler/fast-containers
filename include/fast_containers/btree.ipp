@@ -17,18 +17,14 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
   requires ComparatorCompatible<Key, Compare>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::btree(const Allocator& alloc)
-    : root_is_leaf_(true),
-      size_(0),
-      leaf_alloc_(alloc),
+    : leaf_alloc_(alloc),
       internal_alloc_(alloc),
-      leftmost_leaf_(nullptr),
-      rightmost_leaf_(nullptr) {
-  // Always allocate an empty root leaf to simplify insert/erase logic
-  leaf_root_ = allocate_leaf_node();
-  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
-  leftmost_leaf_ = leaf_root_;
-  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
-  rightmost_leaf_ = leaf_root_;
+      root_is_leaf_(true),
+      leaf_root_(allocate_leaf_node()),
+      size_(0),
+      leftmost_leaf_(leaf_root_),
+      rightmost_leaf_(leaf_root_) {
+  // Empty - all initialization done in initializer list
 }
 
 // Destructor
@@ -49,21 +45,17 @@ template <typename Key, typename Value, std::size_t LeafNodeSize,
   requires ComparatorCompatible<Key, Compare>
 btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       Allocator>::btree(const btree& other)
-    : root_is_leaf_(true),
-      size_(0),
-      leaf_alloc_(std::allocator_traits<decltype(leaf_alloc_)>::
+    : leaf_alloc_(std::allocator_traits<decltype(leaf_alloc_)>::
                       select_on_container_copy_construction(other.leaf_alloc_)),
       internal_alloc_(
           std::allocator_traits<decltype(internal_alloc_)>::
               select_on_container_copy_construction(other.internal_alloc_)),
-      leftmost_leaf_(nullptr),
-      rightmost_leaf_(nullptr) {
-  // Always allocate an empty root leaf
-  leaf_root_ = allocate_leaf_node();
-  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
-  leftmost_leaf_ = leaf_root_;
-  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
-  rightmost_leaf_ = leaf_root_;
+      root_is_leaf_(true),
+      leaf_root_(allocate_leaf_node()),
+      size_(0),
+      leftmost_leaf_(leaf_root_),
+      rightmost_leaf_(leaf_root_) {
+  // Always allocate an empty root leaf, then copy all elements
 
   // Copy all elements using insert (use const iterators)
   for (const_iterator it = other.begin(); it != other.end(); ++it) {

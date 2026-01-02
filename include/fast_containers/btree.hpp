@@ -928,6 +928,21 @@ class btree {
    */
   void deallocate_internal_node(InternalNode* node);
 
+  // Comparator instance
+  [[no_unique_address]] Compare comp_;
+
+  // Allocators for LeafNode and InternalNode
+  // Each allocator maintains a separate pool via rebind mechanism
+  // This allows different pool sizes for different node types
+  // NOTE: Allocators must be declared before root pointers so they can be
+  // used in constructor initializer lists (allocate_leaf_node requires them)
+  [[no_unique_address]]
+  typename std::allocator_traits<Allocator>::template rebind_alloc<LeafNode>
+      leaf_alloc_;
+  [[no_unique_address]]
+  typename std::allocator_traits<Allocator>::template rebind_alloc<InternalNode>
+      internal_alloc_;
+
   // Root and size members
   bool root_is_leaf_;
   // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
@@ -942,19 +957,6 @@ class btree {
   // Cached pointers to first and last leaf for O(1) begin()/rbegin()
   LeafNode* leftmost_leaf_;
   LeafNode* rightmost_leaf_;
-
-  // Comparator instance
-  [[no_unique_address]] Compare comp_;
-
-  // Allocators for LeafNode and InternalNode
-  // Each allocator maintains a separate pool via rebind mechanism
-  // This allows different pool sizes for different node types
-  [[no_unique_address]]
-  typename std::allocator_traits<Allocator>::template rebind_alloc<LeafNode>
-      leaf_alloc_;
-  [[no_unique_address]]
-  typename std::allocator_traits<Allocator>::template rebind_alloc<InternalNode>
-      internal_alloc_;
 
   /**
    * Recursively deallocate all nodes in the tree.
