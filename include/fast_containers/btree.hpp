@@ -41,7 +41,8 @@ constexpr std::size_t default_internal_node_size() {
   // Clamp to reasonable bounds
   // Min 16: Prevents degenerate trees with huge keys
   // Max 64: Keeps binary search cost bounded (6 comparisons)
-  return std::clamp(rounded, std::size_t(16), std::size_t(64));
+  return std::clamp(rounded, static_cast<std::size_t>(16),
+                    static_cast<std::size_t>(64));
 }
 
 /**
@@ -75,7 +76,8 @@ constexpr std::size_t default_leaf_node_size() {
   // Clamp to reasonable bounds
   // Min 8: Prevents tiny nodes with huge values
   // Max 64: Keeps data movement cost reasonable during splits
-  return std::clamp(rounded, std::size_t(8), std::size_t(64));
+  return std::clamp(rounded, static_cast<std::size_t>(8),
+                    static_cast<std::size_t>(64));
 }
 
 /**
@@ -190,32 +192,39 @@ class btree {
    * InternalNode* (all children at the same level have the same type).
    */
   struct InternalNode {
+    // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
+    // Union used for performance - avoids std::variant overhead
     union {
       dense_map<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT>
           leaf_children;
       dense_map<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
           internal_children;
     };
+    // NOLINTEND(cppcoreguidelines-pro-type-union-access)
     const bool children_are_leaves;
     InternalNode* parent;  // Parent is always internal (or nullptr for root)
 
     // Constructor for leaf children
     explicit InternalNode(bool has_leaf_children)
         : children_are_leaves(has_leaf_children), parent(nullptr) {
+      // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
       if (children_are_leaves) {
         new (&leaf_children) decltype(leaf_children)();
       } else {
         new (&internal_children) decltype(internal_children)();
       }
+      // NOLINTEND(cppcoreguidelines-pro-type-union-access)
     }
 
     // Destructor - must explicitly destroy the active union member
     ~InternalNode() {
+      // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
       if (children_are_leaves) {
         leaf_children.~dense_map();
       } else {
         internal_children.~dense_map();
       }
+      // NOLINTEND(cppcoreguidelines-pro-type-union-access)
     }
 
     // Delete copy constructor and assignment (non-copyable due to union)
@@ -296,13 +305,13 @@ class btree {
    * Returns the number of elements in the tree.
    * Complexity: O(1)
    */
-  size_type size() const { return size_; }
+  [[nodiscard]] size_type size() const { return size_; }
 
   /**
    * Returns true if the tree is empty.
    * Complexity: O(1)
    */
-  bool empty() const { return size_ == 0; }
+  [[nodiscard]] bool empty() const { return size_ == 0; }
 
   /**
    * Returns the key comparison object.
@@ -921,10 +930,13 @@ class btree {
 
   // Root and size members
   bool root_is_leaf_;
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
+  // Union for root pointer - avoids std::variant overhead for hot path
   union {
     LeafNode* leaf_root_;
     InternalNode* internal_root_;
   };
+  // NOLINTEND(cppcoreguidelines-pro-type-union-access)
   size_type size_;
 
   // Cached pointers to first and last leaf for O(1) begin()/rbegin()
@@ -959,7 +971,7 @@ class btree {
    */
   InternalNode* get_internal_root() const {
     assert(!root_is_leaf_ && "Root is not an internal node");
-    return internal_root_;
+    return internal_root_;  // NOLINT(cppcoreguidelines-pro-type-union-access)
   }
 
   /**
@@ -967,7 +979,7 @@ class btree {
    */
   LeafNode* get_leaf_root() const {
     assert(root_is_leaf_ && "Root is not a leaf node");
-    return leaf_root_;
+    return leaf_root_;  // NOLINT(cppcoreguidelines-pro-type-union-access)
   }
 
   /**

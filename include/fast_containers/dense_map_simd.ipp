@@ -318,7 +318,7 @@ auto dense_map<Key, Value, Length, Compare,
 
     if constexpr (is_unsigned) {
       // Flip sign bit: converts unsigned comparison to signed comparison
-      key_bits ^= static_cast<int32_t>(0x80000000u);
+      key_bits ^= static_cast<int32_t>(0x80000000U);
     }
 
     __m256i search_vec_256 = _mm256_set1_epi32(key_bits);
@@ -332,7 +332,7 @@ auto dense_map<Key, Value, Length, Compare,
       // For unsigned, flip sign bits before comparison
       if constexpr (is_unsigned) {
         __m256i flip_mask =
-            _mm256_set1_epi32(static_cast<int32_t>(0x80000000u));
+            _mm256_set1_epi32(static_cast<int32_t>(0x80000000U));
         keys_vec = _mm256_xor_si256(keys_vec, flip_mask);
       }
 
@@ -364,7 +364,7 @@ auto dense_map<Key, Value, Length, Compare,
           _mm_load_si128(reinterpret_cast<const __m128i*>(&keys_[i]));
 
       if constexpr (is_unsigned) {
-        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000U));
         keys_vec = _mm_xor_si128(keys_vec, flip_mask);
       }
 
@@ -390,7 +390,7 @@ auto dense_map<Key, Value, Length, Compare,
           _mm_load_sd(reinterpret_cast<const double*>(&keys_[i])));
 
       if constexpr (is_unsigned) {
-        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000u));
+        __m128i flip_mask = _mm_set1_epi32(static_cast<int32_t>(0x80000000U));
         keys_vec = _mm_xor_si128(keys_vec, flip_mask);
       }
 
