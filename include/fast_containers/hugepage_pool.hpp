@@ -45,14 +45,14 @@ inline constexpr bool allocator_stats_enabled = false;
  * - Requires allocated size >= sizeof(void*) for free list
  * - Memory is allocated on NUMA node via first-touch policy during pre-faulting
  */
-class HugePagePool {
+class HugePagePool {  // NOLINT(readability-identifier-naming)
  public:
   using size_type = std::size_t;
 
  private:
-  static constexpr size_type HUGEPAGE_SIZE = 2 * 1024 * 1024;  // 2MB
+  static constexpr size_type hugepage_size = 2UL * 1024 * 1024;  // 2MB
 
-  struct MemoryRegion {
+  struct memory_region {
     std::byte* base = nullptr;
     size_type size = 0;
   };
@@ -63,7 +63,7 @@ class HugePagePool {
    *
    * Note: Not thread-safe (consistent with rest of pool).
    */
-  struct Stats {
+  struct stats {
     size_type allocations{0};      // Total allocations
     size_type deallocations{0};    // Total deallocations
     size_type growth_events{0};    // Number of pool growths
@@ -96,14 +96,14 @@ class HugePagePool {
     }
   };
 
-  std::vector<MemoryRegion> regions_;
-  std::byte* next_free_;
-  size_type bytes_remaining_;
-  const size_type initial_size_;
-  const size_type growth_size_;
-  bool using_hugepages_;
-  void* free_list_head_;  // Head of intrusive free list
-  Stats stats_;
+  std::vector<memory_region> regions_;
+  std::byte* next_free_ = nullptr;
+  size_type bytes_remaining_ = 0;
+  const size_type initial_size_;  // NOLINT(readability-identifier-naming)
+  const size_type growth_size_;   // NOLINT(readability-identifier-naming)
+  bool using_hugepages_ = false;
+  void* free_list_head_ = nullptr;  // Head of intrusive free list
+  stats stats_;
 
  public:
   /**
@@ -118,17 +118,12 @@ class HugePagePool {
    * @param growth_size Size of additional regions when pool grows (default
    * 64MB)
    */
-  explicit HugePagePool(size_type initial_size = 256 * 1024 * 1024,
+  explicit HugePagePool(size_type initial_size = 256UL * 1024 * 1024,
                         bool use_hugepages = true,
-                        size_type growth_size = 64 * 1024 * 1024)
-      : bytes_remaining_(0),
-        initial_size_(initial_size),
-        growth_size_(growth_size),
-        using_hugepages_(false),
-        next_free_(nullptr),
-        free_list_head_(nullptr) {
+                        size_type growth_size = 64UL * 1024 * 1024)
+      : initial_size_(initial_size), growth_size_(growth_size) {
     // Allocate initial region
-    MemoryRegion initial_region;
+    memory_region initial_region;
 
     // Try hugepages first if requested
     if (use_hugepages) {
@@ -159,6 +154,8 @@ class HugePagePool {
   // Non-copyable, non-movable
   HugePagePool(const HugePagePool&) = delete;
   HugePagePool& operator=(const HugePagePool&) = delete;
+  HugePagePool(HugePagePool&&) = delete;
+  HugePagePool& operator=(HugePagePool&&) = delete;
 
   /**
    * Allocate raw memory with specified alignment.
@@ -169,8 +166,9 @@ class HugePagePool {
    * @throws std::bad_alloc if unable to grow pool
    */
   void* allocate(size_type bytes, size_type alignment) {
-    if (bytes == 0)
+    if (bytes == 0) {
       return nullptr;
+    }
 
     // Try to allocate from free list first
     if (free_list_head_ != nullptr) {
@@ -216,8 +214,9 @@ class HugePagePool {
    * @param bytes Number of bytes (for statistics tracking)
    */
   void deallocate(void* ptr, size_type bytes) {
-    if (ptr == nullptr || bytes == 0)
+    if (ptr == nullptr || bytes == 0) {
       return;
+    }
 
     // Add to intrusive free list
     *reinterpret_cast<void**>(ptr) = free_list_head_;
@@ -229,63 +228,71 @@ class HugePagePool {
   /**
    * Check if pool is using hugepages.
    */
-  bool using_hugepages() const { return using_hugepages_; }
+  [[nodiscard]] bool using_hugepages() const { return using_hugepages_; }
 
   /**
    * Get remaining bytes in pool.
    */
-  size_type bytes_remaining() const { return bytes_remaining_; }
+  [[nodiscard]] size_type bytes_remaining() const { return bytes_remaining_; }
 
   /**
    * Get initial pool size (for rebind constructor).
    */
-  size_type initial_size() const { return initial_size_; }
+  [[nodiscard]] size_type initial_size() const { return initial_size_; }
 
   /**
    * Get growth size (for rebind constructor).
    */
-  size_type growth_size() const { return growth_size_; }
+  [[nodiscard]] size_type growth_size() const { return growth_size_; }
 
   /**
    * Check if pool is configured to use hugepages.
    */
-  bool is_hugepages_enabled() const { return using_hugepages_; }
+  [[nodiscard]] bool is_hugepages_enabled() const { return using_hugepages_; }
 
   /**
    * Get total number of allocations.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_allocations() const { return stats_.allocations; }
+  [[nodiscard]] size_type get_allocations() const { return stats_.allocations; }
 
   /**
    * Get total number of deallocations.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_deallocations() const { return stats_.deallocations; }
+  [[nodiscard]] size_type get_deallocations() const {
+    return stats_.deallocations;
+  }
 
   /**
    * Get number of pool growth events.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_growth_events() const { return stats_.growth_events; }
+  [[nodiscard]] size_type get_growth_events() const {
+    return stats_.growth_events;
+  }
 
   /**
    * Get lifetime total bytes allocated.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_bytes_allocated() const { return stats_.bytes_allocated; }
+  [[nodiscard]] size_type get_bytes_allocated() const {
+    return stats_.bytes_allocated;
+  }
 
   /**
    * Get current bytes in use.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_current_usage() const { return stats_.current_usage; }
+  [[nodiscard]] size_type get_current_usage() const {
+    return stats_.current_usage;
+  }
 
   /**
    * Get peak bytes in use.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_peak_usage() const { return stats_.peak_usage; }
+  [[nodiscard]] size_type get_peak_usage() const { return stats_.peak_usage; }
 
  private:
   /**
@@ -293,7 +300,7 @@ class HugePagePool {
    * Called when current region is exhausted.
    */
   void grow() {
-    MemoryRegion new_region;
+    memory_region new_region;
 
     if (using_hugepages_) {
       new_region = allocate_hugepages_region(growth_size_);
@@ -312,15 +319,15 @@ class HugePagePool {
     stats_.record_growth();
   }
 
-  MemoryRegion allocate_hugepages_region(size_type size) {
+  memory_region allocate_hugepages_region(size_type size) {
     // Round up to hugepage boundary
-    size_type aligned_size = (size + HUGEPAGE_SIZE - 1) & ~(HUGEPAGE_SIZE - 1);
+    size_type aligned_size = (size + hugepage_size - 1) & ~(hugepage_size - 1);
 
     void* ptr = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
 
     if (ptr == MAP_FAILED) {
-      return {nullptr, 0};  // Hugepages not available
+      return {.base = nullptr, .size = 0};  // Hugepages not available
     }
 
     // Advise kernel about access pattern
@@ -329,14 +336,14 @@ class HugePagePool {
     // Pre-fault pages to ensure hugepages are allocated now
     // This is where first-touch NUMA policy applies - pages will be allocated
     // on the NUMA node where this code runs
-    for (size_type i = 0; i < aligned_size; i += HUGEPAGE_SIZE) {
+    for (size_type i = 0; i < aligned_size; i += hugepage_size) {
       static_cast<volatile char*>(ptr)[i] = 0;
     }
 
-    return {static_cast<std::byte*>(ptr), aligned_size};
+    return {.base = static_cast<std::byte*>(ptr), .size = aligned_size};
   }
 
-  MemoryRegion allocate_regular_region(size_type size) {
+  memory_region allocate_regular_region(size_type size) {
     void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -347,7 +354,7 @@ class HugePagePool {
     // Hint to use transparent hugepages if available
     madvise(ptr, size, MADV_HUGEPAGE);
 
-    return {static_cast<std::byte*>(ptr), size};
+    return {.base = static_cast<std::byte*>(ptr), .size = size};
   }
 };
 

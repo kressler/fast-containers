@@ -45,6 +45,7 @@ namespace kressler::fast_containers {
  * @tparam T The type to allocate
  */
 template <typename T>
+// NOLINTNEXTLINE(readability-identifier-naming,cppcoreguidelines-special-member-functions)
 class HugePageAllocator {
  public:
   using value_type = T;
@@ -89,9 +90,9 @@ class HugePageAllocator {
    * @param growth_size Size of additional regions when pool grows (default
    * 64MB)
    */
-  explicit HugePageAllocator(size_type initial_pool_size = 256 * 1024 * 1024,
+  explicit HugePageAllocator(size_type initial_pool_size = 256UL * 1024 * 1024,
                              bool use_hugepages = true,
-                             size_type growth_size = 64 * 1024 * 1024)
+                             size_type growth_size = 64UL * 1024 * 1024)
       : pool_(std::make_shared<HugePagePool>(initial_pool_size, use_hugepages,
                                              growth_size)) {}
 
@@ -99,6 +100,16 @@ class HugePageAllocator {
    * Copy constructor (shares pool with other allocator).
    */
   HugePageAllocator(const HugePageAllocator& other) = default;
+
+  /**
+   * Copy assignment operator.
+   */
+  HugePageAllocator& operator=(const HugePageAllocator& other) = default;
+
+  /**
+   * Destructor.
+   */
+  ~HugePageAllocator() = default;
 
   /**
    * Rebind constructor (creates separate pool for different type).
@@ -120,8 +131,9 @@ class HugePageAllocator {
    * @throws std::bad_alloc if unable to grow pool
    */
   T* allocate(size_type n) {
-    if (n == 0)
+    if (n == 0) {
       return nullptr;
+    }
 
     if (n != 1) {
       throw std::invalid_argument(
@@ -140,8 +152,9 @@ class HugePageAllocator {
    * @param n Number of objects (must be 1)
    */
   void deallocate(T* p, size_type n) {
-    if (p == nullptr || n == 0)
+    if (p == nullptr || n == 0) {
       return;
+    }
 
     if (n != 1) {
       throw std::invalid_argument(
@@ -170,48 +183,64 @@ class HugePageAllocator {
   /**
    * Check if allocator is using hugepages.
    */
-  bool using_hugepages() const { return pool_->using_hugepages(); }
+  [[nodiscard]] bool using_hugepages() const {
+    return pool_->using_hugepages();
+  }
 
   /**
    * Get remaining bytes in pool.
    */
-  size_type bytes_remaining() const { return pool_->bytes_remaining(); }
+  [[nodiscard]] size_type bytes_remaining() const {
+    return pool_->bytes_remaining();
+  }
 
   /**
    * Get total number of allocations.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_allocations() const { return pool_->get_allocations(); }
+  [[nodiscard]] size_type get_allocations() const {
+    return pool_->get_allocations();
+  }
 
   /**
    * Get total number of deallocations.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_deallocations() const { return pool_->get_deallocations(); }
+  [[nodiscard]] size_type get_deallocations() const {
+    return pool_->get_deallocations();
+  }
 
   /**
    * Get number of pool growth events.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_growth_events() const { return pool_->get_growth_events(); }
+  [[nodiscard]] size_type get_growth_events() const {
+    return pool_->get_growth_events();
+  }
 
   /**
    * Get lifetime total bytes allocated.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_bytes_allocated() const { return pool_->get_bytes_allocated(); }
+  [[nodiscard]] size_type get_bytes_allocated() const {
+    return pool_->get_bytes_allocated();
+  }
 
   /**
    * Get current bytes in use.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_current_usage() const { return pool_->get_current_usage(); }
+  [[nodiscard]] size_type get_current_usage() const {
+    return pool_->get_current_usage();
+  }
 
   /**
    * Get peak bytes in use.
    * Only tracked when ALLOCATOR_STATS is defined.
    */
-  size_type get_peak_usage() const { return pool_->get_peak_usage(); }
+  [[nodiscard]] size_type get_peak_usage() const {
+    return pool_->get_peak_usage();
+  }
 
  private:
   std::shared_ptr<HugePagePool> pool_;
