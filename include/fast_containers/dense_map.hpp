@@ -52,12 +52,14 @@ concept SimdPrimitive =
     (std::is_same_v<T, char> && sizeof(char) == 1) ||
     (std::is_same_v<T, signed char> && sizeof(signed char) == 1) ||
     (std::is_same_v<T, unsigned char> && sizeof(unsigned char) == 1) ||
+    // NOLINTBEGIN(google-runtime-int) - Need built-in types for std::is_same_v
     (std::is_same_v<T, short> && sizeof(short) == 2) ||
     (std::is_same_v<T, unsigned short> && sizeof(unsigned short) == 2) ||
     (std::is_same_v<T, int> && sizeof(int) == 4) ||
     (std::is_same_v<T, unsigned int> && sizeof(unsigned int) == 4) ||
     (std::is_same_v<T, long> && sizeof(long) == 8) ||
     (std::is_same_v<T, unsigned long> && sizeof(unsigned long) == 8);
+// NOLINTEND(google-runtime-int)
 
 // Concept for types that can use SIMD-accelerated search
 // Only supports primitive types with well-defined SIMD comparison semantics
@@ -356,10 +358,10 @@ class dense_map {
   }
 
   // Utility methods
-  size_type size() const { return size_; }
-  constexpr size_type capacity() const { return Length; }
-  bool empty() const { return size_ == 0; }
-  bool full() const { return size_ == Length; }
+  [[nodiscard]] size_type size() const { return size_; }
+  [[nodiscard]] constexpr size_type capacity() const { return Length; }
+  [[nodiscard]] bool empty() const { return size_ == 0; }
+  [[nodiscard]] bool full() const { return size_ == Length; }
 
   void clear() { size_ = 0; }
 
@@ -613,7 +615,7 @@ class dense_map {
     }
 
     // Helper method to get the index
-    size_type index() const { return index_; }
+    [[nodiscard]] size_type index() const { return index_; }
 
     // Helper method to get a reference to the value
     std::conditional_t<IsConst, const Value&, Value&> value_ref() const {
@@ -634,12 +636,11 @@ class dense_map {
 template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT, bool IsConst>
 typename dense_map<Key, Value, Length, Compare,
-                       SearchModeT>::template dense_map_iterator<IsConst>
+                   SearchModeT>::template dense_map_iterator<IsConst>
 operator+(typename dense_map<Key, Value, Length, Compare, SearchModeT>::
               template dense_map_iterator<IsConst>::difference_type n,
-          const typename dense_map<
-              Key, Value, Length, Compare,
-              SearchModeT>::template dense_map_iterator<IsConst>& it) {
+          const typename dense_map<Key, Value, Length, Compare, SearchModeT>::
+              template dense_map_iterator<IsConst>& it) {
   return it + n;
 }
 

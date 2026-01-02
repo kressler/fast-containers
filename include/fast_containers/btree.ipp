@@ -5,6 +5,9 @@
 // Implementation file for btree.hpp
 // This file contains all method implementations for the btree class.
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
+// Btree uses unions for performance - union access is intentional throughout
+
 namespace kressler::fast_containers {
 
 // Constructor
@@ -336,10 +339,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     auto ub = lb;
     ++ub;
     return {lb, ub};
-  } else {
-    // Key doesn't exist - lower_bound == upper_bound
-    return {lb, lb};
   }
+  // Key doesn't exist - lower_bound == upper_bound
+  return {lb, lb};
 }
 
 // find_leaf_for_key
@@ -658,7 +660,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   if (next_in_leaf != leaf->data.end()) {
     // Next element is in same leaf
     return iterator(leaf, next_in_leaf);
-  } else if (leaf->next_leaf != nullptr) {
+  }
+  if (leaf->next_leaf != nullptr) {
     // Erased last element in leaf - move to next leaf
     return iterator(leaf->next_leaf, leaf->next_leaf->data.begin());
   }
@@ -974,9 +977,8 @@ void btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     } else {
       if (node->children_are_leaves) {
         return node->leaf_children.begin()->first;
-      } else {
-        return node->internal_children.begin()->first;
       }
+      return node->internal_children.begin()->first;
     }
   };
 
@@ -1068,11 +1070,10 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     const Key& promoted_key = perform_split.template operator()<LeafNode*>(
         node->leaf_children, new_node->leaf_children);
     return {promoted_key, new_node};
-  } else {
-    const Key& promoted_key = perform_split.template operator()<InternalNode*>(
-        node->internal_children, new_node->internal_children);
-    return {promoted_key, new_node};
   }
+  const Key& promoted_key = perform_split.template operator()<InternalNode*>(
+      node->internal_children, new_node->internal_children);
+  return {promoted_key, new_node};
 }
 
 // update_parent_key_recursive
@@ -1163,7 +1164,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
       }
       --it;
       return it->second;
-    } else if (it != children.begin()) {
+    }
+    if (it != children.begin()) {
       --it;
       if (it->second == node) {
         if (it == children.begin()) {
@@ -1223,7 +1225,8 @@ NodeType* btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare,
         return nullptr;  // This is the rightmost child
       }
       return it->second;
-    } else if (it != children.begin()) {
+    }
+    if (it != children.begin()) {
       --it;
       if (it->second == node) {
         ++it;
@@ -1369,7 +1372,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       // Special case: next is in next leaf, stays there (elements inserted at
       // beginning) Return nullopt, let caller use next_leaf pointer
       return {node, std::nullopt};
-    } else if (next_index.has_value()) {
+    }
+    if (next_index.has_value()) {
       // Next was in this node, index shifts right by borrowed count
       const size_t new_index = *next_index + actual_borrow;
       if (new_index < node->data.size()) {
@@ -1380,7 +1384,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     }
     // else: no next element to track
     return {node, next_iter};
-  } else {
+  }
+  // InternalNode case
+  if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Internal node borrowing - we don't track iterators through internal nodes
     bool success;
     if (node->children_are_leaves) {
@@ -1489,7 +1495,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     }
     // else: no next element to track
     return {node, next_iter};
-  } else {
+  }
+  // InternalNode case
+  if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Internal node borrowing - we don't track iterators through internal nodes
     bool success;
     if (node->children_are_leaves) {
@@ -1569,7 +1577,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       // Special case: next is in next leaf of result, stays there
       // Return nullopt, let caller use next_leaf pointer
       return {left_sibling, std::nullopt};
-    } else if (next_index.has_value()) {
+    }
+    if (next_index.has_value()) {
       // Next was in this node, now at left_old_size + index
       const size_t new_index = left_old_size + *next_index;
       if (new_index < left_sibling->data.size()) {
@@ -1580,7 +1589,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     }
     // else: no next element to track
     return {left_sibling, next_iter};
-  } else {
+  }
+  // InternalNode case
+  if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Capture node's minimum key BEFORE transferring children
     const Key& node_min = node->children_are_leaves
                               ? node->leaf_children.begin()->first
@@ -1706,7 +1717,9 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     }
     // else: no next element to track
     return {node, next_iter};
-  } else {
+  }
+  // InternalNode case
+  if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Capture right sibling's minimum key BEFORE transferring children
     const Key& right_sibling_min =
         right_sibling->children_are_leaves
@@ -1816,10 +1829,11 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   NodeType* left_sibling = find_left_sibling(node);
   if (left_sibling != nullptr) {
     return merge_with_left_sibling(node, next_index, next_in_next_leaf);
-  } else {
-    // No left sibling - merge with right
-    return merge_with_right_sibling(node, next_index, next_in_next_leaf);
   }
+  // No left sibling - merge with right
+  return merge_with_right_sibling(node, next_index, next_in_next_leaf);
 }
+
+// NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
 }  // namespace kressler::fast_containers
