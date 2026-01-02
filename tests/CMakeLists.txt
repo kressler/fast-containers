@@ -19,6 +19,22 @@ else()
     message(WARNING "clang-format not found. 'format' target will not be available.")
 endif()
 
+# Clang-tidy target
+find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy-19 clang-tidy)
+if(CLANG_TIDY_EXECUTABLE)
+    file(GLOB PRODUCTION_HEADERS
+        ${CMAKE_SOURCE_DIR}/include/fast_containers/*.hpp
+    )
+    add_custom_target(
+        clang-tidy
+        COMMAND ${CLANG_TIDY_EXECUTABLE} -p ${CMAKE_SOURCE_DIR}/cmake-build-clang-tidy ${PRODUCTION_HEADERS}
+        COMMENT "Running clang-tidy on production headers"
+        VERBATIM
+    )
+else()
+    message(WARNING "clang-tidy not found. 'clang-tidy' target will not be available.")
+endif()
+
 # Option to enable AddressSanitizer (ASAN) for memory error detection
 # Useful for debugging memory issues like buffer overflows, use-after-free, etc.
 option(ENABLE_ASAN "Enable AddressSanitizer for memory error detection" OFF)

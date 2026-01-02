@@ -67,10 +67,17 @@ cmake --build build --target format
 
 ### Static Analysis
 
-Run clang-tidy on production headers:
+Run clang-tidy on all production headers:
+```bash
+cmake --build build --target clang-tidy
+```
+
+Or run manually:
 ```bash
 clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/*.hpp
 ```
+
+**Note**: Requires `cmake-build-clang-tidy/compile_commands.json` (created by `setup-dev.sh`)
 
 ### Pre-commit Hook (Automatic Formatting & Checks)
 

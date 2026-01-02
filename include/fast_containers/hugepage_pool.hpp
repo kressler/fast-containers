@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <vector>
 
