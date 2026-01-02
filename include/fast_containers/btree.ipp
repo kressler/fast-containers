@@ -402,6 +402,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
       },
       [&value]() -> const Value& {
         // Return reference to value (no copy needed)
+        // NOLINTNEXTLINE(bugprone-return-const-ref-from-parameter)
         return value;
       });
 }

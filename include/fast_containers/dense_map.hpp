@@ -161,6 +161,12 @@ class dense_map {
   dense_map& operator=(dense_map&& other) noexcept;
 
   /**
+   * Destructor - cleans up resources.
+   * Default implementation is sufficient as members manage their own cleanup.
+   */
+  ~dense_map() = default;
+
+  /**
    * Insert a new key-value pair into the array in sorted order.
    *
    * @param key The key to insert
@@ -502,6 +508,7 @@ class dense_map {
     pair_proxy(key_ref_type k, value_ref_type v) : first(k), second(v) {}
 
     // Allow conversion to std::pair for compatibility
+    // NOLINTNEXTLINE(google-explicit-constructor)
     operator std::pair<Key, Value>() const { return {first, second}; }
 
     key_ref_type first;
@@ -515,6 +522,7 @@ class dense_map {
     // Arrow operator helper (forward declare)
     struct arrow_proxy {
       pair_proxy<IsConst> ref;
+      // NOLINTNEXTLINE(google-explicit-constructor)
       arrow_proxy(pair_proxy<IsConst> r) : ref(r) {}
       pair_proxy<IsConst>* operator->() { return &ref; }
     };
@@ -533,6 +541,7 @@ class dense_map {
 
     // Allow conversion from non-const to const iterator
     template <bool WasConst = IsConst, typename = std::enable_if_t<WasConst>>
+    // NOLINTNEXTLINE(google-explicit-constructor)
     dense_map_iterator(const dense_map_iterator<false>& other)
         : array_(other.array_), index_(other.index_) {}
 

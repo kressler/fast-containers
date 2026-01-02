@@ -230,6 +230,11 @@ class btree {
     // Delete copy constructor and assignment (non-copyable due to union)
     InternalNode(const InternalNode&) = delete;
     InternalNode& operator=(const InternalNode&) = delete;
+
+    // Delete move constructor and assignment (nodes are managed in-place by
+    // btree)
+    InternalNode(InternalNode&&) = delete;
+    InternalNode& operator=(InternalNode&&) = delete;
   };
 
   /**
