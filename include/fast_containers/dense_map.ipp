@@ -276,8 +276,9 @@ dense_map<Key, Value, Length, Compare, SearchModeT>::erase(iterator pos) {
 
   const size_type idx = pos.index();
   // Shift elements to the left to fill the gap in both arrays
-  std::move(&keys_[idx + 1], &keys_[size_], &keys_[idx]);
-  std::move(&values_[idx + 1], &values_[size_], &values_[idx]);
+  std::move(keys_.data() + idx + 1, keys_.data() + size_, keys_.data() + idx);
+  std::move(values_.data() + idx + 1, values_.data() + size_,
+            values_.data() + idx);
   --size_;
 
   // Return iterator to element following the erased element
@@ -335,8 +336,10 @@ Value& dense_map<Key, Value, Length, Compare, SearchModeT>::operator[](
   size_type idx = pos - keys_.begin();
 
   // Shift elements to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(keys_.data() + idx, keys_.data() + size_,
+                     keys_.data() + size_ + 1);
+  std::move_backward(values_.data() + idx, values_.data() + size_,
+                     values_.data() + size_ + 1);
 
   // Insert with default-constructed value
   keys_[idx] = key;
@@ -513,8 +516,10 @@ void dense_map<Key, Value, Length, Compare, SearchModeT>::split_at(
 
   // Move elements from [split_idx, size_) to output
   if (num_to_move > 0) {
-    std::move(&keys_[split_idx], &keys_[size_], output.keys_.data());
-    std::move(&values_[split_idx], &values_[size_], output.values_.data());
+    std::move(keys_.data() + split_idx, keys_.data() + size_,
+              output.keys_.data());
+    std::move(values_.data() + split_idx, values_.data() + size_,
+              output.values_.data());
     output.size_ = num_to_move;
   }
 
@@ -570,16 +575,17 @@ void dense_map<Key, Value, Length, Compare, SearchModeT>::
   }
 
   // Copy prefix from source to end of this array (append)
-  std::move(source.keys_.data(), source.keys_.data() + count, &keys_[size_]);
+  std::move(source.keys_.data(), source.keys_.data() + count,
+            keys_.data() + size_);
   std::move(source.values_.data(), source.values_.data() + count,
-            &values_[size_]);
+            values_.data() + size_);
 
   // Shift remaining elements in source left to fill the gap
   if (count < source.size_) {
-    std::move(&source.keys_[count], &source.keys_[source.size_],
+    std::move(source.keys_.data() + count, source.keys_.data() + source.size_,
               source.keys_.data());
-    std::move(&source.values_[count], &source.values_[source.size_],
-              source.values_.data());
+    std::move(source.values_.data() + count,
+              source.values_.data() + source.size_, source.values_.data());
   }
 
   // Update sizes
@@ -639,18 +645,20 @@ void dense_map<Key, Value, Length, Compare, SearchModeT>::
 
   // Shift current elements right to make space for incoming suffix
   if (size_ > 0) {
-    std::move_backward(&keys_[0], &keys_[size_], &keys_[size_ + count]);
-    std::move_backward(&values_[0], &values_[size_], &values_[size_ + count]);
+    std::move_backward(keys_.data(), keys_.data() + size_,
+                       keys_.data() + size_ + count);
+    std::move_backward(values_.data(), values_.data() + size_,
+                       values_.data() + size_ + count);
   }
 
   // Calculate starting position of suffix in source
   const size_type suffix_start = source.size_ - count;
 
   // Copy suffix from source to beginning of this array (prepend)
-  std::move(&source.keys_[suffix_start], &source.keys_[source.size_],
-            keys_.data());
-  std::move(&source.values_[suffix_start], &source.values_[source.size_],
-            values_.data());
+  std::move(source.keys_.data() + suffix_start,
+            source.keys_.data() + source.size_, keys_.data());
+  std::move(source.values_.data() + suffix_start,
+            source.values_.data() + source.size_, values_.data());
 
   // Update sizes (no need to shift source - we took from the end)
   size_ += count;
@@ -701,8 +709,10 @@ dense_map<Key, Value, Length, Compare, SearchModeT>::insert_impl(
   }
 
   // Shift elements to the right to make space in both arrays
-  std::move_backward(&keys_[idx], &keys_[size_], &keys_[size_ + 1]);
-  std::move_backward(&values_[idx], &values_[size_], &values_[size_ + 1]);
+  std::move_backward(keys_.data() + idx, keys_.data() + size_,
+                     keys_.data() + size_ + 1);
+  std::move_backward(values_.data() + idx, values_.data() + size_,
+                     values_.data() + size_ + 1);
 
   // Insert the key
   keys_[idx] = key;
