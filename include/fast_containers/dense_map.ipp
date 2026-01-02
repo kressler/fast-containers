@@ -700,7 +700,8 @@ dense_map<Key, Value, Length, Compare, SearchModeT>::insert_impl(
     size_type idx, const Key& key, OnExists&& on_exists, OnInsert&& on_insert) {
   // Check if key exists at this position
   if (idx < size_ && keys_[idx] == key) {
-    return on_exists(idx);  // Let caller decide what to do (return or assign)
+    return std::forward<OnExists>(on_exists)(
+        idx);  // Let caller decide what to do (return or assign)
   }
 
   // Key doesn't exist - insert it
@@ -718,7 +719,7 @@ dense_map<Key, Value, Length, Compare, SearchModeT>::insert_impl(
   keys_[idx] = key;
 
   // Let caller insert the value (assignment vs construct_at)
-  on_insert(idx);
+  std::forward<OnInsert>(on_insert)(idx);
 
   ++size_;
 

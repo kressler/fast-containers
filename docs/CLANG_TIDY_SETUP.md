@@ -190,17 +190,17 @@ struct LeafNode;      // Warning: wants leaf_node
 
 ### Check specific files:
 ```bash
-clang-tidy-19 -p build-clang-tidy include/fast_containers/dense_map.hpp
+clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/dense_map.hpp
 ```
 
 ### Check all files:
 ```bash
-run-clang-tidy-19 -p build-clang-tidy
+run-clang-tidy-19 -p cmake-build-clang-tidy
 ```
 
 ### Count warnings by type:
 ```bash
-clang-tidy-19 -p build-clang-tidy include/fast_containers/*.hpp 2>&1 | \
+clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/*.hpp 2>&1 | \
   grep "warning:" | sed 's/.*\[\(.*\)\]/\1/' | sort | uniq -c | sort -rn
 ```
 
@@ -282,7 +282,7 @@ clang-tidy-19 -p build <changed-files>
 - `.clang-tidy` - Configuration file
 - `clang-tidy-report.md` - Detailed analysis
 - `CLANG_TIDY_SETUP.md` - This file
-- `build-clang-tidy/compile_commands.json` - For IDE integration
+- `cmake-build-clang-tidy/compile_commands.json` - For IDE integration
 
 ## IDE Integration
 
@@ -292,4 +292,4 @@ Most IDEs can use compile_commands.json automatically:
 - **CLion**: Settings → Build → CMake → Enable clang-tidy
 - **Vim/Neovim**: Use ALE or coc-clangd
 
-Point to: `/mnt/flash0/home/kressler/git/fast-containers/build-clang-tidy/compile_commands.json`
+Point to: `/mnt/flash0/home/kressler/git/fast-containers/cmake-build-clang-tidy/compile_commands.json`
