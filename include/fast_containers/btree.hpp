@@ -100,15 +100,15 @@ constexpr std::size_t default_leaf_node_size() {
  * ## Allocator Rebinding
  *
  * The btree uses std::allocator_traits::rebind to create separate allocators
- * for LeafNode and InternalNode types from the provided value_type allocator.
+ * for leaf_node and internal_node types from the provided value_type allocator.
  * This enables performance optimizations like separate hugepage pools:
  *
- * - `leaf_alloc_`: rebind_alloc<LeafNode> - allocates leaf nodes
- * - `internal_alloc_`: rebind_alloc<InternalNode> - allocates internal nodes
+ * - `leaf_alloc_`: rebind_alloc<leaf_node> - allocates leaf nodes
+ * - `internal_alloc_`: rebind_alloc<internal_node> - allocates internal nodes
  *
  * When using PolicyBasedHugePageAllocator with TwoPoolPolicy, the policy
  * automatically routes allocations to the appropriate pool via type
- * introspection (LeafNode has `next_leaf` member, InternalNode has
+ * introspection (leaf_node has `next_leaf` member, internal_node has
  * `children_are_leaves` member). This allows different pool sizes and
  * configurations for leaf vs internal nodes.
  *
@@ -174,38 +174,38 @@ class btree {
    * Leaf node - stores actual key-value pairs in an dense_map.
    * Forms a doubly-linked list with other leaf nodes for iteration.
    */
-  // Forward declaration for LeafNode to use in InternalNode
-  struct InternalNode;
+  // Forward declaration for leaf_node to use in internal_node
+  struct internal_node;
 
-  struct LeafNode {
+  struct leaf_node {
     dense_map<Key, Value, LeafNodeSize, Compare, SearchModeT> data;
-    LeafNode* next_leaf;
-    LeafNode* prev_leaf;
-    InternalNode* parent;  // Parent is always internal (or nullptr for root)
+    leaf_node* next_leaf;
+    leaf_node* prev_leaf;
+    internal_node* parent;  // Parent is always internal (or nullptr for root)
 
-    LeafNode() : next_leaf(nullptr), prev_leaf(nullptr), parent(nullptr) {}
+    leaf_node() : next_leaf(nullptr), prev_leaf(nullptr), parent(nullptr) {}
   };
 
   /**
    * Internal node - stores keys and pointers to child nodes.
-   * The children_are_leaves flag indicates whether children are LeafNode* or
-   * InternalNode* (all children at the same level have the same type).
+   * The children_are_leaves flag indicates whether children are leaf_node* or
+   * internal_node* (all children at the same level have the same type).
    */
-  struct InternalNode {
+  struct internal_node {
     // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
     // Union used for performance - avoids std::variant overhead
     union {
-      dense_map<Key, LeafNode*, InternalNodeSize, Compare, SearchModeT>
+      dense_map<Key, leaf_node*, InternalNodeSize, Compare, SearchModeT>
           leaf_children;
-      dense_map<Key, InternalNode*, InternalNodeSize, Compare, SearchModeT>
+      dense_map<Key, internal_node*, InternalNodeSize, Compare, SearchModeT>
           internal_children;
     };
     // NOLINTEND(cppcoreguidelines-pro-type-union-access)
     const bool children_are_leaves;
-    InternalNode* parent;  // Parent is always internal (or nullptr for root)
+    internal_node* parent;  // Parent is always internal (or nullptr for root)
 
     // Constructor for leaf children
-    explicit InternalNode(bool has_leaf_children)
+    explicit internal_node(bool has_leaf_children)
         : children_are_leaves(has_leaf_children), parent(nullptr) {
       // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
       if (children_are_leaves) {
@@ -217,7 +217,7 @@ class btree {
     }
 
     // Destructor - must explicitly destroy the active union member
-    ~InternalNode() {
+    ~internal_node() {
       // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
       if (children_are_leaves) {
         leaf_children.~dense_map();
@@ -228,13 +228,13 @@ class btree {
     }
 
     // Delete copy constructor and assignment (non-copyable due to union)
-    InternalNode(const InternalNode&) = delete;
-    InternalNode& operator=(const InternalNode&) = delete;
+    internal_node(const internal_node&) = delete;
+    internal_node& operator=(const internal_node&) = delete;
 
     // Delete move constructor and assignment (nodes are managed in-place by
     // btree)
-    InternalNode(InternalNode&&) = delete;
-    InternalNode& operator=(InternalNode&&) = delete;
+    internal_node(internal_node&&) = delete;
+    internal_node& operator=(internal_node&&) = delete;
   };
 
   /**
@@ -439,17 +439,17 @@ class btree {
    private:
     friend class btree;
 
-    iterator(LeafNode* node,
+    iterator(leaf_node* node,
              typename dense_map<Key, Value, LeafNodeSize, Compare,
                                 SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
-    iterator(const btree* tree, LeafNode* node,
+    iterator(const btree* tree, leaf_node* node,
              typename dense_map<Key, Value, LeafNodeSize, Compare,
                                 SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
-    LeafNode* leaf_node_;
+    leaf_node* leaf_node_;
     std::optional<typename dense_map<Key, Value, LeafNodeSize, Compare,
                                      SearchModeT>::iterator>
         leaf_it_;
@@ -566,20 +566,20 @@ class btree {
    private:
     friend class btree;
 
-    reverse_iterator(LeafNode* node,
+    reverse_iterator(leaf_node* node,
                      typename dense_map<Key, Value, LeafNodeSize, Compare,
                                         SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(nullptr) {}
 
-    reverse_iterator(const btree* tree, LeafNode* node,
+    reverse_iterator(const btree* tree, leaf_node* node,
                      typename dense_map<Key, Value, LeafNodeSize, Compare,
                                         SearchModeT>::iterator it)
         : leaf_node_(node), leaf_it_(it), tree_(tree) {}
 
-    reverse_iterator(const btree* tree, LeafNode* node)
+    reverse_iterator(const btree* tree, leaf_node* node)
         : leaf_node_(node), leaf_it_(std::nullopt), tree_(tree) {}
 
-    LeafNode* leaf_node_;
+    leaf_node* leaf_node_;
     std::optional<typename dense_map<Key, Value, LeafNodeSize, Compare,
                                      SearchModeT>::iterator>
         leaf_it_;
@@ -914,54 +914,54 @@ class btree {
   /**
    * Allocate a new leaf node.
    */
-  LeafNode* allocate_leaf_node();
+  leaf_node* allocate_leaf_node();
 
   /**
    * Allocate a new internal node.
-   * @param leaf_children If true, children are LeafNode*, otherwise
-   * InternalNode*
+   * @param leaf_children If true, children are leaf_node*, otherwise
+   * internal_node*
    */
-  InternalNode* allocate_internal_node(bool leaf_children);
+  internal_node* allocate_internal_node(bool leaf_children);
 
   /**
    * Deallocate a leaf node.
    */
-  void deallocate_leaf_node(LeafNode* node);
+  void deallocate_leaf_node(leaf_node* node);
 
   /**
    * Deallocate an internal node.
    */
-  void deallocate_internal_node(InternalNode* node);
+  void deallocate_internal_node(internal_node* node);
 
   // Comparator instance
   [[no_unique_address]] Compare comp_;
 
-  // Allocators for LeafNode and InternalNode
+  // Allocators for leaf_node and internal_node
   // Each allocator maintains a separate pool via rebind mechanism
   // This allows different pool sizes for different node types
   // NOTE: Allocators must be declared before root pointers so they can be
   // used in constructor initializer lists (allocate_leaf_node requires them)
   [[no_unique_address]]
-  typename std::allocator_traits<Allocator>::template rebind_alloc<LeafNode>
+  typename std::allocator_traits<Allocator>::template rebind_alloc<leaf_node>
       leaf_alloc_;
   [[no_unique_address]]
-  typename std::allocator_traits<Allocator>::template rebind_alloc<InternalNode>
-      internal_alloc_;
+  typename std::allocator_traits<Allocator>::template rebind_alloc<
+      internal_node> internal_alloc_;
 
   // Root and size members
   bool root_is_leaf_;
   // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
   // Union for root pointer - avoids std::variant overhead for hot path
   union {
-    LeafNode* leaf_root_;
-    InternalNode* internal_root_;
+    leaf_node* leaf_root_;
+    internal_node* internal_root_;
   };
   // NOLINTEND(cppcoreguidelines-pro-type-union-access)
   size_type size_;
 
   // Cached pointers to first and last leaf for O(1) begin()/rbegin()
-  LeafNode* leftmost_leaf_;
-  LeafNode* rightmost_leaf_;
+  leaf_node* leftmost_leaf_;
+  leaf_node* rightmost_leaf_;
 
   /**
    * Recursively deallocate all nodes in the tree.
@@ -971,12 +971,12 @@ class btree {
   /**
    * Helper to recursively deallocate an internal node and its subtree.
    */
-  void deallocate_internal_subtree(InternalNode* node);
+  void deallocate_internal_subtree(internal_node* node);
 
   /**
    * Helper to get the internal root (asserts if root is a leaf).
    */
-  InternalNode* get_internal_root() const {
+  internal_node* get_internal_root() const {
     assert(!root_is_leaf_ && "Root is not an internal node");
     return internal_root_;  // NOLINT(cppcoreguidelines-pro-type-union-access)
   }
@@ -984,7 +984,7 @@ class btree {
   /**
    * Helper to get the leaf root (asserts if root is internal).
    */
-  LeafNode* get_leaf_root() const {
+  leaf_node* get_leaf_root() const {
     assert(root_is_leaf_ && "Root is not a leaf node");
     return leaf_root_;  // NOLINT(cppcoreguidelines-pro-type-union-access)
   }
@@ -996,14 +996,14 @@ class btree {
    * @param key The key to search for
    * @return Pointer to the leaf node that should contain the key
    */
-  LeafNode* find_leaf_for_key(const Key& key) const;
+  leaf_node* find_leaf_for_key(const Key& key) const;
 
   /**
    * Common implementation for all insert operations.
    * Handles leaf finding, key existence check, splitting, and insertion logic.
    *
    * @param key Key to insert
-   * @param on_exists Callback when key exists: (LeafNode*, pos) ->
+   * @param on_exists Callback when key exists: (leaf_node*, pos) ->
    * pair<iterator, bool> Can modify existing value (insert_or_assign) or just
    * return
    * @param get_value Callback to provide value on-demand: () -> Value
@@ -1030,7 +1030,7 @@ class btree {
    * @post Returns {iterator, true} - second element is always true
    */
   template <typename GetValue>
-  std::pair<iterator, bool> split_leaf_and_insert(LeafNode* leaf,
+  std::pair<iterator, bool> split_leaf_and_insert(leaf_node* leaf,
                                                   const Key& key,
                                                   GetValue&& get_value);
 
@@ -1039,7 +1039,7 @@ class btree {
    * If parent is full, splits it recursively.
    * If node has no parent, creates a new root.
    *
-   * Templated to handle both LeafNode and InternalNode children.
+   * Templated to handle both leaf_node and internal_node children.
    */
   template <typename NodeType>
   void insert_into_parent(NodeType* left_child, const Key& key,
@@ -1051,12 +1051,12 @@ class btree {
    * Returns a reference to the promoted key and pointer to the new node.
    * The key reference points to the first key in the new node's children.
    */
-  std::pair<const Key&, InternalNode*> split_internal(InternalNode* node);
+  std::pair<const Key&, internal_node*> split_internal(internal_node* node);
 
   /**
    * Update parent's key for a child node to match its current minimum.
    * Recursively updates ancestors if the child is leftmost at each level.
-   * Template supports both LeafNode and InternalNode children.
+   * Template supports both leaf_node and internal_node children.
    */
   template <typename ChildNodeType>
   void update_parent_key_recursive(ChildNodeType* child, const Key& new_min);
@@ -1065,7 +1065,7 @@ class btree {
    * Handle underflow in a node after removal or merge.
    * Attempts to borrow from siblings or merge with them.
    * Returns pointer to the node where the data ended up (may differ if merged).
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    *
    * @param node The node that underflowed
    * @param next_index Optional index to track during rebalancing (for erase
@@ -1080,7 +1080,7 @@ class btree {
 
   /**
    * Try to borrow element(s) or child(ren) from the left sibling of a node.
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    * Returns pointer to node if successful, nullptr if borrowing was not
    * possible.
    *
@@ -1097,7 +1097,7 @@ class btree {
 
   /**
    * Try to borrow element(s) or child(ren) from the right sibling of a node.
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    * Returns pointer to node if successful, nullptr if borrowing was not
    * possible.
    *
@@ -1116,7 +1116,7 @@ class btree {
    * Merge a node with its left sibling.
    * The left sibling absorbs all elements/children from 'node'.
    * Returns pointer to the left sibling (where data ended up).
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    *
    * @param node The node to merge (will be deleted)
    * @param next_index Optional index to track during merging (O(1) path)
@@ -1133,7 +1133,7 @@ class btree {
    * Merge a node with its right sibling.
    * 'node' absorbs all elements/children from its right sibling.
    * Returns pointer to node (where data ended up).
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    *
    * @param node The node that absorbs right sibling's data
    * @param next_index Optional index to track during merging (O(1) path)
@@ -1147,7 +1147,7 @@ class btree {
 
   /**
    * Template helper to find the left sibling of a node.
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    * Returns nullptr if no left sibling exists.
    */
   template <typename NodeType>
@@ -1155,7 +1155,7 @@ class btree {
 
   /**
    * Template helper to find the right sibling of a node.
-   * Works for both LeafNode and InternalNode.
+   * Works for both leaf_node and internal_node.
    * Returns nullptr if no right sibling exists.
    */
   template <typename NodeType>
@@ -1170,7 +1170,7 @@ class btree {
    * @param parent_children Reference to parent's children array
    */
   template <typename NodeType, typename ChildrenArray>
-  void handle_parent_after_merge(InternalNode* parent,
+  void handle_parent_after_merge(internal_node* parent,
                                  ChildrenArray& parent_children);
 
   /**

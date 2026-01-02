@@ -134,7 +134,7 @@ TEST_CASE("PolicyBasedHugePageAllocator - TwoPoolPolicy",
     PolicyBasedHugePageAllocator<int64_t, TwoPoolPolicy> alloc1(policy);
     PolicyBasedHugePageAllocator<double, TwoPoolPolicy> alloc2(alloc1);
 
-    // Both should use leaf pool (no LeafNode/InternalNode traits)
+    // Both should use leaf pool (no leaf_node/internal_node traits)
     int64_t* p1 = alloc1.allocate(1);
     double* p2 = alloc2.allocate(1);
 
@@ -283,14 +283,14 @@ TEST_CASE("Type trait detection", "[policy][traits]") {
   // Create a mock btree to get its node types
   using TestTree = btree<int, std::string, 32, 32>;
 
-  SECTION("LeafNode detection") {
-    REQUIRE(has_next_leaf_v<TestTree::LeafNode>);
-    REQUIRE_FALSE(has_children_are_leaves_v<TestTree::LeafNode>);
+  SECTION("leaf_node detection") {
+    REQUIRE(has_next_leaf_v<TestTree::leaf_node>);
+    REQUIRE_FALSE(has_children_are_leaves_v<TestTree::leaf_node>);
   }
 
-  SECTION("InternalNode detection") {
-    REQUIRE_FALSE(has_next_leaf_v<TestTree::InternalNode>);
-    REQUIRE(has_children_are_leaves_v<TestTree::InternalNode>);
+  SECTION("internal_node detection") {
+    REQUIRE_FALSE(has_next_leaf_v<TestTree::internal_node>);
+    REQUIRE(has_children_are_leaves_v<TestTree::internal_node>);
   }
 
   SECTION("Regular types don't match") {
