@@ -20,10 +20,14 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
     : root_is_leaf_(true),
       size_(0),
       leaf_alloc_(alloc),
-      internal_alloc_(alloc) {
+      internal_alloc_(alloc),
+      leftmost_leaf_(nullptr),
+      rightmost_leaf_(nullptr) {
   // Always allocate an empty root leaf to simplify insert/erase logic
   leaf_root_ = allocate_leaf_node();
+  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
   leftmost_leaf_ = leaf_root_;
+  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
   rightmost_leaf_ = leaf_root_;
 }
 
@@ -51,10 +55,14 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                       select_on_container_copy_construction(other.leaf_alloc_)),
       internal_alloc_(
           std::allocator_traits<decltype(internal_alloc_)>::
-              select_on_container_copy_construction(other.internal_alloc_)) {
+              select_on_container_copy_construction(other.internal_alloc_)),
+      leftmost_leaf_(nullptr),
+      rightmost_leaf_(nullptr) {
   // Always allocate an empty root leaf
   leaf_root_ = allocate_leaf_node();
+  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
   leftmost_leaf_ = leaf_root_;
+  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
   rightmost_leaf_ = leaf_root_;
 
   // Copy all elements using insert (use const iterators)
@@ -877,7 +885,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Get value on-demand after determining target leaf
   // This preserves try_emplace's optimization
-  auto value = get_value();
+  auto value = std::forward<GetValue>(get_value)();
 
   // Insert the new key-value pair into appropriate leaf
   auto [leaf_it, inserted] = target_leaf->data.insert(key, std::move(value));
@@ -927,7 +935,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
 
   // Check if key already exists - delegate to on_exists callback
   if (pos != leaf->data.end() && pos->first == key) {
-    return on_exists(leaf, pos);
+    return std::forward<OnExists>(on_exists)(leaf, pos);
   }
 
   // If leaf is full, split it with on-demand value construction
@@ -936,7 +944,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   }
 
   // Leaf has space - get value on-demand and insert using hint
-  auto value = get_value();
+  auto value = std::forward<GetValue>(get_value)();
   auto [leaf_it, inserted] = leaf->data.insert_hint(pos, key, std::move(value));
 
   // Key is guaranteed not to exist (checked above)
@@ -1388,7 +1396,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // InternalNode case
   if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Internal node borrowing - we don't track iterators through internal nodes
-    bool success;
+    bool success = false;
     if (node->children_are_leaves) {
       success = borrow_impl.template operator()<LeafNode*, true>(
           node->leaf_children, left_sibling->leaf_children, min_internal_size(),
@@ -1499,7 +1507,7 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
   // InternalNode case
   if constexpr (std::is_same_v<NodeType, InternalNode>) {
     // Internal node borrowing - we don't track iterators through internal nodes
-    bool success;
+    bool success = false;
     if (node->children_are_leaves) {
       success = borrow_impl.template operator()<LeafNode*, true>(
           node->leaf_children, right_sibling->leaf_children,
@@ -1787,8 +1795,8 @@ btree<Key, Value, LeafNodeSize, InternalNodeSize, Compare, SearchModeT,
                                    const std::optional<size_t>& next_index,
                                    bool next_in_next_leaf) {
   // Compute node size and underflow threshold based on node type
-  size_type node_size;
-  size_type underflow_threshold;
+  size_type node_size = 0;
+  size_type underflow_threshold = 0;
 
   if constexpr (std::is_same_v<NodeType, LeafNode>) {
     node_size = node->data.size();
