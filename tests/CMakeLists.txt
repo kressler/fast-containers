@@ -43,6 +43,13 @@ if(ENABLE_ASAN)
     endif()
 endif()
 
+# Enable -Werror to treat warnings as errors
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Werror)
+elseif(MSVC)
+    add_compile_options(/WX)
+endif()
+
 # Test executables
 add_executable(sample_test sample_test.cpp)
 target_link_libraries(sample_test PRIVATE
