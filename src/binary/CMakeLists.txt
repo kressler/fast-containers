@@ -15,7 +15,7 @@ add_executable(btree_benchmark btree_benchmark.cpp)
 target_link_libraries(btree_benchmark PRIVATE
   absl::base
   benchmark::benchmark
-  histograms::histograms
+  kressler::histograms
   lyra::lyra
   unordered_dense::unordered_dense
   kressler::fast_containers

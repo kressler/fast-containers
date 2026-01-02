@@ -5,8 +5,8 @@
 #include <absl/container/btree_map.h>
 #include <ankerl/unordered_dense.h>
 #include <benchmark/benchmark.h>
-#include <histogram.h>
-#include <log_linear_bucketer.h>
+#include <histograms/histogram.h>
+#include <histograms/log_linear_bucketer.h>
 
 #include <fast_containers/btree.hpp>
 #include <fast_containers/hugepage_allocator.hpp>
