@@ -548,10 +548,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void dense_map<Key, Value, Length, Compare, SearchModeT>::
-    transfer_prefix_from(
-        dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
-        size_type count) {
+void dense_map<Key, Value, Length, Compare, SearchModeT>::transfer_prefix_from(
+    dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
+    size_type count) {
   // Validate count
   if (count > source.size_) {
     throw std::runtime_error(
@@ -616,10 +615,9 @@ template <typename Key, typename Value, std::size_t Length, typename Compare,
           SearchMode SearchModeT>
   requires ComparatorCompatible<Key, Compare>
 template <std::size_t SourceLength>
-void dense_map<Key, Value, Length, Compare, SearchModeT>::
-    transfer_suffix_from(
-        dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
-        size_type count) {
+void dense_map<Key, Value, Length, Compare, SearchModeT>::transfer_suffix_from(
+    dense_map<Key, Value, SourceLength, Compare, SearchModeT>& source,
+    size_type count) {
   // Validate count
   if (count > source.size_) {
     throw std::runtime_error(

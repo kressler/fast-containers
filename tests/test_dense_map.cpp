@@ -92,8 +92,8 @@ TEMPLATE_TEST_CASE("dense_map insert operations", "[dense_map]",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map find operations", "[dense_map]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map find operations", "[dense_map]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
   dense_map<int, std::string, 10, std::less<int>, Mode> arr;
   arr.insert(10, "ten");
@@ -380,8 +380,7 @@ TEST_CASE("dense_map concept enforcement", "[dense_map]") {
   }
 }
 
-TEST_CASE("dense_map search mode comparison",
-          "[dense_map][search_mode]") {
+TEST_CASE("dense_map search mode comparison", "[dense_map][search_mode]") {
   using BinaryArray =
       dense_map<int, std::string, 20, std::less<int>, SearchMode::Binary>;
   using LinearArray =
@@ -514,8 +513,8 @@ TEMPLATE_TEST_CASE("dense_map copy constructor", "[dense_map]",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map copy assignment", "[dense_map]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map copy assignment", "[dense_map]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy assign to empty array") {
@@ -634,8 +633,8 @@ TEMPLATE_TEST_CASE("dense_map move constructor", "[dense_map]",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map move assignment", "[dense_map]",
-                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map move assignment", "[dense_map]", BinarySearchMode,
+                   LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Move assign to empty array") {
@@ -704,9 +703,8 @@ TEMPLATE_TEST_CASE("dense_map move assignment", "[dense_map]",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map copy/move with different types",
-                   "[dense_map]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map copy/move with different types", "[dense_map]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Copy with int keys and int values") {
@@ -872,9 +870,8 @@ TEMPLATE_TEST_CASE("dense_map split_at operation", "[dense_map]",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map transfer_prefix_from operation",
-                   "[dense_map]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map transfer_prefix_from operation", "[dense_map]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer prefix to empty array") {
@@ -1003,9 +1000,8 @@ TEMPLATE_TEST_CASE("dense_map transfer_prefix_from operation",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map transfer_suffix_from operation",
-                   "[dense_map]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map transfer_suffix_from operation", "[dense_map]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Transfer suffix to empty array") {
@@ -1133,9 +1129,8 @@ TEMPLATE_TEST_CASE("dense_map transfer_suffix_from operation",
   }
 }
 
-TEMPLATE_TEST_CASE("dense_map transfer operations combined",
-                   "[dense_map]", BinarySearchMode, LinearSearchMode,
-                   SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map transfer operations combined", "[dense_map]",
+                   BinarySearchMode, LinearSearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("Rebalancing simulation: transfer from overfull to underfull node") {
@@ -1170,8 +1165,7 @@ TEMPLATE_TEST_CASE("dense_map transfer operations combined",
   }
 
   SECTION("Multiple transfers in sequence") {
-    dense_map<int, std::string, 15, std::less<int>, Mode> node1, node2,
-        node3;
+    dense_map<int, std::string, 15, std::less<int>, Mode> node1, node2, node3;
 
     // Setup initial nodes
     node1.insert(1, "a");
@@ -1204,8 +1198,8 @@ TEMPLATE_TEST_CASE("dense_map transfer operations combined",
 }
 
 // Test search for 16-byte keys (byte arrays don't support SIMD mode)
-TEMPLATE_TEST_CASE("dense_map search with 16-byte keys",
-                   "[dense_map][simd]", BinarySearchMode) {
+TEMPLATE_TEST_CASE("dense_map search with 16-byte keys", "[dense_map][simd]",
+                   BinarySearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using Key16 = std::array<uint8_t, 16>;
 
@@ -1294,8 +1288,8 @@ TEMPLATE_TEST_CASE("dense_map search with 16-byte keys",
 }
 
 // Test search for 32-byte keys (byte arrays don't support SIMD mode)
-TEMPLATE_TEST_CASE("dense_map search with 32-byte keys",
-                   "[dense_map][simd]", BinarySearchMode) {
+TEMPLATE_TEST_CASE("dense_map search with 32-byte keys", "[dense_map][simd]",
+                   BinarySearchMode) {
   constexpr SearchMode Mode = TestType::value;
   using Key32 = std::array<uint8_t, 32>;
 
@@ -1691,8 +1685,8 @@ TEMPLATE_TEST_CASE("dense_map SIMD search with 16-bit unsigned integers",
 }
 
 // Test with char types (may alias to int8_t or be separate type)
-TEMPLATE_TEST_CASE("dense_map SIMD search with char types",
-                   "[dense_map][simd]", BinarySearchMode, SIMDSearchMode) {
+TEMPLATE_TEST_CASE("dense_map SIMD search with char types", "[dense_map][simd]",
+                   BinarySearchMode, SIMDSearchMode) {
   constexpr SearchMode Mode = TestType::value;
 
   SECTION("unsigned char basic operations") {
@@ -1753,8 +1747,7 @@ TEMPLATE_TEST_CASE("dense_map SIMD search with short types",
 TEST_CASE("dense_map with std::greater (descending order)",
           "[dense_map][comparator]") {
   SECTION("Binary search mode") {
-    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Binary>
-        arr;
+    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Binary> arr;
 
     // Insert elements (they should be stored in descending order)
     arr.insert(5, "five");
@@ -1804,8 +1797,7 @@ TEST_CASE("dense_map with std::greater (descending order)",
   }
 
   SECTION("Linear search mode") {
-    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Linear>
-        arr;
+    dense_map<int, std::string, 10, std::greater<int>, SearchMode::Linear> arr;
 
     arr.insert(15, "fifteen");
     arr.insert(25, "twenty-five");
@@ -1831,8 +1823,7 @@ TEST_CASE("dense_map with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 4-byte keys (int32_t)") {
-    dense_map<int32_t, std::string, 64, std::greater<int32_t>,
-                  SearchMode::SIMD>
+    dense_map<int32_t, std::string, 64, std::greater<int32_t>, SearchMode::SIMD>
         arr;
 
     // Insert many elements to test SIMD paths
@@ -1869,8 +1860,7 @@ TEST_CASE("dense_map with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 8-byte keys (int64_t)") {
-    dense_map<int64_t, int, 64, std::greater<int64_t>, SearchMode::SIMD>
-        arr;
+    dense_map<int64_t, int, 64, std::greater<int64_t>, SearchMode::SIMD> arr;
 
     // Insert values to test 8-byte SIMD implementation
     for (int64_t i = 0; i < 40; ++i) {
@@ -1936,8 +1926,7 @@ TEST_CASE("dense_map with std::greater (descending order)",
   }
 
   SECTION("SIMD search mode with 2-byte keys (int16_t)") {
-    dense_map<int16_t, int, 64, std::greater<int16_t>, SearchMode::SIMD>
-        arr;
+    dense_map<int16_t, int, 64, std::greater<int16_t>, SearchMode::SIMD> arr;
 
     // Insert int16_t values
     for (int16_t i = 0; i < 50; ++i) {
