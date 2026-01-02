@@ -29,7 +29,7 @@ src/
   hugepage_allocator.hpp, policy_based_hugepage_allocator.hpp
   tests/
 third_party/catch2/  # submodule
-hooks/, install-hooks.sh
+hooks/, setup-dev.sh
 ```
 
 **Header-Implementation Separation**: Template implementations are in `.ipp` files (included at end of `.hpp`) for cleaner interfaces.
@@ -652,13 +652,13 @@ namespace fast_containers {
 
 ## Setup
 ```bash
-git clone --recursive <repo> && cd <repo> && ./install-hooks.sh
+git clone --recursive <repo> && cd <repo> && ./setup-dev.sh
 cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cmake-build-release --parallel
 ctest --test-dir cmake-build-release --output-on-failure
 ```
 
 ## Contributing
-1. `./install-hooks.sh` (auto-format on commit)
+1. `./setup-dev.sh` (auto-format and clang-tidy on commit)
 2. Write Catch2 tests + Google Benchmark for perf-critical code
 3. Follow Google C++ Style
 4. Update this file with learnings

@@ -9,12 +9,32 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOKS_DIR="$SCRIPT_DIR/hooks"
+GIT_HOOKS_DIR="$SCRIPT_DIR/.git/hooks"
+
 echo "Setting up fast-containers development environment..."
 echo ""
 
 # Install pre-commit hooks
 echo "1. Installing pre-commit hooks..."
-./install-hooks.sh
+
+# Check if .git/hooks directory exists
+if [ ! -d "$GIT_HOOKS_DIR" ]; then
+    echo "Error: .git/hooks directory not found."
+    echo "Are you running this from the repository root?"
+    exit 1
+fi
+
+# Install pre-commit hook
+if [ -f "$HOOKS_DIR/pre-commit" ]; then
+    cp "$HOOKS_DIR/pre-commit" "$GIT_HOOKS_DIR/pre-commit"
+    chmod +x "$GIT_HOOKS_DIR/pre-commit"
+    echo "   ✅ pre-commit hook installed"
+else
+    echo "   ❌ hooks/pre-commit not found"
+    exit 1
+fi
 
 # Create cmake-build-clang-tidy directory for clang-tidy
 echo ""

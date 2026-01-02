@@ -84,9 +84,7 @@ clang-tidy-19 -p cmake-build-clang-tidy include/fast_containers/*.hpp
 To automatically format and check C++ files before each commit:
 
 ```bash
-./setup-dev.sh  # One-time setup (recommended)
-# OR
-./install-hooks.sh  # Just install hooks
+./setup-dev.sh  # One-time setup
 ```
 
 The pre-commit hook will:
@@ -94,11 +92,12 @@ The pre-commit hook will:
 - Check production headers with clang-tidy (production code only)
 - Fail the commit if clang-tidy finds warnings
 - Re-stage formatted files
+- Auto-create `cmake-build-clang-tidy/` if missing
 
 **Requirements**:
 - clang-format (for formatting)
 - clang-tidy-19 (for static analysis)
-- cmake-build-clang-tidy/ directory (created by `setup-dev.sh`)
+- cmake (to auto-create cmake-build-clang-tidy/ when needed)
 
 **Bypass hook** (when needed):
 ```bash
@@ -116,7 +115,7 @@ git commit --no-verify
 │       └── hugepage_*.hpp
 ├── tests/                 # Unit tests (Catch2)
 ├── third_party/           # Git submodules (Catch2)
-├── hooks/                 # Git hooks (install with install-hooks.sh)
+├── hooks/                 # Git hooks (install with setup-dev.sh)
 └── CMakeLists.txt         # Build configuration
 ```
 

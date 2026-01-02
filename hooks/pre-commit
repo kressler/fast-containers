@@ -55,12 +55,22 @@ if [ -n "$STAGED_HEADERS" ]; then
         exit 0
     fi
 
-    # Check if compile_commands.json exists
+    # Check if compile_commands.json exists, create if missing
     if [ ! -f "cmake-build-clang-tidy/compile_commands.json" ]; then
-        echo "Warning: cmake-build-clang-tidy/compile_commands.json not found."
-        echo "Run: cmake -S . -B cmake-build-clang-tidy -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-        echo "Skipping clang-tidy checks."
-        exit 0
+        echo ""
+        echo "cmake-build-clang-tidy/compile_commands.json not found."
+        echo "Creating cmake-build-clang-tidy directory..."
+
+        if cmake -S . -B cmake-build-clang-tidy \
+            -DCMAKE_CXX_COMPILER=clang++-19 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Debug &>/dev/null; then
+            echo "✅ Created cmake-build-clang-tidy/"
+        else
+            echo "⚠️  Failed to create cmake-build-clang-tidy/"
+            echo "Skipping clang-tidy checks."
+            exit 0
+        fi
     fi
 
     echo ""
