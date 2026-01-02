@@ -17,7 +17,7 @@ Checks: >
   -readability-identifier-length,
   -readability-magic-numbers
 WarningsAsErrors: ''
-HeaderFilterRegex: '(include|tests)/.*\.(h|hpp|ipp|cpp)$'
+HeaderFilterRegex: 'include/.*\.(h|hpp|ipp)$'
 FormatStyle: none
 CheckOptions:
   readability-identifier-naming.NamespaceCase: lower_case
