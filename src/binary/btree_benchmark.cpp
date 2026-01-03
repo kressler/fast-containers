@@ -177,6 +177,7 @@ using LambdaType = std::function<void(TimingStats&)>;
 
 int main(int argc, char** argv) {
   bool show_help = false;
+  bool json_output = false;
   uint64_t seed = 42;
   size_t target_iterations = 1000;
   size_t tree_size = 1000000;
@@ -195,20 +196,22 @@ int main(int argc, char** argv) {
   };
 
   // Define command line interface
-  auto cli = lyra::cli() | lyra::help(show_help) |
-             lyra::opt(seed, "seed")["-d"]["--seed"](
-                 "Random seed (defaults to time since epoch") |
-             lyra::opt(target_iterations, "iterations")["-i"]["--iterations"](
-                 "Iterations to run") |
-             lyra::opt(tree_size, "min_keys")["-t"]["--tree-size"](
-                 "Minimum keys to target in tree") |
-             lyra::opt(batches, "batches")["-b"]["--batches"](
-                 "Number of erase/insert batches to run") |
-             lyra::opt(batch_size, "batch_size")["-s"]["--batch-size"](
-                 "Size of an erase/insert batch") |
-             lyra::opt(record_rampup, "record_rampup")["-r"]["--record-rampup"](
-                 "Record stats during rampup in tree size") |
-             lyra::arg(names, "names")("Name of the benchmark to run");
+  auto cli =
+      lyra::cli() | lyra::help(show_help) |
+      lyra::opt(seed, "seed")["-d"]["--seed"](
+          "Random seed (defaults to time since epoch") |
+      lyra::opt(target_iterations,
+                "iterations")["-i"]["--iterations"]("Iterations to run") |
+      lyra::opt(tree_size, "min_keys")["-t"]["--tree-size"](
+          "Minimum keys to target in tree") |
+      lyra::opt(batches, "batches")["-b"]["--batches"](
+          "Number of erase/insert batches to run") |
+      lyra::opt(batch_size, "batch_size")["-s"]["--batch-size"](
+          "Size of an erase/insert batch") |
+      lyra::opt(record_rampup, "record_rampup")["-r"]["--record-rampup"](
+          "Record stats during rampup in tree size") |
+      lyra::opt(json_output)["-j"]["--json"]("Output results in JSON format") |
+      lyra::arg(names, "names")("Name of the benchmark to run");
 
   // Parse command line
   auto result = cli.parse({argc, argv});
@@ -370,25 +373,17 @@ int main(int argc, char** argv) {
     }
   }
 
+  // Run benchmarks with optional progress output
   for (size_t iter = 0; iter < target_iterations; ++iter) {
-    std::cout << "Iteration " << iter << std::endl;
+    if (!json_output) {
+      std::cout << "Iteration " << iter << std::endl;
+    }
     for (const auto& name : names) {
       benchmarkers.at(name)(results[name]);
     }
   }
 
-  std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", "Benchmark Name",
-               "Insert cycles", "Find cycles", "Erase cycles",
-               "Iterate cycles");
-  for (const auto& name : names) {
-    const auto& stats = results.at(name);
-    std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", name,
-                 stats.insert_time, stats.find_time, stats.erase_time,
-                 stats.iterate_time);
-  }
-
-  std::cout << std::endl << std::endl;
-
+  // Calibrate rdtsc to nanoseconds
   unsigned int dummy;
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t rdtsc_start = __rdtsc();
@@ -398,30 +393,104 @@ int main(int argc, char** argv) {
   const double cycles_per_nano =
       static_cast<double>(rdtsc_end - rdtsc_start) /
       std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-  std::cout << "rdtsc calibration: " << cycles_per_nano << " cycles / ns"
-            << std::endl;
 
-  const std::vector<double> percentiles{0.5, 0.9, 0.95, 0.99, 0.999, 0.9999};
-  std::cout << "    ";
-  for (const auto& percentile : percentiles) {
-    std::print("{:>16}, ", percentile);
-  }
-  std::cout << std::endl;
+  // Define percentiles to calculate
+  const std::vector<double> percentiles{0.0, 0.5, 0.95, 0.99, 0.999, 0.9999};
 
-  auto print_percentiles = [&](const std::string& name, const auto& histogram) {
-    auto values = histogram.percentiles(percentiles);
-    std::cout << "  " << name << ":";
-    for (const auto& value : values) {
-      std::print("{:>16f}, ", value / cycles_per_nano);
+  if (json_output) {
+    // JSON output format for interleaved_benchmark.py
+    if (names.size() != 1) {
+      std::cerr << "Error: JSON output mode requires exactly one benchmark name"
+                << std::endl;
+      exit(1);
+    }
+
+    const auto& stats = results.at(names[0]);
+
+    // Get percentile values
+    auto insert_percentiles = stats.insert_histogram.percentiles(percentiles);
+    auto find_percentiles = stats.find_histogram.percentiles(percentiles);
+    auto erase_percentiles = stats.erase_histogram.percentiles(percentiles);
+
+    // Convert cycles to nanoseconds
+    auto to_ns = [&](double cycles) { return cycles / cycles_per_nano; };
+
+    // Output JSON
+    std::cout << "{\n";
+    std::cout << "  \"config\": \"" << names[0] << "\",\n";
+    std::cout << "  \"iterations\": " << target_iterations << ",\n";
+    std::cout << "  \"total_cycles\": {\n";
+    std::cout << "    \"insert\": " << stats.insert_time << ",\n";
+    std::cout << "    \"find\": " << stats.find_time << ",\n";
+    std::cout << "    \"erase\": " << stats.erase_time << ",\n";
+    std::cout << "    \"iterate\": " << stats.iterate_time << "\n";
+    std::cout << "  },\n";
+    std::cout << "  \"performance\": {\n";
+    std::cout << "    \"insert\": {\n";
+    std::cout << "      \"p0\": " << to_ns(insert_percentiles[0]) << ",\n";
+    std::cout << "      \"p50\": " << to_ns(insert_percentiles[1]) << ",\n";
+    std::cout << "      \"p95\": " << to_ns(insert_percentiles[2]) << ",\n";
+    std::cout << "      \"p99\": " << to_ns(insert_percentiles[3]) << ",\n";
+    std::cout << "      \"p99_9\": " << to_ns(insert_percentiles[4]) << ",\n";
+    std::cout << "      \"p99_99\": " << to_ns(insert_percentiles[5]) << "\n";
+    std::cout << "    },\n";
+    std::cout << "    \"find\": {\n";
+    std::cout << "      \"p0\": " << to_ns(find_percentiles[0]) << ",\n";
+    std::cout << "      \"p50\": " << to_ns(find_percentiles[1]) << ",\n";
+    std::cout << "      \"p95\": " << to_ns(find_percentiles[2]) << ",\n";
+    std::cout << "      \"p99\": " << to_ns(find_percentiles[3]) << ",\n";
+    std::cout << "      \"p99_9\": " << to_ns(find_percentiles[4]) << ",\n";
+    std::cout << "      \"p99_99\": " << to_ns(find_percentiles[5]) << "\n";
+    std::cout << "    },\n";
+    std::cout << "    \"erase\": {\n";
+    std::cout << "      \"p0\": " << to_ns(erase_percentiles[0]) << ",\n";
+    std::cout << "      \"p50\": " << to_ns(erase_percentiles[1]) << ",\n";
+    std::cout << "      \"p95\": " << to_ns(erase_percentiles[2]) << ",\n";
+    std::cout << "      \"p99\": " << to_ns(erase_percentiles[3]) << ",\n";
+    std::cout << "      \"p99_9\": " << to_ns(erase_percentiles[4]) << ",\n";
+    std::cout << "      \"p99_99\": " << to_ns(erase_percentiles[5]) << "\n";
+    std::cout << "    }\n";
+    std::cout << "  }\n";
+    std::cout << "}\n";
+  } else {
+    // Text output format (existing behavior)
+    std::cout << "rdtsc calibration: " << cycles_per_nano << " cycles / ns"
+              << std::endl;
+
+    std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", "Benchmark Name",
+                 "Insert cycles", "Find cycles", "Erase cycles",
+                 "Iterate cycles");
+    for (const auto& name : names) {
+      const auto& stats = results.at(name);
+      std::println("{:>40}, {:>16}, {:>16}, {:>16}, {:>16}", name,
+                   stats.insert_time, stats.find_time, stats.erase_time,
+                   stats.iterate_time);
+    }
+
+    std::cout << std::endl << std::endl;
+
+    std::cout << "    ";
+    for (const auto& percentile : percentiles) {
+      std::print("{:>16}, ", percentile);
     }
     std::cout << std::endl;
-  };
 
-  for (const auto& name : names) {
-    std::cout << name << std::endl;
-    const auto& stats = results.at(name);
-    print_percentiles("i", stats.insert_histogram);
-    print_percentiles("f", stats.find_histogram);
-    print_percentiles("e", stats.erase_histogram);
+    auto print_percentiles = [&](const std::string& name,
+                                 const auto& histogram) {
+      auto values = histogram.percentiles(percentiles);
+      std::cout << "  " << name << ":";
+      for (const auto& value : values) {
+        std::print("{:>16f}, ", value / cycles_per_nano);
+      }
+      std::cout << std::endl;
+    };
+
+    for (const auto& name : names) {
+      std::cout << name << std::endl;
+      const auto& stats = results.at(name);
+      print_percentiles("i", stats.insert_histogram);
+      print_percentiles("f", stats.find_histogram);
+      print_percentiles("e", stats.erase_histogram);
+    }
   }
 }
