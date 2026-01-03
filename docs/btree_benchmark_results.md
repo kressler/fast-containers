@@ -1,8 +1,12 @@
-# B+Tree Benchmark Results: Hugepage and SearchMode Comparison
+# B+Tree Benchmark Results vs. Abseil and std::map
 
 ## Test Configuration
 
 **Binary:** `cmake-build-clang-release/src/binary/btree_benchmark`
+
+**Benchmark Implementation:**
+- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/167b1453a8f912a3fa88e5a0cdf93419dea6aef5/src/binary/btree_benchmark.cpp)
+- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/167b1453a8f912a3fa88e5a0cdf93419dea6aef5/scripts/interleaved_btree_benchmark.py)
 
 **Test Parameters:**
 - Passes: 5 (interleaved forward/reverse)
@@ -14,16 +18,43 @@
 - CPU core: 15 (pinned with taskset)
 - Compiler: Clang (Release build)
 
+**Machine Configuration:**
+- CPU: AMD Ryzen 9 5950X 16-Core Processor
+- Hyperthreading: Disabled
+- Core isolation: Core 15 isolated via kernel boot parameters
+- Kernel: Linux 6.16.3+deb14-amd64
+
+**Benchmark Workload:**
+
+The benchmark exercises a complete lifecycle:
+1. **Ramp up:** Insert 10M random elements to build the tree to target size
+2. **Steady state:** Execute 25 batches of mixed operations (50k elements per batch):
+   - Erase random elements from the tree
+   - Insert new random elements back into the tree
+   - Find random elements in the tree
+3. **Ramp down:** Erase all elements to empty the tree
+
+Each operation is timed individually using RDTSC (calibrated to nanoseconds), with latency distributions tracked via histograms. The interleaved benchmark script runs multiple configurations in forward/reverse order across multiple passes to eliminate sequential bias.
+
 **Key/Value Configurations Tested:**
 1. **8-byte key + 32-byte value**: Node sizes 96/128 (leaf/internal)
 2. **8-byte key + 256-byte value**: Node sizes 8/128 (leaf/internal)
 
-**Configurations:**
-- `btree_*_linear`: Linear search mode
-- `btree_*_simd`: SIMD search mode
-- `btree_*_hp`: Hugepage allocator variant
-- `absl_*`: Abseil B+tree baseline
-- `map_*`: std::map baseline
+**Configuration Naming Convention:**
+
+Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_size}_{internal_size}_{search_mode}[_hp]`
+
+**Example:** `btree_8_32_96_128_simd_hp` means:
+- Key size: 8 bytes (e.g., `int64_t`, `uint64_t`)
+- Value size: 32 bytes (e.g., small struct)
+- Leaf node size: 96 entries (can hold 96 key-value pairs)
+- Internal node size: 128 entries (can hold 128 child pointers)
+- Search mode: `simd` (SIMD-accelerated linear search) or `linear` (scalar linear search)
+- Allocator: `_hp` suffix indicates hugepage allocator (2MB pages), no suffix = standard allocator (4KB pages)
+
+**Baseline configurations:**
+- `absl_{key_size}_{value_size}`: Abseil's `absl::btree_map` (Google's high-performance B+tree)
+- `map_{key_size}_{value_size}`: Standard library `std::map` (red-black tree)
 
 ---
 
@@ -275,19 +306,21 @@
 
 ### 1. Hugepage Allocator Performance Impact
 
+**Comparison:** `btree_*_simd_hp` (hugepage allocator) vs `btree_*_simd` (standard allocator), both using SIMD search mode.
+
 **Dramatic performance improvements across all workloads:**
 
-**32-byte values:**
+**32-byte values (btree_8_32_96_128_simd_hp vs btree_8_32_96_128_simd):**
 - INSERT P99.9: 3.3× faster (939.9 ns vs 3082.6 ns)
-- FIND P99.9: 3.6× faster (857.5 ns vs 902.2 ns)
+- FIND P99.9: 1.1× faster (857.5 ns vs 902.2 ns)
 - ERASE P99.9: 1.2× faster (1059.9 ns vs 1281.8 ns)
 
-**256-byte values (even larger impact):**
+**256-byte values (btree_8_256_8_128_simd_hp vs btree_8_256_8_128_simd) - even larger impact:**
 - INSERT P99.9: 4.7× faster (1001.6 ns vs 4723.5 ns)
 - FIND P99.9: 1.3× faster (946.2 ns vs 1195.9 ns)
 - ERASE P99.9: 1.5× faster (1146.5 ns vs 1719.7 ns)
 
-**Root cause:** Hugepages reduce TLB misses for large working sets (10M elements). With 2MB hugepages vs 4KB standard pages, TLB coverage increases 512×, critical for random access patterns in B+trees.
+**Root cause:** Hugepages reduce TLB misses for large working sets (10M elements). With 2MB hugepages vs 4KB standard pages, TLB coverage increases 512×, critical for random access patterns in B+trees. The impact is more dramatic with larger values due to increased memory footprint.
 
 ### 2. SIMD vs Linear SearchMode Comparison
 
