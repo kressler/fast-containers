@@ -130,14 +130,16 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
     stats.find_histogram.observe(stop - start);
   };
 
-  auto erase = [&]() -> void {
+  auto erase = [&](bool record_stats = true) -> void {
     auto key = *keys.begin();
     keys.erase(key);
     uint64_t start = __rdtscp(&dummy);
-    benchmark::DoNotOptimize(tree.find(key));
+    tree.erase(key);
     uint64_t stop = __rdtscp(&dummy);
-    stats.erase_time += stop - start;
-    stats.erase_histogram.observe(stop - start);
+    if (record_stats) {
+      stats.erase_time += stop - start;
+      stats.erase_histogram.observe(stop - start);
+    }
   };
 
   auto iterate = [&]() -> void {
@@ -151,7 +153,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
   };
 
   while (tree.size() < tree_size) {
-    insert(false);
+    insert(record_rampup);
   }
 
   for (const auto& key : keys) {
@@ -171,6 +173,10 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
   }
 
   iterate();
+
+  while (tree.size() > 0) {
+    erase(record_rampup);
+  }
 }
 
 using LambdaType = std::function<void(TimingStats&)>;
