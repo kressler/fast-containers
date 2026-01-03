@@ -20,6 +20,15 @@
 #include <thread>
 #include <unordered_set>
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
+    defined(_M_IX86)
+#if defined(__GNUC__) || defined(__clang__)
+#include <x86intrin.h>
+#elif defined(_MSC_VER)
+#include <intrin.h>
+#endif
+#endif
+
 using namespace kressler::fast_containers;
 using namespace kressler::histograms;
 
