@@ -178,7 +178,6 @@ using LambdaType = std::function<void(TimingStats&)>;
 int main(int argc, char** argv) {
   bool show_help = false;
   bool json_output = false;
-  std::string config_name;
   uint64_t seed = 42;
   size_t target_iterations = 1000;
   size_t tree_size = 1000000;
@@ -212,9 +211,6 @@ int main(int argc, char** argv) {
       lyra::opt(record_rampup, "record_rampup")["-r"]["--record-rampup"](
           "Record stats during rampup in tree size") |
       lyra::opt(json_output)["-j"]["--json"]("Output results in JSON format") |
-      lyra::opt(config_name, "config")["-c"]["--config"](
-          "Configuration name (for JSON output, defaults to first benchmark "
-          "name)") |
       lyra::arg(names, "names")("Name of the benchmark to run");
 
   // Parse command line
@@ -377,11 +373,6 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Default config_name to first benchmark if not specified
-  if (config_name.empty() && !names.empty()) {
-    config_name = names[0];
-  }
-
   // Run benchmarks with optional progress output
   for (size_t iter = 0; iter < target_iterations; ++iter) {
     if (!json_output) {
@@ -426,7 +417,7 @@ int main(int argc, char** argv) {
 
     // Output JSON
     std::cout << "{\n";
-    std::cout << "  \"config\": \"" << config_name << "\",\n";
+    std::cout << "  \"config\": \"" << names[0] << "\",\n";
     std::cout << "  \"iterations\": " << target_iterations << ",\n";
     std::cout << "  \"total_cycles\": {\n";
     std::cout << "    \"insert\": " << stats.insert_time << ",\n";

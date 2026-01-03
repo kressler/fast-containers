@@ -22,15 +22,14 @@ from collections import defaultdict
 from statistics import median, stdev
 
 
-def run_benchmark(binary: Path, config: str, iterations: int = 1000,
+def run_benchmark(binary: Path, config: str, iterations: int = 1,
                   tree_size: int = 1000000, batches: int = 100,
-                  batch_size: int = 1000, record_rampup: bool = True,
+                  batch_size: int = 1000, record_rampup: bool = False,
                   seed: int = 42) -> Dict[str, Any]:
     """Run a single benchmark and return parsed JSON results."""
 
     cmd = [
         str(binary),
-        "-c", config,
         "-j",  # JSON output
         "-i", str(iterations),
         "-t", str(tree_size),
@@ -40,8 +39,8 @@ def run_benchmark(binary: Path, config: str, iterations: int = 1000,
         config  # benchmark name
     ]
 
-    if record_rampup:
-        cmd.extend(["-r", "true"])
+    if not record_rampup:
+        cmd.extend(["-r", "false"])
 
     print(f"  Running: {config}...", end="", flush=True)
 
@@ -71,11 +70,11 @@ def interleaved_benchmark(
     binary: Path,
     configs: List[str],
     num_passes: int = 10,
-    iterations: int = 1000,
+    iterations: int = 1,
     tree_size: int = 1000000,
     batches: int = 100,
     batch_size: int = 1000,
-    record_rampup: bool = True,
+    record_rampup: bool = False,
     seed: int = 42
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -383,8 +382,8 @@ Examples:
     parser.add_argument(
         "-i", "--iterations",
         type=int,
-        default=1000,
-        help="Number of iterations per run (default: 1000)"
+        default=1,
+        help="Number of iterations per run (default: 1)"
     )
 
     parser.add_argument(
