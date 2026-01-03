@@ -76,7 +76,8 @@ auto print_pool_stats = [](const HugePagePool& pool,
 
 template <typename T>
 void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
-                   size_t batches, size_t batch_size, TimingStats& stats) {
+                   size_t batches, size_t batch_size, bool record_rampup,
+                   TimingStats& stats) {
   auto get_dist = [&]() -> auto {
     if constexpr (std::is_fundamental_v<typename T::key_type>) {
       if (tree_size > std::numeric_limits<typename T::key_type>::max() / 2) {
@@ -98,7 +99,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
   unsigned int dummy;
   std::unordered_set<typename T::key_type> keys{};
 
-  auto insert = [&]() -> void {
+  auto insert = [&](bool record_stats = true) -> void {
     bool inserted;
     typename T::key_type key;
     do {
@@ -115,8 +116,10 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
     uint64_t start = __rdtscp(&dummy);
     tree.insert({key, {}});
     uint64_t stop = __rdtscp(&dummy);
-    stats.insert_time += stop - start;
-    stats.insert_histogram.observe(stop - start);
+    if (record_stats) {
+      stats.insert_time += stop - start;
+      stats.insert_histogram.observe(stop - start);
+    }
   };
 
   auto find = [&](const typename T::key_type& key) -> void {
@@ -148,7 +151,7 @@ void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
   };
 
   while (tree.size() < tree_size) {
-    insert();
+    insert(false);
   }
 
   for (const auto& key : keys) {
@@ -181,13 +184,14 @@ int main(int argc, char** argv) {
   size_t batch_size = 1000;
   std::vector<std::string> names;
   std::unordered_map<std::string, TimingStats> results;
+  bool record_rampup = true;
 
   auto benchmarker =
       [&]<typename Tree,
           typename Allocator = std::allocator<typename Tree::value_type>>(
           Tree tree, TimingStats& stats) -> void {
     run_benchmark(tree, seed, target_iterations, tree_size, batches, batch_size,
-                  stats);
+                  record_rampup, stats);
   };
 
   // Define command line interface
@@ -202,6 +206,8 @@ int main(int argc, char** argv) {
                  "Number of erase/insert batches to run") |
              lyra::opt(batch_size, "batch_size")["-s"]["--batch-size"](
                  "Size of an erase/insert batch") |
+             lyra::opt(record_rampup, "record_rampup")["-r"]["--record-rampup"](
+                 "Record stats during rampup in tree size") |
              lyra::arg(names, "names")("Name of the benchmark to run");
 
   // Parse command line
