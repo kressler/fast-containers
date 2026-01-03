@@ -25,10 +25,16 @@ from statistics import median, stdev
 def run_benchmark(binary: Path, config: str, iterations: int = 1,
                   tree_size: int = 1000000, batches: int = 100,
                   batch_size: int = 1000, record_rampup: bool = False,
-                  seed: int = 42) -> Dict[str, Any]:
+                  seed: int = 42, taskset_core: int = -1) -> Dict[str, Any]:
     """Run a single benchmark and return parsed JSON results."""
 
-    cmd = [
+    cmd = []
+
+    # Add taskset if core pinning requested
+    if taskset_core >= 0:
+        cmd.extend(["taskset", "-c", str(taskset_core)])
+
+    cmd.extend([
         str(binary),
         "-j",  # JSON output
         "-i", str(iterations),
@@ -37,7 +43,7 @@ def run_benchmark(binary: Path, config: str, iterations: int = 1,
         "-s", str(batch_size),
         "-d", str(seed),
         config  # benchmark name
-    ]
+    ])
 
     if not record_rampup:
         cmd.extend(["-r", "false"])
@@ -75,7 +81,8 @@ def interleaved_benchmark(
     batches: int = 100,
     batch_size: int = 1000,
     record_rampup: bool = False,
-    seed: int = 42
+    seed: int = 42,
+    taskset_core: int = -1
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Run interleaved forward/reverse passes for all configs.
@@ -99,7 +106,7 @@ def interleaved_benchmark(
         for config in order:
             result = run_benchmark(
                 binary, config, iterations, tree_size, batches,
-                batch_size, record_rampup, seed
+                batch_size, record_rampup, seed, taskset_core
             )
             results[config].append(result)
 
@@ -353,6 +360,9 @@ Examples:
   # Quick test with fewer iterations
   %(prog)s -c btree_8_32_96_128_linear btree_8_32_96_128_simd -p 3 -i 100 -t 10000
 
+  # Pin to isolated CPU core for reduced variance
+  %(prog)s -c btree_8_32_96_128_linear btree_8_32_96_128_simd -p 10 --taskset 7
+
   # Export results to CSV
   %(prog)s -c btree_8_32_96_128_linear btree_8_32_96_128_simd -p 10 --csv results.csv
         """
@@ -421,6 +431,14 @@ Examples:
     )
 
     parser.add_argument(
+        "--taskset",
+        type=int,
+        default=-1,
+        metavar="CORE",
+        help="Pin benchmark to specific CPU core using taskset (default: -1 = no pinning)"
+    )
+
+    parser.add_argument(
         "--csv",
         type=Path,
         help="Export results to CSV file"
@@ -455,6 +473,8 @@ Examples:
     print(f"Batches:      {args.batches}")
     print(f"Batch size:   {args.batch_size}")
     print(f"Seed:         {args.seed}")
+    if args.taskset >= 0:
+        print(f"CPU core:     {args.taskset} (pinned with taskset)")
     print("=" * 100)
 
     # Run interleaved benchmarks
@@ -467,7 +487,8 @@ Examples:
         args.batches,
         args.batch_size,
         not args.no_record_rampup,
-        args.seed
+        args.seed,
+        args.taskset
     )
 
     # Aggregate results
