@@ -5,8 +5,8 @@
 **Binary:** `cmake-build-clang-release/src/binary/btree_benchmark`
 
 **Benchmark Implementation:**
-- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/167b1453a8f912a3fa88e5a0cdf93419dea6aef5/src/binary/btree_benchmark.cpp)
-- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/167b1453a8f912a3fa88e5a0cdf93419dea6aef5/scripts/interleaved_btree_benchmark.py)
+- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/main/src/binary/btree_benchmark.cpp)
+- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/main/scripts/interleaved_btree_benchmark.py)
 
 **Test Parameters:**
 - Passes: 5 (interleaved forward/reverse)
@@ -62,33 +62,39 @@ Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_siz
 
 ### 8-byte Key + 32-byte Value (Node Size 96/128)
 
-| Metric | btree_simd_hp | btree_linear_hp | vs Abseil | vs std::map |
-|--------|---------------|-----------------|-----------|-------------|
-| **INSERT P99.9** | **939.9 ns** | 1029.1 ns | -66.4% | -73.3% |
-| **INSERT P50** | **284.3 ns** | 301.9 ns | -36.9% | -69.2% |
-| **FIND P99.9** | **857.5 ns** | 888.3 ns | -33.6% | -60.6% |
-| **FIND P50** | **258.9 ns** | 260.4 ns | -48.5% | -70.6% |
-| **ERASE P99.9** | **1059.9 ns** | 1176.7 ns | -34.4% | -53.7% |
-| **ERASE P50** | **280.9 ns** | 293.8 ns | -38.7% | -69.3% |
+| Metric | btree_simd_hp* | btree_linear_hp | btree_simd | vs Abseil* | vs std::map* |
+|--------|----------------|-----------------|------------|------------|--------------|
+| **INSERT P99.9** | **939.9 ns** | 1029.1 ns | 3082.6 ns | -70.4% | -73.3% |
+| **INSERT P50** | **284.3 ns** | 301.9 ns | 321.2 ns | -36.9% | -69.2% |
+| **FIND P99.9** | **857.5 ns** | 888.3 ns | 902.2 ns | -33.6% | -60.6% |
+| **FIND P50** | **258.9 ns** | 260.4 ns | 287.7 ns | -48.5% | -70.6% |
+| **ERASE P99.9** | **1059.9 ns** | 1176.7 ns | 1281.8 ns | -34.4% | -53.7% |
+| **ERASE P50** | **280.9 ns** | 293.8 ns | 317.0 ns | -38.7% | -69.3% |
+
+\* Comparison percentages (vs Abseil, vs std::map) are relative to **btree_simd_hp**.
 
 ### 8-byte Key + 256-byte Value (Node Size 8/128)
 
-| Metric | btree_simd_hp | btree_linear_hp | vs Abseil | vs std::map |
-|--------|---------------|-----------------|-----------|-------------|
-| **INSERT P99.9** | **1001.6 ns** | 1041.6 ns | -81.8% | -79.8% |
-| **INSERT P50** | **209.6 ns** | 252.1 ns | -75.1% | -79.5% |
-| **FIND P99.9** | **946.2 ns** | 998.5 ns | -50.6% | -60.6% |
-| **FIND P50** | **281.7 ns** | 315.5 ns | -63.2% | -70.9% |
-| **ERASE P99.9** | **1146.5 ns** | 1320.3 ns | -62.9% | -55.5% |
-| **ERASE P50** | **274.5 ns** | 337.9 ns | -67.6% | -74.2% |
+| Metric | btree_simd_hp* | btree_linear_hp | btree_simd | vs Abseil* | vs std::map* |
+|--------|----------------|-----------------|------------|------------|--------------|
+| **INSERT P99.9** | **1001.6 ns** | 1041.6 ns | 4723.5 ns | -81.8% | -79.8% |
+| **INSERT P50** | **209.6 ns** | 252.1 ns | 398.1 ns | -75.1% | -79.5% |
+| **FIND P99.9** | **946.2 ns** | 998.5 ns | 1195.9 ns | -50.6% | -60.6% |
+| **FIND P50** | **281.7 ns** | 315.5 ns | 440.5 ns | -63.2% | -70.9% |
+| **ERASE P99.9** | **1146.5 ns** | 1320.3 ns | 1719.7 ns | -62.9% | -55.5% |
+| **ERASE P50** | **274.5 ns** | 337.9 ns | 474.6 ns | -67.6% | -74.2% |
 
-**Key Finding:** Hugepage allocator provides massive performance improvements (2-5×) over standard allocation across all operations.
+\* Comparison percentages (vs Abseil, vs std::map) are relative to **btree_simd_hp**.
+
+**Key Finding:** Hugepage allocator provides massive performance improvements (3-5×) over standard allocation across all operations, with the largest impact on insert operations.
 
 ---
 
 ## 8-byte Key + 32-byte Value Detailed Results
 
 ### INSERT P99.9 Latency Comparison
+
+*Min/Max/StdDev are computed across the 5 interleaved benchmark passes.*
 
 | Config | Passes | P99.9 Median (ns) | Min | Max | StdDev | vs Best |
 |--------|--------|-------------------|-----|-----|--------|---------|
@@ -320,7 +326,13 @@ Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_siz
 - FIND P99.9: 1.3× faster (946.2 ns vs 1195.9 ns)
 - ERASE P99.9: 1.5× faster (1146.5 ns vs 1719.7 ns)
 
-**Root cause:** Hugepages reduce TLB misses for large working sets (10M elements). With 2MB hugepages vs 4KB standard pages, TLB coverage increases 512×, critical for random access patterns in B+trees. The impact is more dramatic with larger values due to increased memory footprint.
+**Root causes:**
+
+1. **TLB miss reduction:** Hugepages (2MB) vs standard pages (4KB) provide 512× greater TLB coverage, critical for random access patterns in B+trees with large working sets (10M elements). This primarily benefits find operations.
+
+2. **Allocator pooling:** The hugepage allocator pre-allocates large slabs and maintains a free list of previously freed nodes. Node allocations/deallocations become extremely cheap pointer manipulations instead of syscalls. This primarily benefits insert/erase operations, which explains the larger performance gains for those operations compared to find.
+
+The impact is more dramatic with larger values due to increased memory footprint (larger working set amplifies TLB benefits, more data movement amplifies allocation cost savings).
 
 ### 2. SIMD vs Linear SearchMode Comparison
 
@@ -334,32 +346,19 @@ Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_siz
 
 **Conclusion:** SIMD provides consistent but modest benefits (3-10%) when combined with hugepages. Linear search remains competitive, especially for write-heavy workloads with standard allocation.
 
-### 3. Value Size Impact on Node Size Selection
+### 3. Comparison to Industry Standards
 
-**Node size scaling with value size:**
-- **32-byte values**: Optimal node size 96 (leaf) → ~3KB nodes
-- **256-byte values**: Optimal node size 8 (leaf) → ~2KB nodes
+**vs Abseil B+tree (for these specific configurations):**
+- **32-byte values**: btree_simd_hp is 2.4-3.4× faster across all operations
+- **256-byte values**: btree_simd_hp is 1.9-5.5× faster
 
-**Trade-off:** Larger values require smaller node sizes to:
-1. Minimize data movement during splits (256-byte copies are expensive)
-2. Maintain cache-friendly working set
-3. Balance split frequency vs split cost
+**vs std::map (for these specific configurations):**
+- **32-byte values**: btree_simd_hp is 2.2-3.7× faster across all operations
+- **256-byte values**: btree_simd_hp is 2.2-5.0× faster
 
-**Internal node size:** Both use 128 entries, validating that internal nodes (storing only 8-byte pointers) benefit from larger sizes regardless of value size.
+**Note:** These comparisons are specific to the tested configurations (8-byte keys with 32-byte or 256-byte values, node sizes 96/128 or 8/128). Performance may vary with different key/value sizes and node configurations.
 
-### 4. Comparison to Industry Standards
-
-**vs Abseil B+tree:**
-- **32-byte values**: 2.4-3.4× faster across all operations
-- **256-byte values**: 1.9-5.5× faster (larger improvement on larger values)
-
-**vs std::map:**
-- **32-byte values**: 2.2-3.7× faster across all operations
-- **256-byte values**: 2.2-5.0× faster
-
-**Key advantage:** Cache-friendly node layout and SIMD search provide consistent 2-5× speedup over standard library implementations, with larger improvements on larger value sizes.
-
-### 5. Variance and Measurement Quality
+### 4. Variance and Measurement Quality
 
 **Interleaved A/B testing delivers excellent repeatability:**
 - Median P50 variance: 0.04-2.38% StdDev
@@ -369,7 +368,7 @@ Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_siz
 
 **Confidence:** Performance differences >5% are statistically significant and reproducible.
 
-### 6. Latency Distribution Characteristics
+### 5. Latency Distribution Characteristics
 
 **Tail latency (P99.9) vs median (P50) ratios:**
 
@@ -384,19 +383,3 @@ Configuration names follow the pattern: `btree_{key_size}_{value_size}_{leaf_siz
 - ERASE: 4.2× (1146.5 ns vs 274.5 ns)
 
 **Analysis:** Tail latencies are dominated by tree rebalancing operations (splits/merges). Larger values exhibit higher P99.9/P50 ratios due to more expensive data movement during rebalancing.
-
-### 7. Recommended Configuration
-
-**For production workloads with 8-byte keys:**
-
-**Small-to-medium values (≤64 bytes):**
-- Use `btree<Key, Value, 96, 128, SearchMode::SIMD, MoveMode::SIMD>` with hugepage allocator
-- Provides optimal balance of cache efficiency and split cost
-- SIMD search mode gives 3-10% benefit
-
-**Large values (≥128 bytes):**
-- Use `btree<Key, Value, 8, 128, SearchMode::SIMD, MoveMode::SIMD>` with hugepage allocator
-- Smaller leaf nodes minimize expensive data movement
-- Internal nodes remain large (128) for efficient traversal
-
-**Critical:** Always use hugepage allocator for working sets >1GB to achieve 2-5× speedup from TLB miss reduction.
