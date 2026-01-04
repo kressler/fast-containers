@@ -182,6 +182,17 @@ class MultiSizeHugePagePool {  // NOLINT(readability-identifier-naming)
     return it != pools_.end() ? it->second.get() : nullptr;
   }
 
+  /**
+   * Get all pools for iteration (mainly for stats/debugging).
+   *
+   * @return Const reference to the internal pools map
+   */
+  [[nodiscard]] const std::unordered_map<size_type,
+                                         std::unique_ptr<HugePagePool>>&
+  get_pools() const {
+    return pools_;
+  }
+
  private:
   std::unordered_map<size_type, std::unique_ptr<HugePagePool>> pools_;
   const size_type

@@ -76,6 +76,30 @@ auto print_pool_stats = [](const HugePagePool& pool,
 #endif
 };
 
+auto print_multi_size_pool_stats =
+    [](const std::shared_ptr<MultiSizeHugePagePool>& pool,
+       std::string_view name) -> void {
+#ifdef ALLOCATOR_STATS
+  std::cout << name << " multi-size pool stats:\n";
+  std::println("  Active size classes: {}", pool->active_size_classes());
+  std::println("  Using hugepages: {}", pool->using_hugepages());
+
+  // Print stats for each underlying pool
+  std::cout << "  Per-size-class stats:\n";
+  for (const auto& [size_class, underlying_pool] : pool->get_pools()) {
+    if (underlying_pool) {
+      std::print("    Size class {}B: ", size_class);
+      std::println("a: {}, d: {}, g: {}, b: {}, p: {}",
+                   underlying_pool->get_allocations(),
+                   underlying_pool->get_deallocations(),
+                   underlying_pool->get_growth_events(),
+                   underlying_pool->get_bytes_allocated(),
+                   underlying_pool->get_peak_usage());
+    }
+  }
+#endif
+};
+
 template <typename T>
 void run_benchmark(T& tree, uint64_t seed, size_t iterations, size_t tree_size,
                    size_t batches, size_t batch_size, bool record_rampup,
@@ -286,13 +310,7 @@ int main(int argc, char** argv) {
                              std::less<int64_t>, decltype(alloc)>{alloc},
              stats);
 
-#ifdef ALLOCATOR_STATS
-         const auto pool = alloc.get_pool();
-         std::cout << "Multi-size pool stats:\n";
-         std::cout << "  Active size classes: " << pool->active_size_classes()
-                   << "\n";
-         std::cout << "  Using hugepages: " << pool->using_hugepages() << "\n";
-#endif
+         print_multi_size_pool_stats(alloc.get_pool(), "absl_8_32_hp");
        }},
       {"map_8_32",
        [&](TimingStats& stats) -> void {
@@ -370,13 +388,7 @@ int main(int argc, char** argv) {
                              std::less<int64_t>, decltype(alloc)>{alloc},
              stats);
 
-#ifdef ALLOCATOR_STATS
-         const auto pool = alloc.get_pool();
-         std::cout << "Multi-size pool stats:\n";
-         std::cout << "  Active size classes: " << pool->active_size_classes()
-                   << "\n";
-         std::cout << "  Using hugepages: " << pool->using_hugepages() << "\n";
-#endif
+         print_multi_size_pool_stats(alloc.get_pool(), "absl_8_256_hp");
        }},
       {"map_8_256",
        [&](TimingStats& stats) -> void {

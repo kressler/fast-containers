@@ -24,6 +24,23 @@ namespace kressler::fast_containers {
  * - Stateful: stores reference to shared pool
  * - Copy/move semantics: allocators sharing a pool compare equal
  *
+ * When to use vs PolicyBasedHugePageAllocator:
+ * - Use PolicyBasedHugePageAllocator if your container supports allocator
+ *   rebinding (e.g., our btree, std::map). It provides optimal memory
+ *   efficiency by using separate pools for each rebound type.
+ * - Use MultiSizeHugePageAllocator as a compromise for containers that don't
+ *   rebind (e.g., absl::btree_map). Allows hugepage pooling with containers
+ *   that use variable-sized allocations from a single allocator instance.
+ *
+ * Disadvantages vs policy-based approach:
+ * - More pools than optimal: Containers may create multiple size classes
+ *   (e.g., absl::btree_map creates 5 pools instead of 2), leading to wasted
+ *   memory and potential fragmentation
+ * - Runtime dispatch overhead: Each allocation requires size-class calculation
+ *   and hash table lookup to find the appropriate pool
+ * - Memory overhead: Each size class maintains separate hugepage regions
+ *   (default 64MB per pool)
+ *
  * Thread safety: Not thread-safe (same as underlying MultiSizeHugePagePool)
  *
  * Example usage with absl::btree_map:
