@@ -34,8 +34,8 @@ namespace kressler::fast_containers {
  *
  * Disadvantages vs policy-based approach:
  * - More pools than optimal: Containers may create multiple size classes
- *   (e.g., absl::btree_map creates 5 pools instead of 2), leading to wasted
- *   memory and potential fragmentation
+ *   (e.g., absl::btree_map creates more pools than the expected 2), leading to
+ *   wasted memory and potential fragmentation
  * - Runtime dispatch overhead: Each allocation requires size-class calculation
  *   and hash table lookup to find the appropriate pool
  * - Memory overhead: Each size class maintains separate hugepage regions
