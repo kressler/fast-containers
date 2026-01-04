@@ -356,6 +356,11 @@ The impact is more dramatic with larger values due to increased memory footprint
 - **32-byte values**: btree_simd_hp is 2.2-3.7× faster across all operations
 - **256-byte values**: btree_simd_hp is 2.2-5.0× faster
 
+The performance wins relative to Abseil B+trees are a result of:
+- The use of pooling hugepage allocators
+- Tunable node sizes (Abseil B+trees target a fixed byte size for nodes)
+- Use of SIMD instructions for searches
+
 **Note:** These comparisons are specific to the tested configurations (8-byte keys with 32-byte or 256-byte values, node sizes 96/128 or 8/128). Performance may vary with different key/value sizes and node configurations.
 
 ### 4. Variance and Measurement Quality
