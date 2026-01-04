@@ -129,6 +129,8 @@ int main() {
     Allocator                                // Hugepage allocator
   >;
 
+  // Tree will default-construct the allocator (256MB initial pool, 64MB growth)
+  // The btree automatically creates separate pools for leaf and internal nodes
   Tree tree;
 
   // Insert 10 million elements - hugepages reduce TLB misses
@@ -141,6 +143,50 @@ int main() {
   assert(it != tree.end() && it->second == 10'000'000);
 }
 ```
+
+### Advanced: Policy-Based Allocator for Shared Pools
+
+For multiple trees or fine-grained control over pool sizes, use `PolicyBasedHugePageAllocator`:
+
+```cpp
+#include <fast_containers/btree.hpp>
+#include <fast_containers/policy_based_hugepage_allocator.hpp>
+#include <cstdint>
+
+int main() {
+  // Create separate pools for leaf and internal nodes with custom sizes
+  auto leaf_pool = std::make_shared<kressler::fast_containers::HugePagePool>(
+      512 * 1024 * 1024, true);  // 512MB for leaves
+  auto internal_pool = std::make_shared<kressler::fast_containers::HugePagePool>(
+      256 * 1024 * 1024, true);  // 256MB for internals
+
+  // Create policy that routes types to appropriate pools
+  kressler::fast_containers::TwoPoolPolicy policy{leaf_pool, internal_pool};
+
+  // Create allocator with the policy
+  using Allocator = kressler::fast_containers::PolicyBasedHugePageAllocator<
+      std::pair<int64_t, int32_t>,
+      kressler::fast_containers::TwoPoolPolicy>;
+
+  Allocator alloc(policy);
+
+  using Tree = kressler::fast_containers::btree<
+    int64_t, int32_t, 96, 128, std::less<int64_t>,
+    kressler::fast_containers::SearchMode::SIMD, Allocator>;
+
+  // Multiple trees can share the same pools
+  Tree tree1(alloc);
+  Tree tree2(alloc);
+
+  // Both trees share leaf_pool for leaves and internal_pool for internals
+  tree1.insert(1, 100);
+  tree2.insert(2, 200);
+}
+```
+
+**When to use each allocator:**
+- **`HugePageAllocator`**: Simple, automatic separate pools per type (recommended for single tree)
+- **`PolicyBasedHugePageAllocator`**: Fine-grained control, shared pools across trees, custom pool sizes
 
 ### API Overview
 
@@ -218,8 +264,14 @@ class btree;
 - `Allocator`: Memory allocation strategy
   - **Default**: `std::allocator<std::pair<Key, Value>>`
   - **Recommended for performance**: `HugePageAllocator<std::pair<Key, Value>>` for working sets >1GB (3-5× faster)
+    - Automatically creates separate pools for leaf and internal nodes via rebind
+    - Default: 256MB initial pool, 64MB growth per pool
     - Requires hugepages configured: `sudo sysctl -w vm.nr_hugepages=<num_pages>`
     - Falls back to regular pages if unavailable
+  - **Advanced**: `PolicyBasedHugePageAllocator<std::pair<Key, Value>, TwoPoolPolicy>`
+    - Fine-grained control over pool sizes
+    - Share pools across multiple trees
+    - Separate pools for leaf and internal nodes with custom sizes
 
 ---
 
