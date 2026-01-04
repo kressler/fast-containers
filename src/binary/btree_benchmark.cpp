@@ -286,11 +286,13 @@ int main(int argc, char** argv) {
                              std::less<int64_t>, decltype(alloc)>{alloc},
              stats);
 
+#ifdef ALLOCATOR_STATS
          const auto pool = alloc.get_pool();
          std::cout << "Multi-size pool stats:\n";
          std::cout << "  Active size classes: " << pool->active_size_classes()
                    << "\n";
          std::cout << "  Using hugepages: " << pool->using_hugepages() << "\n";
+#endif
        }},
       {"map_8_32",
        [&](TimingStats& stats) -> void {
@@ -368,11 +370,13 @@ int main(int argc, char** argv) {
                              std::less<int64_t>, decltype(alloc)>{alloc},
              stats);
 
+#ifdef ALLOCATOR_STATS
          const auto pool = alloc.get_pool();
          std::cout << "Multi-size pool stats:\n";
          std::cout << "  Active size classes: " << pool->active_size_classes()
                    << "\n";
          std::cout << "  Using hugepages: " << pool->using_hugepages() << "\n";
+#endif
        }},
       {"map_8_256",
        [&](TimingStats& stats) -> void {
