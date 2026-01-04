@@ -67,18 +67,12 @@ This is a work in progress. I don't have plans for major changes to the B+tree c
 ```cpp
 #include <fast_containers/btree.hpp>
 #include <cstdint>
+#include <iostream>
 
 int main() {
   // Create a btree mapping int64_t keys to int32_t values
-  // Template parameters: <Key, Value, LeafSize, InternalSize, SearchMode, MoveMode>
-  using Tree = fast_containers::btree<
-    int64_t,                             // Key type
-    int32_t,                             // Value type
-    96,                                  // Leaf node size (entries)
-    128,                                 // Internal node size (entries)
-    fast_containers::SearchMode::SIMD,   // SIMD-accelerated search
-    fast_containers::MoveMode::SIMD      // SIMD-accelerated data movement
-  >;
+  // Using defaults: auto-computed node sizes, Linear search
+  using Tree = kressler::fast_containers::btree<int64_t, int32_t>;
 
   Tree tree;
 
@@ -111,20 +105,23 @@ int main() {
 ```cpp
 #include <fast_containers/btree.hpp>
 #include <fast_containers/hugepage_allocator.hpp>
+#include <cstdint>
+#include <cassert>
 
 int main() {
   // Use the hugepage allocator for 3-5× performance improvement
-  using Allocator = fast_containers::HugepageAllocator<std::allocator<std::byte>>;
+  // Allocator type must match the btree's value_type (std::pair<Key, Value>)
+  using Allocator = kressler::fast_containers::HugePageAllocator<
+      std::pair<int64_t, int32_t>>;
 
-  using Tree = fast_containers::btree<
-    int64_t,
-    int32_t,
-    96,
-    128,
-    fast_containers::SearchMode::SIMD,
-    fast_containers::MoveMode::SIMD,
-    std::less<int64_t>,
-    Allocator
+  using Tree = kressler::fast_containers::btree<
+    int64_t,                                 // Key type
+    int32_t,                                 // Value type
+    96,                                      // Leaf node size
+    128,                                     // Internal node size
+    std::less<int64_t>,                      // Comparator
+    kressler::fast_containers::SearchMode::SIMD,  // SIMD search
+    Allocator                                // Hugepage allocator
   >;
 
   Tree tree;
@@ -181,35 +178,43 @@ The `btree` class provides an API similar to `std::map`:
 template <
   typename Key,
   typename Value,
-  std::size_t LeafNodeSize,
-  std::size_t InternalNodeSize,
-  SearchMode SearchModeT = SearchMode::SIMD,
-  MoveMode MoveModeT = MoveMode::SIMD,
+  std::size_t LeafNodeSize = default_leaf_node_size<Key, Value>(),
+  std::size_t InternalNodeSize = default_internal_node_size<Key>(),
   typename Compare = std::less<Key>,
-  typename Allocator = std::allocator<std::byte>
+  SearchMode SearchModeT = SearchMode::Linear,
+  typename Allocator = std::allocator<std::pair<Key, Value>>
 >
 class btree;
 ```
 
-**Key parameters to tune:**
+**Parameters:**
+
+- `Key`, `Value`: The key and value types
 
 - `LeafNodeSize`: Number of key-value pairs per leaf node
-  - Larger values (64-96): Better for small values (≤64 bytes)
-  - Smaller values (8-16): Better for large values (≥128 bytes)
-  - Default: 96 for most use cases
+  - **Default**: Auto-computed heuristic targeting ~2KB (32 cache lines)
+  - Formula: `2048 / (sizeof(Key) + sizeof(Value))`, rounded to multiple of 8, clamped to [8, 64]
+  - Manual tuning: Larger values (64-96) for small values, smaller values (8-16) for large values
 
 - `InternalNodeSize`: Number of child pointers per internal node
-  - Recommended: 128 for most use cases
-  - Stores only 8-byte pointers, so larger is generally better
+  - **Default**: Auto-computed heuristic targeting ~1KB (16 cache lines)
+  - Formula: `1024 / (sizeof(Key) + sizeof(void*))`, rounded to multiple of 8, clamped to [16, 64]
+  - Generally leave at default (stores only 8-byte pointers)
+
+- `Compare`: Comparison function (must satisfy `ComparatorCompatible<Key, Compare>`)
+  - **Default**: `std::less<Key>`
+  - Also supports `std::greater<Key>` for descending order
 
 - `SearchMode`: How to search within a node
-  - `SearchMode::SIMD`: AVX2-accelerated search (3-10% faster, requires AVX2)
-  - `SearchMode::Linear`: Scalar linear search
+  - **Default**: `SearchMode::Linear` (scalar linear search)
+  - `SearchMode::SIMD`: AVX2-accelerated search (3-10% faster, requires AVX2 CPU and SIMD-compatible keys: int32_t, uint32_t, int64_t, uint64_t, float, double)
   - `SearchMode::Binary`: Binary search
 
 - `Allocator`: Memory allocation strategy
-  - `HugepageAllocator`: **Recommended** for working sets >1GB (3-5× faster)
-  - `std::allocator`: Standard allocator (simpler, no setup required)
+  - **Default**: `std::allocator<std::pair<Key, Value>>`
+  - **Recommended for performance**: `HugePageAllocator<std::pair<Key, Value>>` for working sets >1GB (3-5× faster)
+    - Requires hugepages configured: `sudo sysctl -w vm.nr_hugepages=<num_pages>`
+    - Falls back to regular pages if unavailable
 
 ---
 
