@@ -334,14 +334,48 @@ class btree;
 
 ## Performance
 
-Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
+Comprehensive benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
 
-**Highlights** (8-byte keys, 32-byte values, 10M elements):
-- **INSERT P99.9**: 939.9 ns (vs 3171.1 ns Abseil, 3517.1 ns std::map)
-- **FIND P99.9**: 857.5 ns (vs 1291.3 ns Abseil, 2177.9 ns std::map)
-- **ERASE P99.9**: 1059.9 ns (vs 1616.1 ns Abseil, 2288.0 ns std::map)
+### Performance Highlights (8-byte keys, 32-byte values, 10M elements)
 
-The hugepage allocator provides the largest performance gains by reducing TLB misses (benefits find operations) and making allocations extremely cheap through pooling (benefits insert/erase operations).
+**Our btree with hugepages** (`btree_8_32_96_128_simd_hp`):
+- **INSERT P99.9**: 1,023 ns
+- **FIND P99.9**: 864 ns
+- **ERASE P99.9**: 1,086 ns
+
+**vs. Abseil btree with hugepages** (`absl_8_32_hp` using `MultiSizeHugePageAllocator`):
+- INSERT P99.9: 1,401 ns (**27% slower**)
+- FIND P99.9: 1,190 ns (**38% slower**)
+- ERASE P99.9: 1,299 ns (**20% slower**)
+
+**vs. Abseil btree with standard allocator** (`absl_8_32`):
+- INSERT P99.9: 3,287 ns (**3.2× slower**)
+- FIND P99.9: 1,342 ns (**55% slower**)
+- ERASE P99.9: 1,679 ns (**55% slower**)
+
+**vs. std::map** (`map_8_32`):
+- INSERT P99.9: 3,587 ns (**3.5× slower**)
+- FIND P99.9: 2,312 ns (**2.7× slower**)
+- ERASE P99.9: 2,253 ns (**2.1× slower**)
+
+### Key Insights
+
+**Hugepage allocators provide massive performance improvements:**
+- Our btree: **2-3× faster** with hugepages vs. standard allocator
+- Abseil btree: **2× faster** with `MultiSizeHugePageAllocator` vs. standard allocator
+- Critical for large working sets (>1M elements)
+
+**Our implementation maintains significant advantages even with fair comparison:**
+- **20-67% faster** than Abseil btree even when both use hugepage allocators
+- Advantages from SIMD search, tunable node sizes, and optimized bulk transfers
+- Performance gap widens with larger values (256 bytes: **21-135% faster**)
+
+**Performance varies by tree size:**
+- Large trees (10M elements): Our btree dominates all metrics
+- Small trees (10K elements): Competition intensifies, std::map becomes viable for some workloads
+- See [benchmark results](docs/btree_benchmark_results.md) for detailed analysis
+
+The hugepage allocator is the single most important optimization, providing benefits by reducing TLB misses (helps find operations) and making allocations extremely cheap through pooling (helps insert/erase operations).
 
 ---
 
