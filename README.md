@@ -10,7 +10,7 @@ High-performance header-only container library for C++23 on x86-64.
 * **Dense Map** (`fast_containers::ordered_array`) - Fixed-size sorted array used internally by btree nodes
 * **Hugepage Allocator** - Pooling allocator that reduces TLB misses and allocation overhead
 
-## Why Fast Containers?
+## Why This Library?
 
 The B+tree implementation provides significant performance improvements over industry standards for large trees. For some workloads with large trees, we've observed:
 
