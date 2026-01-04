@@ -4,7 +4,7 @@
 
 High-performance header-only container library for C++23 providing:
 - **btree**: Cache-friendly B+tree with SIMD search and hugepage support
-- **ordered_array**: Fixed-size sorted array with SIMD operations (also called `dense_map` in some code)
+- **dense_map**: Fixed-size sorted array with SIMD operations
 - **Hugepage allocators**: Pooling allocators for TLB optimization
 
 ## Stack
@@ -15,13 +15,14 @@ High-performance header-only container library for C++23 providing:
 
 ```
 include/fast_containers/        # Public API headers
-  ordered_array.hpp, ordered_array.ipp, ordered_array_simd.ipp
+  dense_map.hpp, dense_map.ipp, dense_map_simd.ipp
   btree.hpp, btree.ipp
   hugepage_allocator.hpp, policy_based_hugepage_allocator.hpp, hugepage_pool.hpp
 tests/                          # Unit tests (Catch2)
-  test_ordered_array.cpp, test_btree.cpp, test_hugepage_allocator.cpp, test_policy_based_allocator.cpp
+  test_dense_map.cpp, test_btree.cpp, test_hugepage_allocator.cpp, test_policy_based_allocator.cpp
 src/
   benchmarks/                   # Google Benchmark microbenchmarks
+    dense_map_search_benchmark.cpp, hugepage_allocator_benchmark.cpp
   binary/                       # btree_benchmark, btree_stress
 scripts/
   interleaved_btree_benchmark.py  # A/B testing harness for rigorous benchmarking
@@ -49,7 +50,7 @@ third_party/                    # Git submodules (catch2, benchmark, histograms,
 cmake --preset release && cmake --build --preset release && ctest --preset release
 ```
 
-## ordered_array<Key, Value, Length, SearchMode>
+## dense_map<Key, Value, Length, Compare, SearchMode>
 
 ### Core Design
 - **Storage**: Separate `std::array<Key, Length>` and `std::array<Value, Length>` (SoA layout)
@@ -303,7 +304,7 @@ ctest --test-dir cmake-build-release --output-on-failure
 
 ## Limitations
 
-- ordered_array: Fixed compile-time size, no reallocation
+- dense_map: Fixed compile-time size, no reallocation
 - Iterator proxy pattern (use `auto`, not `auto&`)
 - Move-only values untested
 
