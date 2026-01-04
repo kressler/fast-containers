@@ -93,7 +93,7 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 **Winner:** Mixed - btree_linear_hp wins FIND, absl_hp wins ERASE, very tight competition for INSERT
 
-**Key Finding:** At small scale, std::map becomes competitive. Cache effects and contiguous storage dominate over tree structure advantages.
+**Key Finding:** At small scale, std::map becomes competitive. Cache effects dominate when the entire tree fits in cache.
 
 ### Small Trees (10K elements) - 8-byte Key + 256-byte Value
 
@@ -550,9 +550,10 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 **When our btree dominates (large trees or write-heavy small trees):**
 1. **Better cache locality:** Contiguous arrays in B+tree nodes
-2. **Fewer allocations:** Bulk node allocation amortizes cost
-3. **SIMD search:** Parallel key comparisons
-4. **Hugepage benefits:** Fewer TLB misses scale with tree size
+2. **Shallower B+tree structure:** Higher fanout reduces tree depth and pointer chasing
+3. **Fewer allocations:** Bulk node allocation amortizes cost
+4. **SIMD search:** Parallel key comparisons
+5. **Hugepage benefits:** Fewer TLB misses scale with tree size
 
 **Design tradeoff summary:**
 - **std::map:** Excellent for small datasets with large values (minimal data movement)
