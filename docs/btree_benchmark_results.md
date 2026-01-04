@@ -5,8 +5,8 @@
 **Binary:** `cmake-build-clang-release/src/binary/btree_benchmark`
 
 **Benchmark Implementation:**
-- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/main/src/binary/btree_benchmark.cpp)
-- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/main/scripts/interleaved_btree_benchmark.py)
+- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/55074e6c4d92c1399d22205764e456d5a79451ad/src/binary/btree_benchmark.cpp)
+- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/55074e6c4d92c1399d22205764e456d5a79451ad/scripts/interleaved_btree_benchmark.py)
 
 **Machine Configuration:**
 - CPU: AMD Ryzen 9 5950X 16-Core Processor
@@ -110,7 +110,7 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 **Winner:** Mixed - btree_simd_hp wins INSERT, btree_linear_hp wins FIND P50 and ERASE P50, **std::map wins ERASE P99.9**
 
-**Key Finding:** This is where the cache vs. data movement tradeoff becomes visible. std::map's contiguous node allocation and in-place operations excel for tail latency on erase with large values at small scale.
+**Key Finding:** This is where the cache vs. data movement tradeoff becomes visible. When the entire tree fits in cache, std::map's in-place operations excel for tail latency on erase with large values at small scale.
 
 ---
 
@@ -498,7 +498,7 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 **Key insight:** The hugepage allocator provides consistent, massive performance improvements across all implementations. It's the single most important optimization for B+tree performance.
 
-### 2. Our Implementation Maintains Significant Advantage Even With Fair Comparison
+### 2. Our Implementation Maintains Significant Advantage Even With Hugepage Allocators in absl::btree_map
 
 **vs Abseil with hugepages (`btree_*_simd_hp` vs `absl_*_hp`):**
 
@@ -542,10 +542,11 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 **Small 256-byte values - ERASE P99.9:** std::map wins at 213.6 ns vs our btree at 245.7 ns (+15%)
 
 **Why std::map can win:**
-1. **Contiguous node allocation:** Red-black tree nodes individually allocated, but small tree fits entirely in cache
-2. **In-place operations:** Erase just adjusts pointers, no data movement
-3. **No rebalancing overhead:** Rotation operations are pointer swaps, not value copies
-4. **Large value cost:** Our B+tree moves 256-byte values during merges/borrows
+1. **Entire tree fits in cache:** Small tree (10K elements) remains cache-resident despite scattered allocations
+2. **Shallower tree structure:** Red-black tree has minimal depth, reducing pointer chasing overhead
+3. **In-place operations:** Erase just adjusts pointers, no data movement
+4. **No rebalancing overhead:** Rotation operations are pointer swaps, not value copies
+5. **Large value cost:** Our B+tree moves 256-byte values during merges/borrows
 
 **When our btree dominates (large trees or write-heavy small trees):**
 1. **Better cache locality:** Contiguous arrays in B+tree nodes
@@ -598,6 +599,8 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 ## Recommendations
 
+**Note:** These recommendations are based on benchmarking a limited set of configurations (8-byte keys with 32-byte and 256-byte values, specific node sizes). For performance-sensitive workloads, you should conduct your own benchmarking and tuning with your specific key/value types and access patterns.
+
 ### For Large-Scale Systems (>1M elements)
 
 **Use our btree with hugepages (`btree_*_simd_hp`):**
@@ -611,7 +614,7 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 **Consider alternatives based on workload:**
 - **Write-heavy with large values (>128 bytes):** Consider std::map for erase-heavy workloads
 - **Balanced or read-heavy:** Our btree with hugepages still wins most operations
-- **Budget-conscious (no hugepage overhead):** Abseil with hugepages is competitive
+- **Memory constrained:** Abseil with standard allocator avoids hugepage overhead while remaining competitive
 
 ### Node Size Selection
 
