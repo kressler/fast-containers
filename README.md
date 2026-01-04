@@ -8,7 +8,10 @@ High-performance header-only container library for C++23 on x86-64.
 
 * **B+Tree** (`kressler::fast_containers::btree`) - Cache-friendly B+tree with SIMD search and hugepage support
 * **Dense Map** (`kressler::fast_containers::dense_map`) - Fixed-size sorted array used internally by btree nodes
-* **Hugepage Allocator** - Pooling allocator that reduces TLB misses and allocation overhead
+* **Hugepage Allocators** - Pooling allocators that reduce TLB misses and allocation overhead
+  - `HugePageAllocator` - Single-size allocator for uniform allocations
+  - `MultiSizeHugePageAllocator` - Multi-size pooling for variable-sized allocations (e.g., Abseil btree)
+  - `PolicyBasedHugePageAllocator` - Advanced control with shared pools
 
 ## Why This Library?
 
@@ -188,8 +191,54 @@ int main() {
 }
 ```
 
+### Advanced: Multi-Size Hugepage Allocator for Variable-Sized Allocations
+
+For containers that allocate variable-sized objects (like `absl::btree_map`), use `MultiSizeHugePageAllocator`:
+
+```cpp
+#include <fast_containers/multi_size_hugepage_allocator.hpp>
+#include <absl/container/btree_map.h>
+#include <array>
+#include <cstdint>
+
+int main() {
+  // absl::btree_map allocates different-sized nodes (leaf vs internal)
+  // MultiSizeHugePageAllocator routes allocations to size-class-specific pools
+
+  using ValueType = std::array<std::byte, 32>;
+  using Allocator = kressler::fast_containers::MultiSizeHugePageAllocator<
+      std::pair<const int64_t, ValueType>>;
+
+  // Helper function creates allocator with default settings
+  // - 64MB initial size per size class
+  // - Hugepages enabled
+  // - 64MB growth size per size class
+  auto alloc = kressler::fast_containers::make_multi_size_hugepage_allocator<
+      std::pair<const int64_t, ValueType>>();
+
+  // Create absl::btree_map with hugepage allocator
+  absl::btree_map<int64_t, ValueType, std::less<int64_t>, Allocator> tree(alloc);
+
+  // Insert 1 million elements - multiple size classes created automatically
+  for (int64_t i = 0; i < 1'000'000; ++i) {
+    tree[i] = ValueType{};
+  }
+
+  // Find operations benefit from reduced TLB misses
+  auto it = tree.find(500'000);
+}
+```
+
+**How it works:**
+- Allocations are routed to size classes based on requested size
+- Size classes: 0-512B (64B alignment), 513-2048B (256B alignment), 2049+B (power-of-2)
+- Each size class maintains its own `HugePagePool` with uniform-sized blocks
+- Pools created on-demand as different sizes are requested
+- Provides 2-3× performance improvement for `absl::btree_map` over standard allocator
+
 **When to use each allocator:**
-- **`HugePageAllocator`**: Simple, automatic separate pools per type (recommended for single tree)
+- **`HugePageAllocator`**: Simple, automatic separate pools per type (recommended for our btree)
+- **`MultiSizeHugePageAllocator`**: Variable-sized allocations (e.g., `absl::btree_map`, other STL containers with allocator support)
 - **`PolicyBasedHugePageAllocator`**: Fine-grained control, shared pools across trees, custom pool sizes
 
 ### API Overview
@@ -272,7 +321,11 @@ class btree;
     - Default: 256MB initial pool, 64MB growth per pool
     - Requires hugepages configured: `sudo sysctl -w vm.nr_hugepages=<num_pages>`
     - Falls back to regular pages if unavailable
-  - **Advanced**: `PolicyBasedHugePageAllocator<std::pair<Key, Value>, TwoPoolPolicy>`
+  - **For variable-sized allocations**: `MultiSizeHugePageAllocator<std::pair<Key, Value>>`
+    - Routes allocations to size-class-specific pools
+    - Use with `absl::btree_map` or other containers that allocate different-sized objects
+    - Provides 2-3× speedup for Abseil btree over standard allocator
+  - **Advanced control**: `PolicyBasedHugePageAllocator<std::pair<Key, Value>, TwoPoolPolicy>`
     - Fine-grained control over pool sizes
     - Share pools across multiple trees
     - Separate pools for leaf and internal nodes with custom sizes
@@ -427,6 +480,8 @@ git commit --no-verify
 │       ├── btree.hpp, btree.ipp
 │       ├── dense_map.hpp, dense_map.ipp
 │       ├── hugepage_allocator.hpp
+│       ├── multi_size_hugepage_allocator.hpp
+│       ├── multi_size_hugepage_pool.hpp
 │       ├── policy_based_hugepage_allocator.hpp
 │       └── hugepage_pool.hpp
 ├── tests/                       # Unit tests (Catch2)
