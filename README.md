@@ -334,7 +334,7 @@ class btree;
 
 ## Performance
 
-Comprehensive benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
+Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
 
 ### Performance Highlights (8-byte keys, 32-byte values, 10M elements)
 
@@ -342,6 +342,11 @@ Comprehensive benchmarks comparing against Abseil's `btree_map` and `std::map` a
 - **INSERT P99.9**: 1,023 ns
 - **FIND P99.9**: 864 ns
 - **ERASE P99.9**: 1,086 ns
+
+**Our btree with standard allocator** (`btree_8_32_96_128_simd`):
+- INSERT P99.9: 3,155 ns (**3.1× slower** than with hugepages)
+- FIND P99.9: 950 ns (**1.1× slower** than with hugepages)
+- ERASE P99.9: 1,323 ns (**1.2× slower** than with hugepages)
 
 **vs. Abseil btree with hugepages** (`absl_8_32_hp` using `MultiSizeHugePageAllocator`):
 - INSERT P99.9: 1,401 ns (**27% slower**)
