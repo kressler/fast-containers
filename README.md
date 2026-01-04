@@ -12,12 +12,17 @@ High-performance header-only container library for C++23 on x86-64.
 
 ## Why Fast Containers?
 
-The B+tree implementation provides significant performance improvements over industry standards:
+The B+tree implementation provides significant performance improvements over industry standards for large trees (tested with 10M elements):
 
 **vs Abseil B+tree:** 2-5× faster across insert/find/erase operations
 **vs std::map:** 2-5× faster across insert/find/erase operations
 
 See [benchmark results](docs/btree_benchmark_results.md) for detailed performance analysis.
+
+**Important qualifications:**
+- Performance advantages are most significant for large tree sizes where TLB misses and allocation costs dominate
+- Benchmarks currently focus on 10M element trees; smaller tree sizes have not been comprehensively tested
+- Results are specific to the tested configurations (8-byte keys, 32-byte and 256-byte values)
 
 **Key advantages over Abseil's btree:**
 - **Hugepage allocator integration:** 3-5× speedup from reduced TLB misses and pooled allocations
