@@ -93,7 +93,7 @@ Configuration names follow the pattern: `{impl}_{key_size}_{value_size}[_{leaf_s
 
 **Winner:** Mixed - btree_linear_hp wins FIND, absl_hp wins ERASE, very tight competition for INSERT
 
-**Key Finding:** At small scale, std::map becomes competitive. Cache effects dominate when the entire tree fits in cache.
+**Key Finding:** At small scale, std::map becomes competitive. When everything fits in cache, our locality advantages diminish and the tradeoff between locality (btree implementations) and data movement begins to emerge, though less pronounced than with larger values.
 
 ### Small Trees (10K elements) - 8-byte Key + 256-byte Value
 
