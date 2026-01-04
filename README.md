@@ -2,7 +2,30 @@
 
 ![CI](https://github.com/kressler/fast-containers/workflows/CI/badge.svg)
 
-High-performance header-only container library for C++ on x86-64
+High-performance header-only container library for C++ on x86-64. Currently this only includes:
+* A B+Tree implementation
+* A dense map implementation (primarily meant for use by the B+Tree)
+* A pooling hugepage allocator (for use by the B+Tree)
+
+Other data structures may be added in the future.
+
+The primary advantages of this B+Tree implementation over Abseil's B+Tree are:
+* Integration with the pooling hugepage allocator
+* Tunable node sizes (though this imposes a greater burden on the user to tune the tree)
+* SIMD-accelerated key comparisons
+
+Note: This project started out to explore using AI agents for software development towards the
+end of a non-compete period. Based on work I had done tuning a system that was using
+Abseil's B+Tree implementation, I was curious if I could improve B+Tree performance through
+a combination of SIMD instructions, a customized allocator, and tunable node sizes. I found
+Claude to be surprisingly adept at helping me quickly implement this, and the resulting B+Tree
+had compelling performance improvements, so I am making it available here.
+
+This is very much a work in progress. I don't have plans to make major changes to the B+Tree
+currently, but am actively cleaning up the implementation.
+
+TODO: Add overview of the btree's API, and example usage.
+TODO: Add link to benchmark results.
 
 ## Tech Stack
 
