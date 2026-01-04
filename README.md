@@ -6,8 +6,8 @@ High-performance header-only container library for C++23 on x86-64.
 
 ## What's Included
 
-* **B+Tree** (`fast_containers::btree`) - Cache-friendly B+tree with SIMD search and hugepage support
-* **Dense Map** (`fast_containers::ordered_array`) - Fixed-size sorted array used internally by btree nodes
+* **B+Tree** (`kressler::fast_containers::btree`) - Cache-friendly B+tree with SIMD search and hugepage support
+* **Dense Map** (`kressler::fast_containers::dense_map`) - Fixed-size sorted array used internally by btree nodes
 * **Hugepage Allocator** - Pooling allocator that reduces TLB misses and allocation overhead
 
 ## Why This Library?
