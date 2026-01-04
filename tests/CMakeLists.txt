@@ -94,3 +94,10 @@ target_link_libraries(test_policy_based_allocator PRIVATE
   kressler::fast_containers
 )
 add_test(NAME test_policy_based_allocator COMMAND test_policy_based_allocator)
+
+add_executable(test_multi_size_allocator test_multi_size_allocator.cpp)
+target_link_libraries(test_multi_size_allocator PRIVATE
+  Catch2::Catch2WithMain
+  kressler::fast_containers
+)
+add_test(NAME test_multi_size_allocator COMMAND test_multi_size_allocator)

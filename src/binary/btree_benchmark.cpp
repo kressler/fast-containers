@@ -11,6 +11,8 @@
 #include <fast_containers/btree.hpp>
 #include <fast_containers/hugepage_allocator.hpp>
 #include <fast_containers/hugepage_pool.hpp>
+#include <fast_containers/multi_size_hugepage_allocator.hpp>
+#include <fast_containers/multi_size_hugepage_pool.hpp>
 #include <fast_containers/policy_based_hugepage_allocator.hpp>
 #include <iostream>
 #include <lyra/lyra.hpp>
@@ -71,6 +73,30 @@ auto print_pool_stats = [](const HugePagePool& pool,
   std::println("a: {}, d: {}, g: {}, b: {}, p: {}", pool.get_allocations(),
                pool.get_deallocations(), pool.get_growth_events(),
                pool.get_bytes_allocated(), pool.get_peak_usage());
+#endif
+};
+
+auto print_multi_size_pool_stats =
+    [](const std::shared_ptr<MultiSizeHugePagePool>& pool,
+       std::string_view name) -> void {
+#ifdef ALLOCATOR_STATS
+  std::cout << name << " multi-size pool stats:\n";
+  std::println("  Active size classes: {}", pool->active_size_classes());
+  std::println("  Using hugepages: {}", pool->using_hugepages());
+
+  // Print stats for each underlying pool
+  std::cout << "  Per-size-class stats:\n";
+  for (const auto& [size_class, underlying_pool] : pool->get_pools()) {
+    if (underlying_pool) {
+      std::print("    Size class {}B: ", size_class);
+      std::println("a: {}, d: {}, g: {}, b: {}, p: {}",
+                   underlying_pool->get_allocations(),
+                   underlying_pool->get_deallocations(),
+                   underlying_pool->get_growth_events(),
+                   underlying_pool->get_bytes_allocated(),
+                   underlying_pool->get_peak_usage());
+    }
+  }
 #endif
 };
 
@@ -271,6 +297,21 @@ int main(int argc, char** argv) {
          benchmarker(absl::btree_map<std::int64_t, std::array<std::byte, 32>>{},
                      stats);
        }},
+      {"absl_8_32_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_multi_size_hugepage_allocator<
+             std::pair<const int64_t, std::array<std::byte, 32>>>(
+             64ul * 1024ul * 1024ul,   // 64MB per size class
+             true,                     // use hugepages
+             64ul * 1024ul * 1024ul);  // 64MB growth
+
+         benchmarker(
+             absl::btree_map<int64_t, std::array<std::byte, 32>,
+                             std::less<int64_t>, decltype(alloc)>{alloc},
+             stats);
+
+         print_multi_size_pool_stats(alloc.get_pool(), "absl_8_32_hp");
+       }},
       {"map_8_32",
        [&](TimingStats& stats) -> void {
          benchmarker(std::map<std::int64_t, std::array<std::byte, 32>>{},
@@ -333,6 +374,21 @@ int main(int argc, char** argv) {
          benchmarker(
              absl::btree_map<std::int64_t, std::array<std::byte, 256>>{},
              stats);
+       }},
+      {"absl_8_256_hp",
+       [&](TimingStats& stats) -> void {
+         auto alloc = make_multi_size_hugepage_allocator<
+             std::pair<const int64_t, std::array<std::byte, 256>>>(
+             64ul * 1024ul * 1024ul,   // 64MB per size class
+             true,                     // use hugepages
+             64ul * 1024ul * 1024ul);  // 64MB growth
+
+         benchmarker(
+             absl::btree_map<int64_t, std::array<std::byte, 256>,
+                             std::less<int64_t>, decltype(alloc)>{alloc},
+             stats);
+
+         print_multi_size_pool_stats(alloc.get_pool(), "absl_8_256_hp");
        }},
       {"map_8_256",
        [&](TimingStats& stats) -> void {
