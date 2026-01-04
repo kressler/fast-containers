@@ -29,9 +29,13 @@ See [benchmark results](docs/btree_benchmark_results.md) for detailed performanc
 - **SIMD-accelerated search:** 3-10% faster node searches using AVX2 instructions
 - **Tunable node sizes:** Optimize cache behavior for your specific key/value sizes
 
-**Note:** This project started as an exploration of using AI agents for software development. Based on experience tuning systems using Abseil's B+tree, I was curious if performance could be improved through SIMD instructions, a customized allocator, and tunable node sizes. Claude proved surprisingly adept at helping implement this quickly, and the resulting B+tree showed compelling performance improvements, so I'm making it available here.
+### Notes
 
-**Note:** This is a work in progress. I don't have plans for major changes to the B+tree currently, but am actively cleaning up the implementation.
+**Work in progress** This is a work in progress. I don't have plans for major changes to the B+tree currently, but am actively cleaning up the implementation.
+
+**Platforms** This library is really only built and tested on Linux, on x86-64 CPUs with AVX2 support. In theory, it could be built for Windows, though that hasn't been tested. The SIMD implementations are x86-64 specific. Timing in the custom benchmarks is also x86-64 specific (via use of `rdtscp`).
+
+**History/Motivations** This project started as an exploration of using AI agents for software development. Based on experience tuning systems using Abseil's B+tree, I was curious if performance could be improved through SIMD instructions, a customized allocator, and tunable node sizes. Claude proved surprisingly adept at helping implement this quickly, and the resulting B+tree showed compelling performance improvements, so I'm making it available here.
 
 ---
 
