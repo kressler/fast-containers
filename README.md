@@ -419,15 +419,38 @@ git commit --no-verify
 ```
 .
 ├── include/
-│   └── fast_containers/   # Public header files
+│   └── fast_containers/         # Public header files
 │       ├── btree.hpp, btree.ipp
-│       ├── ordered_array.hpp, ordered_array.ipp
-│       └── hugepage_*.hpp
-├── tests/                 # Unit tests (Catch2)
-├── docs/                  # Documentation and benchmarks
-├── third_party/           # Git submodules (Catch2)
-├── hooks/                 # Git hooks (install with setup-dev.sh)
-└── CMakeLists.txt         # Build configuration
+│       ├── dense_map.hpp, dense_map.ipp
+│       ├── hugepage_allocator.hpp
+│       ├── policy_based_hugepage_allocator.hpp
+│       └── hugepage_pool.hpp
+├── tests/                       # Unit tests (Catch2)
+│   ├── test_btree.cpp
+│   ├── test_dense_map.cpp
+│   ├── test_hugepage_allocator.cpp
+│   └── test_policy_based_allocator.cpp
+├── src/
+│   ├── benchmarks/              # Google Benchmark performance tests
+│   │   ├── dense_map_search_benchmark.cpp
+│   │   └── hugepage_allocator_benchmark.cpp
+│   └── binary/                  # Standalone benchmark executables
+│       ├── btree_benchmark.cpp
+│       └── btree_stress.cpp
+├── scripts/
+│   └── interleaved_btree_benchmark.py  # A/B testing harness
+├── docs/
+│   └── btree_benchmark_results.md      # Performance analysis
+├── third_party/                 # Git submodules
+│   ├── catch2/                  # Unit testing framework
+│   ├── benchmark/               # Google Benchmark
+│   ├── histograms/              # Latency histogram library
+│   ├── abseil-cpp/              # Comparison baseline
+│   ├── lyra/                    # Command-line parsing
+│   └── unordered_dense/         # Dense hash map
+├── hooks/                       # Git hooks (install with setup-dev.sh)
+│   └── pre-commit               # Auto-format and clang-tidy
+└── CMakeLists.txt               # Build configuration
 ```
 
 ## Tech Stack
@@ -440,4 +463,17 @@ git commit --no-verify
 
 ## License
 
-[Add license information here]
+This project is licensed under the **BSD 3-Clause License**.
+
+Copyright (c) 2025, Bryan Kressler
+
+See the [LICENSE](LICENSE) file for full details.
+
+### Summary
+
+You are free to use, modify, and distribute this software in source and binary forms, with or without modification, provided that:
+- Redistributions of source code retain the copyright notice, list of conditions, and disclaimer
+- Redistributions in binary form reproduce the copyright notice in the documentation
+- Neither the name of the copyright holder nor contributors may be used to endorse derived products without permission
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
