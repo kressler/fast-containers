@@ -12,10 +12,10 @@ High-performance header-only container library for C++23 on x86-64.
 
 ## Why Fast Containers?
 
-The B+tree implementation provides significant performance improvements over industry standards for large trees (tested with 10M elements):
+The B+tree implementation provides significant performance improvements over industry standards for large trees. For some workloads with large trees, we've observed:
 
-**vs Abseil B+tree:** 2-5× faster across insert/find/erase operations
-**vs std::map:** 2-5× faster across insert/find/erase operations
+- **vs Abseil B+tree:** 2-5× faster across insert/find/erase operations
+- **vs std::map:** 2-5× faster across insert/find/erase operations
 
 See [benchmark results](docs/btree_benchmark_results.md) for detailed performance analysis.
 
@@ -31,7 +31,7 @@ See [benchmark results](docs/btree_benchmark_results.md) for detailed performanc
 
 **Note:** This project started as an exploration of using AI agents for software development. Based on experience tuning systems using Abseil's B+tree, I was curious if performance could be improved through SIMD instructions, a customized allocator, and tunable node sizes. Claude proved surprisingly adept at helping implement this quickly, and the resulting B+tree showed compelling performance improvements, so I'm making it available here.
 
-This is a work in progress. I don't have plans for major changes to the B+tree currently, but am actively cleaning up the implementation.
+**Note:** This is a work in progress. I don't have plans for major changes to the B+tree currently, but am actively cleaning up the implementation.
 
 ---
 
@@ -277,7 +277,7 @@ class btree;
 
 ## Performance
 
-Comprehensive benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
+Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
 
 **Highlights** (8-byte keys, 32-byte values, 10M elements):
 - **INSERT P99.9**: 939.9 ns (vs 3171.1 ns Abseil, 3517.1 ns std::map)
