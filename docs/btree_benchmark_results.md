@@ -5,8 +5,8 @@
 **Binary:** `cmake-build-clang-release/src/binary/btree_benchmark`
 
 **Benchmark Implementation:**
-- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/main/src/binary/btree_benchmark.cpp)
-- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/main/scripts/interleaved_btree_benchmark.py)
+- [btree_benchmark.cpp](https://github.com/kressler/fast-containers/blob/1bd3b4b0ae5675c48fcb138d0c006707771f9ac7/src/binary/btree_benchmark.cpp)
+- [interleaved_btree_benchmark.py](https://github.com/kressler/fast-containers/blob/1bd3b4b0ae5675c48fcb138d0c006707771f9ac7/scripts/interleaved_btree_benchmark.py)
 
 **Test Parameters:**
 - Passes: 5 (interleaved forward/reverse)
