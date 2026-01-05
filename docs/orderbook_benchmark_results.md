@@ -31,25 +31,25 @@ Real-world performance testing using a multi-threaded orderbook simulation proce
 ```cpp
 struct Orderbook {
   // Two btrees for bid/ask sides
-  btree<PriceLevel, OrderData, std::less<PriceLevel>>  asks;   // ascending prices
-  btree<PriceLevel, OrderData, std::greater<PriceLevel>> bids; // descending prices
+  btree<BookKey, OrderData, std::less<BookKey>>  asks;   // ascending prices
+  btree<BookKey, OrderData, std::greater<BookKey>> bids; // descending prices
 
   // Lookup table: order_id -> (price, sequence_number)
-  ankerl::unordered_dense::map<OrderId, PriceLevel> order_map;
+  ankerl::unordered_dense::map<OrderId, BookKey> order_map;
 };
 ```
 
 **Key structure:**
 ```cpp
-struct PriceLevel {
+struct BookKey {
   int64_t price;            // Price in integer representation
-  uint64_t sequence_number; // Monotonically increasing per price level
+  uint64_t sequence_number; // Monotonically increasing per order
 };
 ```
 
 **Value structure:**
-- **24-byte values**: Order size (8 bytes) + timestamp (8 bytes) + flags (8 bytes)
-- **256-byte values**: Extended metadata (order type, participant info, routing data, etc.)
+- **24-byte values**: Order size + timestamp + other metadata
+- **256-byte values**: Order size + timestamp + other metadata
 
 **Allocator configuration:**
 - Hugepage configs use **one shared pooling allocator per thread/core**
@@ -60,7 +60,7 @@ struct PriceLevel {
 
 | Operation | Description | Tree Operations | Ordermap Operations |
 |-----------|-------------|-----------------|---------------------|
-| **ADD** | Create new order | `btree.insert(price_level, order_data)` | `order_map.insert(order_id, price_level)` |
+| **ADD** | Create new order | `btree.insert(book_key, order_data)` | `order_map.insert(order_id, book_key)` |
 | **MODIFY** | Update existing order in-place | `btree.find()` + value modification | `order_map.find()` for lookup |
 | **REPLACE** | Cancel old order, create new one | `btree.erase()` + `btree.insert()` | `order_map.erase()` + `order_map.insert()` |
 | **CANCEL** | Remove existing order | `btree.erase()` | `order_map.find()` + `order_map.erase()` |
@@ -279,6 +279,22 @@ struct PriceLevel {
 
 ## Key Findings
 
+**How Orderbook Benchmarks Differ from Standard Btree Benchmarks:**
+
+This workload presents unique performance characteristics compared to standard btree benchmarks:
+
+1. **Large number of trees → very large working set**: Instead of a few large trees, we maintain ~8,000 independent orderbooks (16,000 btrees total for bid/ask sides). While individual trees are shallower, the aggregate working set is massive, stressing TLB and cache hierarchies differently.
+
+2. **Highly variable tree size**: Low-activity symbols may have only a handful of orders, while high-volume stocks maintain tens of thousands of orders. This creates a mix of hot (frequently accessed, cache-resident) and cold (infrequently accessed) trees.
+
+3. **Unbalanced tree activity**: Most operations concentrate on one side (bid or ask) of each tree. Market conditions create asymmetric order flow - bullish markets see more buying pressure (ask-side activity), bearish markets more selling (bid-side activity).
+
+4. **16-byte struct keys → no SIMD search optimization**: Keys are `(int64_t price, uint64_t sequence_number)` structs. Unlike the 4-byte or 8-byte primitive keys in standard benchmarks, these compound keys cannot leverage SIMD comparison instructions.
+
+5. **Mixed data structure performance**: Measurements include both btree operations and `ankerl::unordered_dense::map` lookups (for order_id → book_key mapping). The overall latencies reflect the combined cost of both structures, though we are not measuring queuing latency or similar threading effects.
+
+---
+
 ### 1. Hugepage Allocators Are Critical for Real-World Performance
 
 **24-byte values:**
@@ -309,12 +325,6 @@ struct PriceLevel {
 
 ### 3. Real-World Workload Characteristics
 
-**Mixed operation latencies:**
-- ADD operations fastest (new order, sequential insert at price level)
-- MODIFY operations slightly slower (find existing order, update in place)
-- REPLACE operations slowest (find, erase, reinsert)
-- CANCEL operations moderate (find, erase from both structures)
-
 **Tail latency patterns:**
 - P99.9 latencies are 6-7× higher than P50 medians
 - Reflects worst-case scenarios: node splits, tree rebalancing, cache misses
@@ -339,8 +349,8 @@ struct PriceLevel {
 
 **Surprising result:** Our btree without hugepages performs **271% worse** on ADD operations compared to with hugepages (12,988 vs 3,499 cycles).
 
-**Explanation:**
-- ADD operations create new price levels (new keys in btree)
+**Tentative explanation** (not deeply investigated):
+- ADD operations create new book entries (new keys in btree)
 - High allocation rate triggers frequent malloc/free calls
 - Standard allocator suffers from:
   - TLB misses on newly allocated pages
@@ -348,15 +358,23 @@ struct PriceLevel {
   - Fragmentation effects
 - Hugepage allocator eliminates these overheads through pre-allocated pools
 
+This explanation is preliminary and requires further investigation to confirm the exact mechanisms.
+
 ### 6. Value Size Impact on Node Capacity
 
 **Configuration differences:**
 - 24-byte values: Leaf node size 32, Internal node size 36
 - 256-byte values: Leaf node size 8, Internal node size 32
 
+**Why smaller leaf nodes for large values:**
+- With 256-byte values, smaller leaf nodes (8 entries) limit data movement during insert/erase operations
+- During node splits, merges, or borrowing, the btree must physically copy value data
+- 8 entries × 256 bytes = 2KB max data movement vs 32 entries × 256 bytes = 8KB
+- Trade-off: Reduced split/merge cost vs increased tree depth
+
 **Performance implications:**
 - Larger values → smaller node capacity → more frequent splits/merges
-- Smaller leaf nodes (8 vs 32) increase tree depth
+- Smaller leaf nodes (8 vs 32) increase tree depth (more pointer chasing)
 - More rebalancing operations → higher tail latencies
 - Hugepages become even more critical (more allocations per operation)
 
@@ -371,106 +389,6 @@ struct PriceLevel {
 - 8 concurrent threads maintain independent orderbooks
 - Linear scaling with core count (no allocator contention)
 - Full utilization of 64MB L3 cache across both core complexes
-
----
-
-## Recommendations
-
-### Production Orderbook Systems
-
-1. **Use hugepage allocators** - Non-negotiable for consistent tail latencies
-   - 2-3× performance improvement on tail latencies
-   - Reduces P99.9 variance significantly
-   - Worth the 2MB memory overhead per allocator instance
-
-2. **Configure node sizes for value size**
-   - Small values (≤32 bytes): Larger leaf nodes (24-32 entries)
-   - Large values (≥128 bytes): Smaller leaf nodes (8-16 entries)
-   - Keep internal nodes sized for ~1KB cache line alignment
-
-3. **Thread-local allocators**
-   - One allocator per worker thread
-   - Pre-allocate sufficient hugepage pool per thread (64-128MB)
-   - Avoid shared allocators (contention negates hugepage benefits)
-
-4. **Core isolation critical for consistency**
-   - Isolate worker threads from kernel scheduling
-   - Dedicate non-isolated core for I/O (reader thread)
-   - Ensures predictable tail latencies under load
-
-### When to Use Each Implementation
-
-| Scenario | Recommendation | Rationale |
-|----------|---------------|-----------|
-| **Production trading systems** | Our btree with hugepages | Best tail latency, lowest variance |
-| **Small values (<32 bytes)** | Our btree with hugepages | 8-16% faster than Abseil |
-| **Large values (≥128 bytes)** | Our btree with hugepages | 34-52% faster than Abseil |
-| **Memory constrained** | Abseil with hugepages | Competitive performance, smaller footprint |
-| **Prototyping/testing** | std::map | Simplest, no allocator tuning needed |
-
-### Tuning Guidelines
-
-**Hugepage pool sizing:**
-- Estimate peak orderbook depth per symbol
-- Multiply by number of symbols per thread
-- Add 50% headroom for variance
-- Example: 1,000 symbols × 100 orders/side × 2 sides × 1.5 headroom = ~64MB per thread
-
-**Node size selection:**
-- Profile actual value sizes in production
-- Run interleaved benchmarks with 2-3 candidate configurations
-- Optimize for P99.9 latency, not median (tail latency matters for trading)
-
-**Thread affinity:**
-- Pin worker threads to isolated cores
-- Keep reader thread on separate NUMA node if possible
-- Monitor cache miss rates (target <5% L3 miss rate)
-
----
-
-## Reproducing These Results
-
-### Prerequisites
-
-```bash
-# Enable hugepages
-echo 2048 | sudo tee /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
-
-# Isolate cores (add to kernel boot parameters)
-# /etc/default/grub: GRUB_CMDLINE_LINUX="isolcpus=4,5,6,7,12,13,14,15"
-sudo update-grub
-sudo reboot
-```
-
-### Build and Run
-
-```bash
-cd fast-containers-benchmarks
-cmake -S . -B cmake-build-clang-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-19
-cmake --build cmake-build-clang-release --parallel
-
-# Run interleaved benchmark (24-byte values)
-./scripts/interleaved_orderbook_benchmark.py \
-  -c absl_btree_k16_v24 absl_btree_k16_v24_hp btree_k16_v24_l32_i36_hp btree_k16_v24_l32_i36 std_map_k16_v24 \
-  -p 9 \
-  -i /path/to/nasdaq_events.dat \
-  --worker-cores 4,5,6,7,12,13,14,15 \
-  --reader-core 0
-
-# Run interleaved benchmark (256-byte values)
-./scripts/interleaved_orderbook_benchmark.py \
-  -c absl_btree_k16_v256 absl_btree_k16_v256_hp btree_k16_v256_l8_i32_hp btree_k16_v256_l8_i32 std_map_k16_v256 \
-  -p 9 \
-  -i /path/to/nasdaq_events.dat \
-  --worker-cores 4,5,6,7,12,13,14,15 \
-  --reader-core 0
-```
-
-### Dataset
-
-NASDAQ ITCH 5.0 data available from: https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/
-
-Use the ITCH parser provided in the fast-containers-benchmarks repository to convert to binary event format.
 
 ---
 
