@@ -287,9 +287,9 @@ This workload presents unique performance characteristics compared to standard b
 
 2. **Highly variable tree size**: Low-activity symbols may have only a handful of orders, while high-volume stocks maintain tens of thousands of orders. This creates a mix of hot (frequently accessed, cache-resident) and cold (infrequently accessed) trees.
 
-3. **Unbalanced tree activity**: Most operations concentrate on one side (bid or ask) of each tree. Market conditions create asymmetric order flow - bullish markets see more buying pressure (ask-side activity), bearish markets more selling (bid-side activity).
+3. **Unbalanced tree activity**: Most operations concentrate near the top of the book (best bid/ask prices). Orders at competitive prices see frequent modifications and cancellations, while orders far from the market price remain relatively static. This creates hot spots at the beginning of each tree.
 
-4. **16-byte struct keys → no SIMD search optimization**: Keys are `(int64_t price, uint64_t sequence_number)` structs. Unlike the 4-byte or 8-byte primitive keys in standard benchmarks, these compound keys cannot leverage SIMD comparison instructions.
+4. **16-byte struct keys → no SIMD search optimization**: Keys are `(int64_t price, uint64_t sequence_number)` structs. Unlike the 4-byte or 8-byte primitive keys in standard benchmarks, these compound keys cannot easily leverage SIMD comparison instructions. While SIMD comparisons are possible for struct keys, the added complexity was not worth the performance gain.
 
 5. **Mixed data structure performance**: Measurements include both btree operations and `ankerl::unordered_dense::map` lookups (for order_id → book_key mapping). The overall latencies reflect the combined cost of both structures, though we are not measuring queuing latency or similar threading effects.
 
@@ -370,7 +370,8 @@ This explanation is preliminary and requires further investigation to confirm th
 - With 256-byte values, smaller leaf nodes (8 entries) limit data movement during insert/erase operations
 - During node splits, merges, or borrowing, the btree must physically copy value data
 - 8 entries × 256 bytes = 2KB max data movement vs 32 entries × 256 bytes = 8KB
-- Trade-off: Reduced split/merge cost vs increased tree depth
+- Trade-off: Reduced split/merge cost vs increased frequency of splits/merges and increased tree depth
+- This helps limit tail latencies (P99.9) at the cost of slightly increased latencies at lower percentiles (P50)
 
 **Performance implications:**
 - Larger values → smaller node capacity → more frequent splits/merges
