@@ -336,6 +336,8 @@ class btree;
 
 Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
 
+For an example of performance in a real-world application, see [docs/orderbook_benchmark_results.md](docs/orderbook_benchmark_results.md) - a multi-threaded orderbook simulation processing 500M NASDAQ market events across 8,000 symbols.
+
 ### Performance Highlights (8-byte keys, 32-byte values, 10M elements)
 
 **Our btree with hugepages** (`btree_8_32_96_128_simd_hp`):
