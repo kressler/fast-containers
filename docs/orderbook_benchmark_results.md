@@ -7,8 +7,8 @@ Real-world performance testing using a multi-threaded orderbook simulation proce
 ### System Configuration
 
 **Hardware:**
-- AMD Ryzen 9 7950X (16 cores, 32 threads)
-- 64GB DDR5-6000 RAM
+- AMD Ryzen 9 5950X (16 cores, 32 threads)
+- 128GB RAM
 - 2× 32MB L3 cache (one per core complex)
 
 **Core Isolation:**
