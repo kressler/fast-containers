@@ -20,7 +20,7 @@ The B+tree implementation provides significant performance improvements over ind
 - **vs Abseil B+tree:** 2-5× faster across insert/find/erase operations
 - **vs std::map:** 2-5× faster across insert/find/erase operations
 
-See [benchmark results](docs/btree_benchmark_results.md) for detailed performance analysis.
+See [benchmark results](results/btree_benchmark_results.md) for detailed performance analysis.
 
 **Important qualifications:**
 - Performance advantages are most significant for large tree sizes where TLB misses and allocation costs dominate
@@ -334,9 +334,7 @@ class btree;
 
 ## Performance
 
-Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [docs/btree_benchmark_results.md](docs/btree_benchmark_results.md).
-
-For an example of performance in a real-world application, see [docs/orderbook_benchmark_results.md](docs/orderbook_benchmark_results.md) - a multi-threaded orderbook simulation processing 500M NASDAQ market events across 8,000 symbols.
+Benchmarks comparing against Abseil's `btree_map` and `std::map` are available in [results/btree_benchmark_results.md](results/btree_benchmark_results.md).
 
 ### Performance Highlights (8-byte keys, 32-byte values, 10M elements)
 
@@ -380,7 +378,7 @@ For an example of performance in a real-world application, see [docs/orderbook_b
 **Performance varies by tree size:**
 - Large trees (10M elements): Our btree dominates all metrics
 - Small trees (10K elements): Competition intensifies, std::map becomes viable for some workloads
-- See [benchmark results](docs/btree_benchmark_results.md) for detailed analysis
+- See [benchmark results](results/btree_benchmark_results.md) for detailed analysis
 
 The hugepage allocator is the single most important optimization, providing benefits by reducing TLB misses (helps find operations) and making allocations extremely cheap through pooling (helps insert/erase operations).
 
@@ -539,7 +537,7 @@ git commit --no-verify
 │       └── btree_stress.cpp
 ├── scripts/
 │   └── interleaved_btree_benchmark.py  # A/B testing harness
-├── docs/
+├── results/
 │   └── btree_benchmark_results.md      # Performance analysis
 ├── third_party/                 # Git submodules
 │   ├── catch2/                  # Unit testing framework
@@ -561,19 +559,3 @@ git commit --no-verify
 - **Code Formatting**: clang-format (Google C++ Style)
 - **Static Analysis**: clang-tidy-19
 
-## License
-
-This project is licensed under the **BSD 3-Clause License**.
-
-Copyright (c) 2025, Bryan Kressler
-
-See the [LICENSE](LICENSE) file for full details.
-
-### Summary
-
-You are free to use, modify, and distribute this software in source and binary forms, with or without modification, provided that:
-- Redistributions of source code retain the copyright notice, list of conditions, and disclaimer
-- Redistributions in binary form reproduce the copyright notice in the documentation
-- Neither the name of the copyright holder nor contributors may be used to endorse derived products without permission
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
